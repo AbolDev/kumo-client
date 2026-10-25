@@ -39,11 +39,12 @@ class ProxyConfig {
   /// "host:port" with the host partly hidden, for lists (the real address stays in the link).
   String get maskedAddress => '${maskHost(host)}:$port';
 
-  /// Same server + same credentials => same key; used to drop duplicates.
+  /// Same connection settings (server, credentials, transport, TLS) => same key; used to drop
+  /// duplicates. The name is not part of it, and two entries that differ in e.g. the websocket
+  /// path or SNI are different servers.
   String get key {
-    if (needsXray) return 'xray|$link';
-    final secret = outbound['uuid'] ?? outbound['password'] ?? '';
-    return '$protocol|$host|$port|$secret';
+    if (needsXray) return 'xray|${link.split('#').first}';
+    return '$protocol|${jsonEncode(outbound)}';
   }
 }
 

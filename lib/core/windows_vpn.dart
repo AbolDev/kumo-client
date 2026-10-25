@@ -271,7 +271,7 @@ class WindowsVpn {
   Future<List<AppEntry>> runningProcesses() async {
     final r = await Process.run('tasklist', ['/fo', 'csv', '/nh']);
     final names = <String>{};
-    for (final line in ''.split('\n')) {
+    for (final line in '${r.stdout}'.split('\n')) {
       final m = RegExp(r'^"([^"]+\.exe)"', caseSensitive: false).firstMatch(line.trim());
       if (m != null) names.add(m.group(1)!);
     }

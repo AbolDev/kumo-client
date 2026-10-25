@@ -119,6 +119,15 @@ void main() {
     expect(servers, hasLength(2));
   });
 
+  test('duplicates ignore the name but not the transport', () {
+    final servers = parseLinks([
+      'vless://id@h.com:443?security=tls&type=ws&path=%2Fa#one',
+      'vless://id@h.com:443?security=tls&type=ws&path=%2Fa#two',
+      'vless://id@h.com:443?security=tls&type=ws&path=%2Fb#three',
+    ]);
+    expect(servers.map((s) => s.name), ['one', 'three']);
+  });
+
   test('config uses urltest for several servers', () {
     final servers = parseLinks(
         ['trojan://p@h1.example.com:443#a', 'trojan://p@h2.example.com:443#b']);

@@ -348,6 +348,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// After a list was replaced by new objects the chosen server follows to its new copy; if the
+  /// list no longer has it, the choice goes back to automatic.
+  void _keepSelected() {
+    final chosen = selected;
+    if (chosen == null || all.contains(chosen)) return;
+    selected = all.where((c) => c.key == chosen.key).firstOrNull;
+  }
+
   /// Puts a downloaded subscription into [g]. Returns how many configs it has.
   Future<int> _applyFetched(ServerGroup g, Fetched fetched, int time) async {
     final title = fetched.title;
@@ -372,7 +380,7 @@ class AppState extends ChangeNotifier {
       ..addAll(parsed);
     if (known.values.any((v) => v != null)) _sort(g);
     g.updatedAt = time;
-    if (selected != null && !all.contains(selected)) selected = null;
+    _keepSelected();
     return parsed.length;
   }
 
@@ -848,7 +856,7 @@ class AppState extends ChangeNotifier {
         collector.configs
           ..clear()
           ..addAll(fresh);
-        if (selected != null && !all.contains(selected)) selected = null;
+        _keepSelected();
         message = (t) => t.listLoaded(fresh.length);
       } on AllSourcesFailed {
         message = (t) => t.allSourcesFailed;
