@@ -56,8 +56,20 @@ Get the latest version from the [**Releases**](../../releases) page.
 - **Android:** download the `.apk` file and open it. If your phone asks, allow installing apps from this source.
 - **Windows:** download `kumo-windows-x64-setup.exe` and run it. It installs Kumo with an uninstaller. Kumo asks for administrator rights because it starts the VPN core and can change the system proxy. (Windows on ARM runs the x64 build through emulation; a native ARM build is not available yet.)
 
-Kumo is not signed yet, so Windows SmartScreen and Android Play Protect may warn that the app is unknown. On Windows choose *More info* then *Run anyway*; on Android choose *Install without scanning*. You can check for new versions in *Settings → About and updates*.
+### Installing on Android
 
+1. Open the downloaded `.apk`. If Android asks, allow your browser or file manager to install apps.
+2. Google Play Protect may show **"App scan recommended – Play Protect hasn't seen this app before"**. This happens for every app that is not from Google Play and that Google has not scanned yet. It does not mean Kumo is harmful; the source code is public and the app is built by GitHub Actions.
+3. Tap **Install without scanning** (under *More details* on some phones), or tap **Scan app** to let Google check it and then install.
+4. After the first install, updates are signed with the same key, so they install over the old version without removing it.
+
+### Installing on Windows
+
+1. Run `kumo-windows-x64-setup.exe`.
+2. Windows SmartScreen may say *"Windows protected your PC"* because the installer is not code-signed. Choose **More info**, then **Run anyway**.
+3. Allow the administrator prompt. Kumo needs it to start the VPN core and change the system proxy.
+
+You can check that a file is the one that was built by this repository by comparing its SHA-256 with the list in the release notes. Check for new versions in *Settings → About*.
 ## How to use
 
 1. Open Kumo.
