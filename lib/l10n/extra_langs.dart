@@ -2,6 +2,9 @@
 /// English and Persian live in extra.dart.
 const extraRu = <String, String>{
   'languageDevice': 'Как на устройстве',
+  'prereleaseUpdates': 'Предварительные версии',
+  'prereleaseUpdatesDesc': 'Предлагать при проверке обновлений и тестовые версии (pre-release).',
+  'sourceCode': 'Исходный код и проблемы',
   'selectQrArea': 'Выделите QR-код мышью',
   'cancelUpdate': 'Отменить обновление',
   'updateInstall': 'Скачать и установить',
@@ -110,6 +113,9 @@ const extraRu = <String, String>{
 
 const extraVi = <String, String>{
   'languageDevice': 'Theo thiết bị',
+  'prereleaseUpdates': 'Bao gồm bản thử nghiệm',
+  'prereleaseUpdatesDesc': 'Cũng đề xuất các bản thử nghiệm (pre-release) khi kiểm tra cập nhật.',
+  'sourceCode': 'Mã nguồn và vấn đề',
   'selectQrArea': 'Kéo chuột để chọn mã QR',
   'cancelUpdate': 'Hủy cập nhật',
   'updateInstall': 'Tải xuống và cài đặt',
@@ -218,6 +224,9 @@ const extraVi = <String, String>{
 
 const extraZh = <String, String>{
   'languageDevice': '跟随设备',
+  'prereleaseUpdates': '包含预发布版本',
+  'prereleaseUpdatesDesc': '检查更新时也提供测试版本（预发布）。',
+  'sourceCode': '源代码与问题反馈',
   'selectQrArea': '用鼠标拖选二维码区域',
   'cancelUpdate': '取消更新',
   'updateInstall': '下载并安装',
@@ -322,6 +331,9 @@ const extraZh = <String, String>{
 
 const extraAr = <String, String>{
   'languageDevice': 'مثل الجهاز',
+  'prereleaseUpdates': 'تضمين الإصدارات التجريبية',
+  'prereleaseUpdatesDesc': 'اقتراح الإصدارات التجريبية (pre-release) أيضاً عند البحث عن تحديث.',
+  'sourceCode': 'الشيفرة المصدرية والمشاكل',
   'selectQrArea': 'اسحب بالفأرة لتحديد رمز QR',
   'cancelUpdate': 'إلغاء التحديث',
   'updateInstall': 'تنزيل وتثبيت',

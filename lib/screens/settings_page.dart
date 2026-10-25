@@ -377,6 +377,23 @@ class _SettingsPageState extends State<SettingsPage> {
                   onTap: _checkUpdate,
                 ),
               ),
+              _switch('updatePrerelease', state.updatePrerelease,
+                  tr(context, 'prereleaseUpdates'),
+                  tr(context, 'prereleaseUpdatesDesc')),
+              ListTile(
+                leading: const Icon(Icons.code),
+                title: Text(tr(context, 'sourceCode')),
+                subtitle: const Text('github.com/AbolDev/kumo-client',
+                    textDirection: TextDirection.ltr),
+                onTap: () => openLink('https://github.com/AbolDev/kumo-client'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: const Text('GitHub'),
+                subtitle: const Text('github.com/AbolDev',
+                    textDirection: TextDirection.ltr),
+                onTap: () => openLink('https://github.com/AbolDev'),
+              ),
             ]),
             _section(Icons.memory, t.coreSettings, [
               Padding(

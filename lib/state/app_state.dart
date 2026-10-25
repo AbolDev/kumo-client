@@ -14,6 +14,7 @@ import '../core/rule_sets.dart';
 import '../core/singbox_config.dart';
 import '../core/sources.dart';
 import '../core/sub_formats.dart';
+import '../core/updater.dart' show includePrerelease;
 import '../core/vpn_channel.dart';
 import '../l10n/strings.dart';
 
@@ -160,6 +161,7 @@ class AppState extends ChangeNotifier {
   // Sub settings
   bool autoUpdateSubs = true;
   bool updateOnStartup = true;
+  bool updatePrerelease = false;
   bool allowInsecure = true;
 
   // App settings
@@ -423,6 +425,8 @@ class AppState extends ChangeNotifier {
       bool flag(String k, bool d) => j[k] is bool ? j[k] as bool : d;
       autoUpdateSubs = flag('autoUpdateSubs', true);
       updateOnStartup = flag('updateOnStartup', true);
+      updatePrerelease = flag('updatePrerelease', false);
+      includePrerelease = updatePrerelease;
       allowInsecure = flag('allowInsecure', true);
       autoConnect = flag('autoConnect', false);
       restartOnChange = flag('restartOnChange', true);
@@ -453,6 +457,7 @@ class AppState extends ChangeNotifier {
           'language': languageCode,
           'autoUpdateSubs': autoUpdateSubs,
           'updateOnStartup': updateOnStartup,
+          'updatePrerelease': updatePrerelease,
           'allowInsecure': allowInsecure,
           'autoConnect': autoConnect,
           'restartOnChange': restartOnChange,
@@ -477,6 +482,9 @@ class AppState extends ChangeNotifier {
         VpnChannel.scheduleSubUpdates(value).catchError((_) {});
       case 'updateOnStartup':
         updateOnStartup = value;
+      case 'updatePrerelease':
+        updatePrerelease = value;
+        includePrerelease = value;
       case 'allowInsecure':
         allowInsecure = value;
       case 'autoConnect':

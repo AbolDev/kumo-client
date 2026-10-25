@@ -35,13 +35,18 @@ bool isNewer(String a, String b) {
   return false;
 }
 
-/// Asks GitHub for the latest stable release (pre-releases are never returned). Throws when it
-/// cannot be reached or there is none (a private repository answers 404).
+/// Whether pre-releases are offered too (Settings → About). Off by default.
+bool includePrerelease = false;
+
+/// Asks GitHub for the latest stable release, or the newest release of any kind when
+/// [includePrerelease] is on. Throws when it cannot be reached or there is none.
 Future<UpdateInfo> checkForUpdate(String current) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
     final req = await client
-        .getUrl(Uri.parse('https://api.github.com/repos/$updateRepo/releases/latest'))
+        .getUrl(Uri.parse(includePrerelease
+            ? 'https://api.github.com/repos/$updateRepo/releases?per_page=15'
+            : 'https://api.github.com/repos/$updateRepo/releases/latest'))
         .timeout(const Duration(seconds: 12));
     req.headers
       ..set('Accept', 'application/vnd.github+json')
@@ -49,7 +54,23 @@ Future<UpdateInfo> checkForUpdate(String current) async {
     final res = await req.close().timeout(const Duration(seconds: 12));
     final body = await res.transform(utf8.decoder).join();
     if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
-    final j = jsonDecode(body) as Map<String, dynamic>;
+    final decoded = jsonDecode(body);
+    Map<String, dynamic>? picked;
+    if (decoded is List) {
+      // The release with the highest version among the published ones.
+      for (final r in decoded) {
+        if (r is! Map<String, dynamic> || r['draft'] == true) continue;
+        final tag = '${r['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
+        final best = picked == null
+            ? null
+            : '${picked['tag_name']}'.replaceFirst(RegExp(r'^[vV]'), '');
+        if (tag.isNotEmpty && (best == null || isNewer(tag, best))) picked = r;
+      }
+    } else {
+      picked = decoded as Map<String, dynamic>;
+    }
+    if (picked == null) throw const FormatException('no release');
+    final j = picked;
     final tag = '${j['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
     if (tag.isEmpty) throw const FormatException('no version');
     final assets = <String, String>{

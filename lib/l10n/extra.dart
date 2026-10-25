@@ -21,6 +21,9 @@ const _extra = <String, Map<String, String>>{
   'ar': extraAr,
   'en': {
     'languageDevice': 'Same as device',
+    'prereleaseUpdates': 'Include pre-releases',
+    'prereleaseUpdatesDesc': 'Also offer test versions (pre-releases) when checking for updates.',
+    'sourceCode': 'Source code and issues',
     'selectQrArea': 'Drag over the QR code to select it',
     'cancelUpdate': 'Cancel update',
     'updateInstall': 'Download and install',
@@ -128,6 +131,9 @@ const _extra = <String, Map<String, String>>{
   },
   'fa': {
     'languageDevice': 'مطابق دستگاه',
+    'prereleaseUpdates': 'نسخه‌های آزمایشی (Pre-release)',
+    'prereleaseUpdatesDesc': 'هنگام بررسی به‌روزرسانی، نسخه‌های آزمایشی را هم پیشنهاد بده.',
+    'sourceCode': 'سورس کد و گزارش مشکل',
     'selectQrArea': 'روی QR کد بکشید تا انتخاب شود',
     'cancelUpdate': 'لغو به‌روزرسانی',
     'updateInstall': 'دانلود و نصب',
