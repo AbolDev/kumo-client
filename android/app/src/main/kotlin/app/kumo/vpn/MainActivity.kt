@@ -69,6 +69,7 @@ class MainActivity : FlutterActivity() {
                             .put("showSpeed", showSpeed)
                             .put("showVolume", showVolume)
                             .put("showName", showName)
+                            .put("killSwitch", call.argument<Boolean>("killSwitch") ?: false)
                             .put("xrayPort", if (xrayConfig.isNullOrBlank()) 0 else (call.argument<Int>("xrayPort") ?: 0))
                             .toString(),
                     )

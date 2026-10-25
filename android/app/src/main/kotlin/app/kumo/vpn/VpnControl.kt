@@ -24,6 +24,7 @@ object VpnControl {
             .putExtra(BoxVpnService.EXTRA_SHOW_SPEED, last?.optBoolean("showSpeed", true) ?: true)
             .putExtra(BoxVpnService.EXTRA_SHOW_VOLUME, last?.optBoolean("showVolume", false) ?: false)
             .putExtra(BoxVpnService.EXTRA_SHOW_NAME, last?.optBoolean("showName", true) ?: true)
+            .putExtra(BoxVpnService.EXTRA_KILL_SWITCH, last?.optBoolean("killSwitch", false) ?: false)
         val xrayPort = last?.optInt("xrayPort", 0) ?: 0
         val xray = File(context.filesDir, "xray_config.json")
         if (xrayPort > 0 && xray.exists()) {
