@@ -269,6 +269,7 @@ String? _clashLink(Map p) {
             'obfs': _s(p['obfs']),
             'obfs-password': _s(p['obfs-password']),
             'alpn': _alpn(p['alpn']),
+            'mport': _s(p['ports'] ?? p['mport']),
           })}#${_tag(name)}';
     case 'tuic':
       final id = _s(p['uuid']);
@@ -308,7 +309,9 @@ String? _singBoxLink(Map o) {
   Map<String, String?> transport() => {
         'type': network,
         'path': _s(tr['path']),
-        'host': _s(headers['Host'] ?? headers['host'] ?? tr['host']),
+        'host': _s(headers['Host'] ??
+            headers['host'] ??
+            (tr['host'] is List ? (tr['host'] as List).join(',') : tr['host'])),
         'serviceName': _s(tr['service_name']),
       };
 
@@ -372,6 +375,12 @@ String? _singBoxLink(Map o) {
             'obfs': _s(obfs['type']),
             'obfs-password': _s(obfs['password']),
             'alpn': _alpn(tlsMap['alpn']),
+            // port hopping: sing-box writes ranges as "5000:6000"
+            'mport': o['server_ports'] is List
+                ? (o['server_ports'] as List)
+                    .map((e) => '$e'.replaceAll(':', '-'))
+                    .join(',')
+                : null,
           })}#${_tag(name)}';
     case 'tuic':
       final id = _s(o['uuid']);

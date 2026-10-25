@@ -32,6 +32,23 @@ proxies:
 ''';
 
 void main() {
+  test('hysteria2 port hopping survives the conversion from clash and sing-box', () {
+    final clash = extractSubscriptionLinks('''
+proxies:
+  - name: hy
+    type: hysteria2
+    server: h.example.com
+    port: 443
+    ports: 5000-6000
+    password: pw
+''');
+    expect(parseLinks(clash).single.outbound['server_ports'], ['5000:6000']);
+    final box = extractSubscriptionLinks(
+        '{"outbounds":[{"type":"hysteria2","tag":"hy","server":"h.example.com",'
+        '"server_port":443,"server_ports":["7000:8000"],"password":"pw"}]}');
+    expect(parseLinks(box).single.outbound['server_ports'], ['7000:8000']);
+  });
+
   test('clash yaml becomes links that parse', () {
     final links = extractSubscriptionLinks(_clash);
     expect(links.length, 3);
