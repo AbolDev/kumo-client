@@ -92,7 +92,7 @@ Tap **Add** and choose one of:
 - Public servers are run by unknown people. **Do not use them for banking, private accounts or anything sensitive.** For those, use your own trusted server.
 - Free servers can be slow or stop working at any time. Use *Refresh* to get a fresh list.
 - With *Tunnel whole device* off, only apps that use Kumo's local proxy are protected. Apps like Telegram need the proxy set inside them.
-- Kumo does not collect any data about you.
+- Kumo does not collect any data about you. See the [privacy policy](PRIVACY.md) for the few network requests it makes.
 
 ## Build from source
 
