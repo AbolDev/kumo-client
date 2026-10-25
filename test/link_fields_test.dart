@@ -5,6 +5,13 @@ import 'package:kumo/core/link_fields.dart';
 import 'package:kumo/core/proxy_config.dart';
 
 void main() {
+  test('a hysteria2 link with port hopping can be edited', () {
+    final f = LinkFields.parse('hysteria2://pw@h.com:443,5000-6000?sni=h.com#hop')!;
+    expect(f.port, '443');
+    expect(f.params['mport'], '5000-6000');
+    expect(parseLink(f.build())!.outbound['server_ports'], ['5000:6000']);
+  });
+
   test('vless link survives a form round trip', () {
     const link =
         'vless://11111111-2222-3333-4444-555555555555@example.com:443?security=tls&sni=a.com&type=ws&path=%2Fx#My%20Node';

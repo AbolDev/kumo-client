@@ -85,14 +85,22 @@ class LinkFields {
   }
 
   static LinkFields _uri(String scheme, String link) {
-    final u = Uri.parse(link.replaceFirst(RegExp('^hy2://'), 'hysteria2://'));
+    var text = link.replaceFirst(RegExp('^hy2://'), 'hysteria2://');
+    // `host:443,5000-6000` (port hopping) is not a valid URI: the extra ports move to `mport`.
+    final hop = RegExp(r'(@[^/?#@]+:\d+),([\d,\-]+)').firstMatch(text);
+    if (hop != null) text = text.replaceFirst(hop.group(0)!, hop.group(1)!);
+    final u = Uri.parse(text);
+    final params = Map.of(u.queryParameters);
+    if (hop != null && (params['mport'] ?? '').isEmpty) {
+      params['mport'] = hop.group(2)!;
+    }
     return LinkFields._(
       scheme,
       Uri.decodeComponent(u.fragment),
       u.host,
       u.hasPort ? '${u.port}' : '',
       u.userInfo.contains('%') ? Uri.decodeComponent(u.userInfo) : u.userInfo,
-      Map.of(u.queryParameters),
+      params,
     );
   }
 
