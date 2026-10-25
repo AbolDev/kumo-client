@@ -223,11 +223,9 @@ class WindowsVpn {
   /// With [keepBlocked] the system proxy is left pointing at a dead port, so programs that follow
   /// it cannot reach the internet until the user disconnects or reconnects.
   Future<void> _killAll({bool keepBlocked = false}) async {
-    if (keepBlocked) {
-      await _proxy.enable(1);
-    } else {
-      await _proxy.restore();
-    }
+    // The proxy settings are put back while the cores are being stopped, not before: the two
+    // are independent and each used to wait for the other.
+    final proxy = keepBlocked ? _proxy.enable(1) : _proxy.restore();
     final procs = [_core, _xray].whereType<Process>().toList();
     _core = null;
     _xray = null;
@@ -236,9 +234,11 @@ class WindowsVpn {
     for (final p in procs) {
       p.kill();
     }
-    for (final p in procs) {
-      await p.exitCode.timeout(const Duration(seconds: 4), onTimeout: () => -1);
-    }
+    await Future.wait([
+      proxy,
+      for (final p in procs)
+        p.exitCode.timeout(const Duration(seconds: 4), onTimeout: () => -1),
+    ]);
   }
 
   /// Speed and totals from the core's local API, one line a second.

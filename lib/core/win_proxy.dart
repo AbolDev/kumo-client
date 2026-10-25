@@ -67,10 +67,13 @@ class WinProxy {
       if (!await _backup.exists()) return;
       final j = jsonDecode(await _backup.readAsString()) as Map<String, dynamic>;
       final enable = j['enable'] as String?;
-      await _set('ProxyEnable', 'REG_DWORD',
-          enable == null ? '0' : '${int.tryParse(enable.replaceFirst('0x', ''), radix: 16) ?? 0}');
-      await _set('ProxyServer', 'REG_SZ', j['server'] as String?);
-      await _set('ProxyOverride', 'REG_SZ', j['override'] as String?);
+      // Three independent registry writes, each a separate process: run them side by side.
+      await Future.wait([
+        _set('ProxyEnable', 'REG_DWORD',
+            enable == null ? '0' : '${int.tryParse(enable.replaceFirst('0x', ''), radix: 16) ?? 0}'),
+        _set('ProxyServer', 'REG_SZ', j['server'] as String?),
+        _set('ProxyOverride', 'REG_SZ', j['override'] as String?),
+      ]);
       await _backup.delete();
       _notify();
     } catch (_) {}

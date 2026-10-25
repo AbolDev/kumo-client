@@ -484,6 +484,9 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         runCatching { blockFd?.close() }
         blockFd = null
         stopStatsClient()
+        // Xray is the core's upstream: stopping it first makes the core's open connections fail at
+        // once instead of waiting for them to end, which is what closing the service waits for.
+        runCatching { stopXray() }
         // The core owns the tun descriptor while it runs: let it shut down first, and only
         // then release our handle, otherwise it can read from a descriptor that is already gone.
         runCatching { commandServer?.closeService() }
@@ -492,7 +495,6 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         runCatching { DefaultNetworkMonitor.stop() }
         runCatching { commandServer?.close() }
         commandServer = null
-        runCatching { stopXray() }
     }
 
     private fun stopForegroundAndSelf() {
