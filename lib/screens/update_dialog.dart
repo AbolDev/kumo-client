@@ -114,7 +114,6 @@ Future<void> _install(BuildContext context, UpdateInfo info) async {
           ]);
         },
       ),
-    )
     ),
   );
   String? path;
