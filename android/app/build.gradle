@@ -1,0 +1,82 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "app.kumo.vpn"
+    compileSdk = 35
+    // Only 35.0.1 is installed here; the AGP default (34.0.0) would need a download from Google.
+    buildToolsVersion = "35.0.1"
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    defaultConfig {
+        applicationId = "app.kumo.vpn"
+        // libbox is built with -androidapi 23
+        minSdk = 23
+        targetSdk = 35
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        // The app only ships these languages; drop the other library translations.
+        resourceConfigurations += ["en", "fa", "zh", "zh-rTW", "vi", "ru", "ar"]
+    }
+
+    packaging {
+        jniLibs {
+            // Store the .so files compressed in the APK: smaller download, slightly larger install.
+            useLegacyPackaging = true
+            // libxray.so is a Go executable, not a library: stripping it would corrupt it.
+            keepDebugSymbols += "**/libxray.so"
+        }
+    }
+
+    // A fixed key: CI builds all carry the same signature, so each APK installs over the last.
+    // The release key is never in the repository. It comes from android/key.properties (local
+    // builds) or from environment variables (CI); without it the build is signed with the debug key.
+    def keyProps = new Properties()
+    def keyFile = rootProject.file('key.properties')
+    if (keyFile.exists()) keyFile.withInputStream { keyProps.load(it) }
+    def signValue = { String name -> keyProps.getProperty(name) ?: System.getenv('KUMO_' + name.toUpperCase()) }
+    def hasReleaseKey = signValue('storeFile') && signValue('storePassword') && signValue('keyAlias') && signValue('keyPassword')
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile file(signValue('storeFile'))
+                storePassword signValue('storePassword')
+                keyAlias signValue('keyAlias')
+                keyPassword signValue('keyPassword')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    implementation files("libs/libbox.aar")
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0"
+    implementation "androidx.core:core-ktx:1.13.1"
+}

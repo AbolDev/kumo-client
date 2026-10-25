@@ -1,0 +1,270 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    # A tag such as v1.0.1 also publishes a GitHub release with the files below.
+    tags: ['v*']
+
+env:
+  SING_BOX: '1.13.21'
+  XRAY: 'v26.10.21'
+
+jobs:
+  # Tests run next to the build instead of before it, so they no longer add to its time.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      - run: flutter pub get
+      - run: flutter test
+
+  # sing-box (libbox.aar) for every Android CPU. Built once, then cached until the version changes.
+  native-box:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: native-out
+          key: native-box-${{ env.SING_BOX }}-${{ hashFiles('tools/libbox_patch/**') }}-v1
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Build libbox.aar for arm64, arm and x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p native-out
+          export GOTOOLCHAIN=auto
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          git clone --depth 1 --branch "v$SING_BOX" https://github.com/SagerNet/sing-box.git sb
+          cp tools/libbox_patch/*.go sb/experimental/libbox/
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          (cd sb && gomobile bind -v -o libbox.aar \
+            -target android/arm64,android/arm,android/amd64 -androidapi 23 \
+            -javapkg=io.nekohasekai -libname=box -trimpath -buildvcs=false \
+            -ldflags "-X github.com/sagernet/sing-box/constant.Version=$SING_BOX -X internal/godebug.defaultGODEBUG=multipathtcp=0 -s -w -buildid= -checklinkname=0" \
+            -tags "with_gvisor,with_quic,with_utls,with_clash_api,badlinkname,tfogo_checklinkname0" \
+            ./experimental/libbox)
+          cp sb/libbox.aar native-out/libbox.aar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-box
+          path: native-out
+          compression-level: 0
+
+  # Xray executables for every Android CPU (named libxray.so so Android lets the app run them).
+  native-xray:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: native-out
+          key: native-xray-${{ env.XRAY }}-v1
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Build Xray for arm64, arm and x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          BIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          git clone --depth 1 --branch "$XRAY" https://github.com/XTLS/Xray-core.git xray
+          export GOTOOLCHAIN=go1.27.3 GOOS=android CGO_ENABLED=1
+          build_xray() { # abi goarch compiler [goarm]
+            mkdir -p "native-out/jniLibs/$1"
+            (cd xray && GOARCH=$2 GOARM=${4:-} CC="$BIN/$3" go build -o "../native-out/jniLibs/$1/libxray.so" \
+              -trimpath -buildvcs=false \
+              -ldflags "-s -w -buildid= -checklinkname=0 -X github.com/xtls/xray-core/core.build=kumo" ./main)
+          }
+          build_xray arm64-v8a arm64 aarch64-linux-android23-clang
+          build_xray armeabi-v7a arm armv7a-linux-androideabi23-clang 7
+          build_xray x86_64 amd64 x86_64-linux-android23-clang
+          ls -R native-out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-xray
+          path: native-out
+          compression-level: 0
+
+  # The four APKs are built side by side, each on its own runner.
+  apk:
+    needs: [native-box, native-xray]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: arm64-v8a
+            args: --split-per-abi --target-platform android-arm64
+            file: app-arm64-v8a-release.apk
+          - name: armeabi-v7a
+            args: --split-per-abi --target-platform android-arm
+            file: app-armeabi-v7a-release.apk
+          - name: x86_64
+            args: --split-per-abi --target-platform android-x64
+            file: app-x86_64-release.apk
+          - name: universal
+            args: ''
+            file: app-release.apk
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Restores Gradle's dependency and build caches faster than setup-java's cache.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      # The committed copies hold arm64 only; these cover arm64, arm and x86_64.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: native-out
+          merge-multiple: true
+
+      - name: Use the multi-CPU native libraries
+        run: |
+          cp native-out/libbox.aar android/app/libs/libbox.aar
+          cp -r native-out/jniLibs/* android/app/src/main/jniLibs/
+
+      # The release key comes from repository secrets; forks without them get a debug-signed APK.
+      - name: Restore the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/kumo.jks"
+            echo "KUMO_STOREFILE=$RUNNER_TEMP/kumo.jks" >> "$GITHUB_ENV"
+          fi
+
+      - run: flutter pub get
+      - env:
+          KUMO_STOREPASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KUMO_KEYPASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KUMO_KEYALIAS: ${{ secrets.KEY_ALIAS }}
+        run: >
+          flutter build apk --release ${{ matrix.args }}
+          --obfuscate --split-debug-info=build/symbols --no-pub
+
+      - run: |
+          mkdir dist
+          cp build/app/outputs/flutter-apk/${{ matrix.file }} dist/kumo-android-${{ matrix.name }}.apk
+
+      # Uploaded as the bare file (no zip); the artifact takes the file's name.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-android-${{ matrix.name }}.apk
+          archive: false
+  # Flutter builds Windows for the CPU of the machine running it and has no x86 target, so only the
+  # x64 installer is made. (An ARM64 one needs an ARM64 runner; the matrix is ready for it, see
+  # tools/fetch_windows_core.ps1 -Arch and installer/kumo.iss /DArch.)
+  windows:
+    # Visual Studio 2022 is the newest version these Flutter releases know.
+    runs-on: windows-2022
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            flutter: '3.27.4'
+            target: ''
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ matrix.flutter }}
+          cache: true
+          pub-cache: true
+
+      - run: flutter pub get
+
+      # sing-box, Xray and the wintun driver that the app runs next to kumo.exe.
+      - run: ./tools/fetch_windows_core.ps1 -Arch ${{ matrix.arch }}
+
+      - run: flutter build windows --release --no-pub ${{ matrix.target }}
+
+      # One installer for the whole app: the program, the cores, the driver and an uninstaller.
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $version = ((Get-Content pubspec.yaml | Select-String '^version:').Line -split '[: +]+')[1]
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=${{ matrix.arch }}" installer\kumo.iss
+          if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-windows-${{ matrix.arch }}-setup.exe
+          archive: false
+
+  # A pushed version tag becomes a release holding the four APKs and the Windows installers.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [apk, windows, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: 'kumo-*'
+          path: dist
+          merge-multiple: true
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}"
+          --title "Kumo ${{ github.ref_name }}" --generate-notes

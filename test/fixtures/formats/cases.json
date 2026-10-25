@@ -1,0 +1,308 @@
+[
+ {
+  "name": "npvt_xray",
+  "bin": "npvt_xray.bin",
+  "file": "a.npvt",
+  "password": "",
+  "mode": "links",
+  "expected": "vless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#xr-test\nvmess://eyJhZGQiOiIxLjIuMy40IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6ImFhYWFhYWFhLWJiYmItY2NjYy1kZGRkLWVlZWVlZWVlZWVlZSIsIm5ldCI6ImdycGMiLCJwYXRoIjoic3ZjIiwicG9ydCI6IjgwODAiLCJwcyI6InhyLXRlc3QiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im11bHRpIiwidiI6IjIifQ==\ntrojan://p@ss%2Fw:rd@t.example.com:443?fp=firefox&pbk=PUBKEY&security=reality&sid=ab12&sni=r.example.com&spx=%2F&type=tcp#xr-test\nss://YWVzLTEyOC1nY206cHc=@[::1]:1234#xr-test\nvless://u@x.example:443?encryption=none&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D&host=cdn.example&mode=packet-up&path=%2Fx&security=none&type=xhttp#xr-test",
+  "links": []
+ },
+ {
+  "name": "npvt_two",
+  "bin": "npvt_two.bin",
+  "file": "a.npvt",
+  "password": "",
+  "mode": "links",
+  "expected": "vless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#xr-test\nvmess://eyJhZGQiOiIxLjIuMy40IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6ImFhYWFhYWFhLWJiYmItY2NjYy1kZGRkLWVlZWVlZWVlZWVlZSIsIm5ldCI6ImdycGMiLCJwYXRoIjoic3ZjIiwicG9ydCI6IjgwODAiLCJwcyI6InhyLXRlc3QiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im11bHRpIiwidiI6IjIifQ==\ntrojan://p@ss%2Fw:rd@t.example.com:443?fp=firefox&pbk=PUBKEY&security=reality&sid=ab12&sni=r.example.com&spx=%2F&type=tcp#xr-test\nss://YWVzLTEyOC1nY206cHc=@[::1]:1234#xr-test\nvless://u@x.example:443?encryption=none&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D&host=cdn.example&mode=packet-up&path=%2Fx&security=none&type=xhttp#xr-test\nvless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#xr-test\nvmess://eyJhZGQiOiIxLjIuMy40IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6ImFhYWFhYWFhLWJiYmItY2NjYy1kZGRkLWVlZWVlZWVlZWVlZSIsIm5ldCI6ImdycGMiLCJwYXRoIjoic3ZjIiwicG9ydCI6IjgwODAiLCJwcyI6InhyLXRlc3QiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im11bHRpIiwidiI6IjIifQ==\ntrojan://p@ss%2Fw:rd@t.example.com:443?fp=firefox&pbk=PUBKEY&security=reality&sid=ab12&sni=r.example.com&spx=%2F&type=tcp#xr-test\nss://YWVzLTEyOC1nY206cHc=@[::1]:1234#xr-test\nvless://u@x.example:443?encryption=none&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D&host=cdn.example&mode=packet-up&path=%2Fx&security=none&type=xhttp#xr-test",
+  "links": []
+ },
+ {
+  "name": "npvt_b64_ssh",
+  "bin": "npvt_b64_ssh.bin",
+  "file": "a.npvt",
+  "password": "",
+  "mode": "full",
+  "expected": "{\n  \"hello\": \"ssh\"\n}",
+  "links": []
+ },
+ {
+  "name": "npvt_wrapped",
+  "bin": "npvt_wrapped.bin",
+  "file": "a.npvt",
+  "password": "",
+  "mode": "links",
+  "expected": "vless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#xr-test\nvmess://eyJhZGQiOiIxLjIuMy40IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6ImFhYWFhYWFhLWJiYmItY2NjYy1kZGRkLWVlZWVlZWVlZWVlZSIsIm5ldCI6ImdycGMiLCJwYXRoIjoic3ZjIiwicG9ydCI6IjgwODAiLCJwcyI6InhyLXRlc3QiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im11bHRpIiwidiI6IjIifQ==\ntrojan://p@ss%2Fw:rd@t.example.com:443?fp=firefox&pbk=PUBKEY&security=reality&sid=ab12&sni=r.example.com&spx=%2F&type=tcp#xr-test\nss://YWVzLTEyOC1nY206cHc=@[::1]:1234#xr-test\nvless://u@x.example:443?encryption=none&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D&host=cdn.example&mode=packet-up&path=%2Fx&security=none&type=xhttp#xr-test\nvless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#second",
+  "links": []
+ },
+ {
+  "name": "npvs_open",
+  "bin": "npvs_open.bin",
+  "file": "a.npvs",
+  "password": "",
+  "mode": "links",
+  "expected": "vless://uuid-sentinel@o.example.com:443?allowInsecure=1&encryption=none&fp=chrome&host=oh.example&path=%2Fo&security=tls&sni=os.example&type=ws#open%20vless\nvmess://eyJhZGQiOiJ2LmV4YW1wbGUuY29tIiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6InV1aWQtMiIsImluc2VjdXJlIjoiMCIsIm5ldCI6ImdycGMiLCJwYXRoIjoiZyIsInBvcnQiOiI4NDQzIiwicHMiOiJvcGVuIHZtZXNzIiwic2N5IjoiYXV0byIsInNuaSI6IiIsInRscyI6InRscyIsInR5cGUiOiJndW4iLCJ2IjoiMiJ9\ntrojan://pw%2F1@t.example.com:443?flow=xtls-rprx-vision&fp=chrome&pbk=PK&security=reality&sid=sid&sni=r.e&type=tcp#open%20trojan\nss://YWVzLTI1Ni1nY206cHc=@s.example.com:8388#open%20ss\nssh://u%40x:p%20w@ssh.example.com:22?remarks=open+ssh#GET /\nsocks://a:b@s5.example.com:1080?password=b&remarks=open+socks&username=a\n\n// ---- container ----\n// NPVO1 (open export, plain JSON payload, no key material)\n// configs: 6\n// source: a.npvs\n",
+  "links": []
+ },
+ {
+  "name": "npvs_gen2_appkey",
+  "bin": "npvs_gen2_appkey.bin",
+  "file": "a.npvs",
+  "password": "",
+  "mode": "links",
+  "expected": "// ---- creator message ----\nhello\n\nvless://uuid-sentinel@o.example.com:443?allowInsecure=1&encryption=none&fp=chrome&host=oh.example&path=%2Fo&security=tls&sni=os.example&type=ws#open%20vless\nvmess://eyJhZGQiOiJ2LmV4YW1wbGUuY29tIiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6InV1aWQtMiIsImluc2VjdXJlIjoiMCIsIm5ldCI6ImdycGMiLCJwYXRoIjoiZyIsInBvcnQiOiI4NDQzIiwicHMiOiJvcGVuIHZtZXNzIiwic2N5IjoiYXV0byIsInNuaSI6IiIsInRscyI6InRscyIsInR5cGUiOiJndW4iLCJ2IjoiMiJ9\ntrojan://pw%2F1@t.example.com:443?flow=xtls-rprx-vision&fp=chrome&pbk=PK&security=reality&sid=sid&sni=r.e&type=tcp#open%20trojan\nss://YWVzLTI1Ni1nY206cHc=@s.example.com:8388#open%20ss\nssh://u%40x:p%20w@ssh.example.com:22?remarks=open+ssh#GET /\nsocks://a:b@s5.example.com:1080?password=b&remarks=open+socks&username=a\n\n// ---- recovered key material ----\n// configId: f7c7701d0117e9f1f0ce9508abb11519\n// creator.pk: c45a3c0407fcc90458a59f7b9d7626172eb61dd803807ce1f73f10aa8ae9771199\n// contentId: 9062c3597e5795d177790bc8ee78ded198e12b70bbc784d0704b461fc72f6a6f\n// appKey A16 (gen-2 whitebox): 22d4e8533c843837b17038403676ecd6\n// KDK: 023fe647b3cabbdb468581524ce94f38a67369cd779b2cdaf750a83c98b7310b\n// DEK/CEK (hex): a7ee3374e087aa04f18212015524b579a8602a0d13967f29138e372406ef58c5\n",
+  "links": []
+ },
+ {
+  "name": "npvs_gen2_pass",
+  "bin": "npvs_gen2_pass.bin",
+  "file": "a.npvs",
+  "password": "secret-pass",
+  "mode": "links",
+  "expected": "// ---- creator message ----\nhello\n\nvless://uuid-sentinel@o.example.com:443?allowInsecure=1&encryption=none&fp=chrome&host=oh.example&path=%2Fo&security=tls&sni=os.example&type=ws#open%20vless\nvmess://eyJhZGQiOiJ2LmV4YW1wbGUuY29tIiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6InV1aWQtMiIsImluc2VjdXJlIjoiMCIsIm5ldCI6ImdycGMiLCJwYXRoIjoiZyIsInBvcnQiOiI4NDQzIiwicHMiOiJvcGVuIHZtZXNzIiwic2N5IjoiYXV0byIsInNuaSI6IiIsInRscyI6InRscyIsInR5cGUiOiJndW4iLCJ2IjoiMiJ9\ntrojan://pw%2F1@t.example.com:443?flow=xtls-rprx-vision&fp=chrome&pbk=PK&security=reality&sid=sid&sni=r.e&type=tcp#open%20trojan\n\n// ---- recovered key material ----\n// configId: c41ef0871ad4d77c60d1d1a841a43158\n// creator.pk: 1bb3b3cff62894e8f144f827d9d7fbb852cbc972b8121465360ce549cd093881d4\n// contentId: a316c2ca25ea370a6e64bc5335f8d2ac61efdfeaf54789a1eb4d6c51af93d826\n// kdf: pbkdf2-hmac-sha256 iterations=1500\n// KDK: f3a4882280f5b31aff967c5c9f147c0e6a66baa5b48917c49e8699a11bd80a5f\n// DEK/CEK (hex): 6df333196531b4e2e375803cd1cc5ceedb3483e3b36b2cf395344d0fd05a8827\n",
+  "links": []
+ },
+ {
+  "name": "hat_plain",
+  "bin": "hat_plain.bin",
+  "file": "a.hat",
+  "password": "",
+  "mode": "full",
+  "expected": "{\n    \"name\": \"hat\",\n    \"list\": [\n        1,\n        2,\n        {\n            \"a\": \"\\u003cb\\u003e\\u0026\"\n        }\n    ]\n}",
+  "links": []
+ },
+ {
+  "name": "hat_xray",
+  "bin": "hat_xray.bin",
+  "file": "a.hat",
+  "password": "",
+  "mode": "xray",
+  "expected": "{\n    \"remarks\": \"xr-test\",\n    \"outbounds\": [\n        {\n            \"protocol\": \"vless\",\n            \"tag\": \"proxy\",\n            \"settings\": {\n                \"vnext\": [\n                    {\n                        \"address\": \"example.com\",\n                        \"port\": 443,\n                        \"users\": [\n                            {\n                                \"id\": \"11111111-2222-3333-4444-555555555555\",\n                                \"encryption\": \"none\",\n                                \"flow\": \"xtls-rprx-vision\"\n                            }\n                        ]\n                    }\n                ]\n            },\n            \"streamSettings\": {\n                \"network\": \"ws\",\n                \"security\": \"tls\",\n                \"wsSettings\": {\n                    \"path\": \"/ws\",\n                    \"headers\": {\n                        \"Host\": \"h.example.com\"\n                    }\n                },\n                \"tlsSettings\": {\n                    \"serverName\": \"s.example.com\",\n                    \"fingerprint\": \"chrome\",\n                    \"alpn\": [\n                        \"h2\",\n                        \"http/1.1\"\n                    ],\n                    \"allowInsecure\": true\n                }\n            }\n        },\n        {\n            \"protocol\": \"vmess\",\n            \"tag\": \"p2\",\n            \"settings\": {\n                \"vnext\": [\n                    {\n                        \"address\": \"1.2.3.4\",\n                        \"port\": 8080,\n                        \"users\": [\n                            {\n                                \"id\": \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\n                                \"alterId\": 0,\n                                \"security\": \"auto\"\n                            }\n                        ]\n                    }\n                ]\n            },\n            \"streamSettings\": {\n                \"network\": \"grpc\",\n                \"security\": \"none\",\n                \"grpcSettings\": {\n                    \"serviceName\": \"svc\",\n                    \"multiMode\": true\n                }\n            }\n        },\n        {\n            \"protocol\": \"trojan\",\n            \"tag\": \"p3\",\n            \"settings\": {\n                \"servers\": [\n                    {\n                        \"address\": \"t.example.com\",\n                        \"port\": 443,\n                        \"password\": \"p@ss/w:rd\"\n                    }\n                ]\n            },\n            \"streamSettings\": {\n                \"network\": \"tcp\",\n                \"security\": \"reality\",\n                \"realitySettings\": {\n                    \"serverName\": \"r.example.com\",\n                    \"fingerprint\": \"firefox\",\n                    \"publicKey\": \"PUBKEY\",\n                    \"shortId\": \"ab12\",\n                    \"spiderX\": \"/\"\n                }\n            }\n        },\n        {\n            \"protocol\": \"shadowsocks\",\n            \"tag\": \"p4\",\n            \"settings\": {\n                \"servers\": [\n                    {\n                        \"address\": \"::1\",\n                        \"port\": 1234,\n                        \"method\": \"aes-128-gcm\",\n                        \"password\": \"pw\"\n                    }\n                ]\n            }\n        },\n        {\n            \"protocol\": \"vless\",\n            \"tag\": \"p5\",\n            \"settings\": {\n                \"vnext\": [\n                    {\n                        \"address\": \"x.example\",\n                        \"port\": 443,\n                        \"users\": [\n                            {\n                                \"id\": \"u\"\n                            }\n                        ]\n                    }\n                ]\n            },\n            \"streamSettings\": {\n                \"network\": \"xhttp\",\n                \"security\": \"none\",\n                \"xhttpSettings\": {\n                    \"path\": \"/x\",\n                    \"host\": \"cdn.example\",\n                    \"mode\": \"packet-up\",\n                    \"extra\": {\n                        \"xPaddingBytes\": \"100-1000\"\n                    }\n                }\n            }\n        }\n    ]\n}",
+  "links": [
+   "vless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#xr-test",
+   "vmess://eyJhZGQiOiIxLjIuMy40IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6ImFhYWFhYWFhLWJiYmItY2NjYy1kZGRkLWVlZWVlZWVlZWVlZSIsIm5ldCI6ImdycGMiLCJwYXRoIjoic3ZjIiwicG9ydCI6IjgwODAiLCJwcyI6InhyLXRlc3QiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im11bHRpIiwidiI6IjIifQ==",
+   "trojan://p@ss%2Fw:rd@t.example.com:443?fp=firefox&pbk=PUBKEY&security=reality&sid=ab12&sni=r.example.com&spx=%2F&type=tcp#xr-test",
+   "ss://YWVzLTEyOC1nY206cHc=@[::1]:1234#xr-test",
+   "vless://u@x.example:443?encryption=none&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D&host=cdn.example&mode=packet-up&path=%2Fx&security=none&type=xhttp#xr-test"
+  ]
+ },
+ {
+  "name": "hat_text",
+  "bin": "hat_text.bin",
+  "file": "a.hat",
+  "password": "",
+  "mode": "full",
+  "expected": "just some text, not json",
+  "links": []
+ },
+ {
+  "name": "nm_plain",
+  "bin": "nm_plain.bin",
+  "file": "a.nm",
+  "password": "",
+  "mode": "full",
+  "expected": "{\n    \"name\": \"hat\",\n    \"list\": [\n        1,\n        2,\n        {\n            \"a\": \"\\u003cb\\u003e\\u0026\"\n        }\n    ]\n}",
+  "links": []
+ },
+ {
+  "name": "nm_proto",
+  "bin": "nm_proto.bin",
+  "file": "a.nm",
+  "password": "",
+  "mode": "full",
+  "expected": "nm-vless://vless://abc@h:1#n",
+  "links": []
+ },
+ {
+  "name": "happ_crypt",
+  "bin": "happ_crypt.bin",
+  "file": "a.happ",
+  "password": "",
+  "mode": "full",
+  "expected": "vless://uuid-crypt@h.example:443?type=tcp#crypt link\nvmess://abc",
+  "links": []
+ },
+ {
+  "name": "happ_crypt2",
+  "bin": "happ_crypt2.bin",
+  "file": "a.happ",
+  "password": "",
+  "mode": "full",
+  "expected": "vless://uuid-crypt2@h.example:443?type=tcp#crypt2 link\nvmess://abc",
+  "links": []
+ },
+ {
+  "name": "happ_crypt3",
+  "bin": "happ_crypt3.bin",
+  "file": "a.happ",
+  "password": "",
+  "mode": "full",
+  "expected": "vless://uuid-crypt3@h.example:443?type=tcp#crypt3 link\nvmess://abc",
+  "links": []
+ },
+ {
+  "name": "happ_crypt4",
+  "bin": "happ_crypt4.bin",
+  "file": "a.happ",
+  "password": "",
+  "mode": "full",
+  "expected": "vless://uuid-crypt4@h.example:443?type=tcp#crypt4 link\nvmess://abc",
+  "links": []
+ },
+ {
+  "name": "happ_crypt5",
+  "bin": "happ_crypt5.bin",
+  "file": "a.happ",
+  "password": "",
+  "mode": "full",
+  "expected": "vless://crypt5@h:1#c5\nss://x",
+  "links": []
+ },
+ {
+  "name": "happ_crypt5_salted",
+  "bin": "happ_crypt5_salted.bin",
+  "file": "a.happ",
+  "password": "",
+  "mode": "full",
+  "expected": "vless://crypt5salt@h:1#c5s",
+  "links": []
+ },
+ {
+  "name": "dark",
+  "bin": "dark.bin",
+  "file": "a.dark",
+  "password": "",
+  "mode": "full",
+  "expected": "{\n    \"encryptedLockedConfig\": {\n        \"EncryptedLockedConfig\": {\n            \"Blob\": [\n                0,\n                1,\n                2,\n                3,\n                255\n            ],\n            \"EncryptedJson\": {\n                \"a\": 1,\n                \"k\": \"$VAR\"\n            },\n            \"EncryptedPassword\": \"s3cret\",\n            \"Host\": \"1.2.3.4\",\n            \"Name\": \"dark\",\n            \"Nested\": {\n                \"List\": [\n                    1,\n                    2.5,\n                    null,\n                    true,\n                    \"x\"\n                ]\n            }\n        },\n        \"Version\": 3\n    },\n    \"meta\": \"m\"\n}",
+  "links": []
+ },
+ {
+  "name": "tls_0",
+  "bin": "tls_0.bin",
+  "file": "a.tls",
+  "password": "",
+  "mode": "full",
+  "expected": "\n[+] TLS Tunnel profile (tag 506, key #0 of 5)\nFIELD                          | VALUE\n--------------------------------------------------------------------------------\nConnection                     | Private Server (SSH)\nConfig tag                     | 506\nServer index                   | 1\nPort                           | T 80 (1)\nSSH user                       | sshuser\nSSH password                   | sshpass\nSSH host                       | ssh.example.com\nPort text                      | 443\nCustom port                    | 443\nSSH port                       | 22\nUse Payload                    | ✅ TRUE\nPayload                        | GET / HTTP/1.1\nUse SNI Host                   | ✅ TRUE\nSNI Host                       | sni.example\nUse Payload after TLS          | ❌ FALSE\nUse Proxy                      | ❌ FALSE\nIPv6                           | ❌ FALSE\nTCP Fast Open                  | ❌ FALSE\nObfuscated TLSCH               | ❌ FALSE\nTCP Method                     | ❌ FALSE\nBlock Method                   | ✅ TRUE\nBlock Torrent                  | ❌ FALSE\nMessage                        | hello\nBlock Root and DevMode         | ❌ FALSE\nField 29                       | extra1\nField 30                       | extra2\n",
+  "links": []
+ },
+ {
+  "name": "tls_1",
+  "bin": "tls_1.bin",
+  "file": "a.tls",
+  "password": "",
+  "mode": "full",
+  "expected": "\n[+] TLS Tunnel profile (tag 506, key #1 of 5)\nFIELD                          | VALUE\n--------------------------------------------------------------------------------\nConnection                     | Private Server (SSH)\nConfig tag                     | 506\nServer index                   | 1\nPort                           | T 80 (1)\nSSH user                       | sshuser\nSSH password                   | sshpass\nSSH host                       | ssh.example.com\nPort text                      | 443\nCustom port                    | 443\nSSH port                       | 22\nUse Payload                    | ✅ TRUE\nPayload                        | GET / HTTP/1.1\nUse SNI Host                   | ✅ TRUE\nSNI Host                       | sni.example\nUse Payload after TLS          | ❌ FALSE\nUse Proxy                      | ❌ FALSE\nIPv6                           | ❌ FALSE\nTCP Fast Open                  | ❌ FALSE\nObfuscated TLSCH               | ❌ FALSE\nTCP Method                     | ❌ FALSE\nBlock Method                   | ✅ TRUE\nBlock Torrent                  | ❌ FALSE\nMessage                        | hello\nBlock Root and DevMode         | ❌ FALSE\nField 29                       | extra1\nField 30                       | extra2\n",
+  "links": []
+ },
+ {
+  "name": "tls_undocumented",
+  "bin": "tls_undocumented.bin",
+  "file": "a.tls",
+  "password": "",
+  "mode": "full",
+  "expected": "\n[+] TLS Tunnel profile (tag 1, key #0 of 5)\nFIELD                          | VALUE\n--------------------------------------------------------------------------------\nField 0                        | 1\nField 1                        | 1\nField 2                        | 1\nField 3                        | true\nField 4                        | c3NodXNlcg\nField 5                        | c3NocGFzcw\nField 6                        | c3NoLmV4YW1wbGUuY29t\nField 7                        | 443\nField 8                        | 443\nField 9                        | 22\nField 11                       | true\nField 12                       | R0VUIC8gSFRUUC8xLjE=\nField 13                       | true\nField 14                       | c25pLmV4YW1wbGU=\nField 15                       | false\nField 17                       | false\nField 20                       | false\nField 21                       | false\nField 22                       | false\nField 23                       | false\nField 25                       | true\nField 26                       | false\nField 27                       | aGVsbG8=\nField 28                       | false\nField 29                       | extra1\nField 30                       | extra2\n",
+  "links": []
+ },
+ {
+  "name": "zsx_open_link",
+  "bin": "zsx_open_link.bin",
+  "file": "a.zsx",
+  "password": "",
+  "mode": "full",
+  "expected": "// ---- ZedSecure vault profile ----\n// name: Test vault\n// name (fa): ÃƒËœÃ‚ÂªÃƒËœÃ‚Â³ÃƒËœÃ‚Âª\n// note: n\n//        m\n// created: 2023-11-14T22:13:20Z\n// expires: 2030-03-17T17:46:40Z\n// password: not set\n// extra: {\"a\":1}\n// payload: share link\n\nvless://zsx@h:443?type=tcp#zsx\n",
+  "links": []
+ },
+ {
+  "name": "zsx_open_json",
+  "bin": "zsx_open_json.bin",
+  "file": "a.zsx",
+  "password": "",
+  "mode": "xray",
+  "expected": "// ---- ZedSecure vault profile ----\n// name: Test vault\n// name (fa): ÃƒËœÃ‚ÂªÃƒËœÃ‚Â³ÃƒËœÃ‚Âª\n// note: n\n//        m\n// created: 2023-11-14T22:13:20Z\n// expires: 2030-03-17T17:46:40Z\n// password: not set\n// extra: {\"a\":1}\n// payload: JSON config\n\n{\n  \"remarks\": \"xr-test\",\n  \"outbounds\": [\n    {\n      \"protocol\": \"vless\",\n      \"tag\": \"proxy\",\n      \"settings\": {\n        \"vnext\": [\n          {\n            \"address\": \"example.com\",\n            \"port\": 443,\n            \"users\": [\n              {\n                \"id\": \"11111111-2222-3333-4444-555555555555\",\n                \"encryption\": \"none\",\n                \"flow\": \"xtls-rprx-vision\"\n              }\n            ]\n          }\n        ]\n      },\n      \"streamSettings\": {\n        \"network\": \"ws\",\n        \"security\": \"tls\",\n        \"wsSettings\": {\n          \"path\": \"/ws\",\n          \"headers\": {\n            \"Host\": \"h.example.com\"\n          }\n        },\n        \"tlsSettings\": {\n          \"serverName\": \"s.example.com\",\n          \"fingerprint\": \"chrome\",\n          \"alpn\": [\n            \"h2\",\n            \"http/1.1\"\n          ],\n          \"allowInsecure\": true\n        }\n      }\n    },\n    {\n      \"protocol\": \"vmess\",\n      \"tag\": \"p2\",\n      \"settings\": {\n        \"vnext\": [\n          {\n            \"address\": \"1.2.3.4\",\n            \"port\": 8080,\n            \"users\": [\n              {\n                \"id\": \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\n                \"alterId\": 0,\n                \"security\": \"auto\"\n              }\n            ]\n          }\n        ]\n      },\n      \"streamSettings\": {\n        \"network\": \"grpc\",\n        \"security\": \"none\",\n        \"grpcSettings\": {\n          \"serviceName\": \"svc\",\n          \"multiMode\": true\n        }\n      }\n    },\n    {\n      \"protocol\": \"trojan\",\n      \"tag\": \"p3\",\n      \"settings\": {\n        \"servers\": [\n          {\n            \"address\": \"t.example.com\",\n            \"port\": 443,\n            \"password\": \"p@ss/w:rd\"\n          }\n        ]\n      },\n      \"streamSettings\": {\n        \"network\": \"tcp\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"serverName\": \"r.example.com\",\n          \"fingerprint\": \"firefox\",\n          \"publicKey\": \"PUBKEY\",\n          \"shortId\": \"ab12\",\n          \"spiderX\": \"/\"\n        }\n      }\n    },\n    {\n      \"protocol\": \"shadowsocks\",\n      \"tag\": \"p4\",\n      \"settings\": {\n        \"servers\": [\n          {\n            \"address\": \"::1\",\n            \"port\": 1234,\n            \"method\": \"aes-128-gcm\",\n            \"password\": \"pw\"\n          }\n        ]\n      }\n    },\n    {\n      \"protocol\": \"vless\",\n      \"tag\": \"p5\",\n      \"settings\": {\n        \"vnext\": [\n          {\n            \"address\": \"x.example\",\n            \"port\": 443,\n            \"users\": [\n              {\n                \"id\": \"u\"\n              }\n            ]\n          }\n        ]\n      },\n      \"streamSettings\": {\n        \"network\": \"xhttp\",\n        \"security\": \"none\",\n        \"xhttpSettings\": {\n          \"path\": \"/x\",\n          \"host\": \"cdn.example\",\n          \"mode\": \"packet-up\",\n          \"extra\": {\n            \"xPaddingBytes\": \"100-1000\"\n          }\n        }\n      }\n    }\n  ]\n}\n",
+  "links": [
+   "vless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#xr-test",
+   "vmess://eyJhZGQiOiIxLjIuMy40IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6ImFhYWFhYWFhLWJiYmItY2NjYy1kZGRkLWVlZWVlZWVlZWVlZSIsIm5ldCI6ImdycGMiLCJwYXRoIjoic3ZjIiwicG9ydCI6IjgwODAiLCJwcyI6InhyLXRlc3QiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im11bHRpIiwidiI6IjIifQ==",
+   "trojan://p@ss%2Fw:rd@t.example.com:443?fp=firefox&pbk=PUBKEY&security=reality&sid=ab12&sni=r.example.com&spx=%2F&type=tcp#xr-test",
+   "ss://YWVzLTEyOC1nY206cHc=@[::1]:1234#xr-test",
+   "vless://u@x.example:443?encryption=none&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D&host=cdn.example&mode=packet-up&path=%2Fx&security=none&type=xhttp#xr-test"
+  ]
+ },
+ {
+  "name": "zsx_link",
+  "bin": "zsx_link.bin",
+  "file": "a.zsx",
+  "password": "",
+  "mode": "full",
+  "expected": "// ---- ZedSecure shared profile ----\n// version: 2\n// name: shared\n// source: sub\n// members: 2\n\n{\n  \"v\": 2,\n  \"n\": \"shared\",\n  \"s\": {\n    \"kind\": \"sub\"\n  },\n  \"m\": [\n    1,\n    2\n  ]\n}\n",
+  "links": []
+ },
+ {
+  "name": "zsx_open_zedlink",
+  "bin": "zsx_open_zedlink.bin",
+  "file": "a.zsx",
+  "password": "",
+  "mode": "full",
+  "expected": "// ---- ZedSecure vault profile ----\n// name: Test vault\n// name (fa): ÃƒËœÃ‚ÂªÃƒËœÃ‚Â³ÃƒËœÃ‚Âª\n// note: n\n//        m\n// created: 2023-11-14T22:13:20Z\n// expires: 2030-03-17T17:46:40Z\n// password: not set\n// extra: {\"a\":1}\n// payload: ZedSecure link (sub)\n\n// version: 2\n// name: shared\n// source: sub\n// members: 2\n\n{\n  \"v\": 2,\n  \"n\": \"shared\",\n  \"s\": {\n    \"kind\": \"sub\"\n  },\n  \"m\": [\n    1,\n    2\n  ]\n}\n",
+  "links": []
+ },
+ {
+  "name": "zsx_pass",
+  "bin": "zsx_pass.bin",
+  "file": "a.zsx",
+  "password": "pw123",
+  "mode": "full",
+  "expected": "// ---- ZedSecure vault profile ----\n// name: Test vault\n// name (fa): ÃƒËœÃ‚ÂªÃƒËœÃ‚Â³ÃƒËœÃ‚Âª\n// note: n\n//        m\n// created: 2023-11-14T22:13:20Z\n// expires: 2030-03-17T17:46:40Z\n// password: required\n// extra: {\"a\":1}\n// payload: share link\n\ntrojan://pw@h:443#t\n",
+  "links": []
+ },
+ {
+  "name": "bpf_local",
+  "bin": "bpf_local.bin",
+  "file": "a.bpf",
+  "password": "",
+  "mode": "full",
+  "expected": "// ---- sing-box profile ----\n// name: prof\n// type: local (container version 1)\n\n{\n  \"outbounds\": [\n    {\n      \"type\": \"vless\",\n      \"tag\": \"x\"\n    }\n  ]\n}\n",
+  "links": []
+ },
+ {
+  "name": "bpf_remote",
+  "bin": "bpf_remote.bin",
+  "file": "a.bpf",
+  "password": "",
+  "mode": "full",
+  "expected": "// ---- sing-box profile ----\n// name: remote\n// type: remote (container version 1)\n// source: https://x/y\n// auto-update: every 60 min\n// last updated: 2023-11-14T22:13:20Z\n\n// (the profile carries no config of its own)\n",
+  "links": []
+ },
+ {
+  "name": "ehi_bypass",
+  "bin": "ehi_bypass.bin",
+  "file": "a.ehi",
+  "password": "",
+  "mode": "xray",
+  "expected": "{\n    \"configMessage\": \"\\u0000\\u0000\\u0000\\u0000\\u0000\\u0000\",\n    \"configSalt\": \"~#^|\",\n    \"count\": 3,\n    \"name\": \"plain name\",\n    \"v2rRawJson\": {\n        \"outbounds\": [\n            {\n                \"protocol\": \"vless\",\n                \"settings\": {\n                    \"vnext\": [\n                        {\n                            \"address\": \"example.com\",\n                            \"port\": 443,\n                            \"users\": [\n                                {\n                                    \"encryption\": \"none\",\n                                    \"flow\": \"xtls-rprx-vision\",\n                                    \"id\": \"11111111-2222-3333-4444-555555555555\"\n                                }\n                            ]\n                        }\n                    ]\n                },\n                \"streamSettings\": {\n                    \"network\": \"ws\",\n                    \"security\": \"tls\",\n                    \"tlsSettings\": {\n                        \"allowInsecure\": true,\n                        \"alpn\": [\n                            \"h2\",\n                            \"http/1.1\"\n                        ],\n                        \"fingerprint\": \"chrome\",\n                        \"serverName\": \"s.example.com\"\n                    },\n                    \"wsSettings\": {\n                        \"headers\": {\n                            \"Host\": \"h.example.com\"\n                        },\n                        \"path\": \"/ws\"\n                    }\n                },\n                \"tag\": \"proxy\"\n            },\n            {\n                \"protocol\": \"vmess\",\n                \"settings\": {\n                    \"vnext\": [\n                        {\n                            \"address\": \"1.2.3.4\",\n                            \"port\": 8080,\n                            \"users\": [\n                                {\n                                    \"alterId\": 0,\n                                    \"id\": \"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\",\n                                    \"security\": \"auto\"\n                                }\n                            ]\n                        }\n                    ]\n                },\n                \"streamSettings\": {\n                    \"grpcSettings\": {\n                        \"multiMode\": true,\n                        \"serviceName\": \"svc\"\n                    },\n                    \"network\": \"grpc\",\n                    \"security\": \"none\"\n                },\n                \"tag\": \"p2\"\n            },\n            {\n                \"protocol\": \"trojan\",\n                \"settings\": {\n                    \"servers\": [\n                        {\n                            \"address\": \"t.example.com\",\n                            \"password\": \"p@ss/w:rd\",\n                            \"port\": 443\n                        }\n                    ]\n                },\n                \"streamSettings\": {\n                    \"network\": \"tcp\",\n                    \"realitySettings\": {\n                        \"fingerprint\": \"firefox\",\n                        \"publicKey\": \"PUBKEY\",\n                        \"serverName\": \"r.example.com\",\n                        \"shortId\": \"ab12\",\n                        \"spiderX\": \"/\"\n                    },\n                    \"security\": \"reality\"\n                },\n                \"tag\": \"p3\"\n            },\n            {\n                \"protocol\": \"shadowsocks\",\n                \"settings\": {\n                    \"servers\": [\n                        {\n                            \"address\": \"::1\",\n                            \"method\": \"aes-128-gcm\",\n                            \"password\": \"pw\",\n                            \"port\": 1234\n                        }\n                    ]\n                },\n                \"tag\": \"p4\"\n            },\n            {\n                \"protocol\": \"vless\",\n                \"settings\": {\n                    \"vnext\": [\n                        {\n                            \"address\": \"x.example\",\n                            \"port\": 443,\n                            \"users\": [\n                                {\n                                    \"id\": \"u\"\n                                }\n                            ]\n                        }\n                    ]\n                },\n                \"streamSettings\": {\n                    \"network\": \"xhttp\",\n                    \"security\": \"none\",\n                    \"xhttpSettings\": {\n                        \"extra\": {\n                            \"xPaddingBytes\": \"100-1000\"\n                        },\n                        \"host\": \"cdn.example\",\n                        \"mode\": \"packet-up\",\n                        \"path\": \"/x\"\n                    }\n                },\n                \"tag\": \"p5\"\n            }\n        ],\n        \"remarks\": \"xr-test\"\n    }\n}",
+  "links": [
+   "vless://11111111-2222-3333-4444-555555555555@example.com:443?allowInsecure=1&alpn=h2%2Chttp%2F1.1&encryption=none&flow=xtls-rprx-vision&fp=chrome&host=h.example.com&path=%2Fws&security=tls&sni=s.example.com&type=ws#xr-test",
+   "vmess://eyJhZGQiOiIxLjIuMy40IiwiYWlkIjoiMCIsImFscG4iOiIiLCJmcCI6IiIsImhvc3QiOiIiLCJpZCI6ImFhYWFhYWFhLWJiYmItY2NjYy1kZGRkLWVlZWVlZWVlZWVlZSIsIm5ldCI6ImdycGMiLCJwYXRoIjoic3ZjIiwicG9ydCI6IjgwODAiLCJwcyI6InhyLXRlc3QiLCJzY3kiOiJhdXRvIiwic25pIjoiIiwidGxzIjoiIiwidHlwZSI6Im11bHRpIiwidiI6IjIifQ==",
+   "trojan://p@ss%2Fw:rd@t.example.com:443?fp=firefox&pbk=PUBKEY&security=reality&sid=ab12&sni=r.example.com&spx=%2F&type=tcp#xr-test",
+   "ss://YWVzLTEyOC1nY206cHc=@[::1]:1234#xr-test",
+   "vless://u@x.example:443?encryption=none&extra=%7B%22xPaddingBytes%22%3A%22100-1000%22%7D&host=cdn.example&mode=packet-up&path=%2Fx&security=none&type=xhttp#xr-test"
+  ]
+ },
+ {
+  "name": "slip_enc",
+  "bin": "slip_enc.bin",
+  "file": "a.slip",
+  "password": "",
+  "mode": "full",
+  "expected": "\n[+] Detected Profile Version: 28\nFIELD                          | VALUE\n--------------------------------------------------------------------------------\nVersion                        | 28\nTunnel Type/Mode               | vless\nName                           | My Slip\nDomain                         | d.example.com\nResolvers                      | 1.1.1.1\nAuthMode                       | 0\nKeepAlive                      | 10\nCC                             | bbr\nPort                           | 1080\nHost                           | h\nGSO                            | ✅ TRUE\nDNSTT Public Key               | pk\nSOCKS Username                 | u\nSOCKS Password                 | p\nSSH Enabled                    | ✅ TRUE\nSSH Username                   | su\nSSH Password                   | sp\nSSH Port                       | 22\nForward DNS thru SSH           | ❌ FALSE\nSSH Host                       | sh\nUse Server DNS                 | ✅ TRUE\nDoH URL                        | (empty)\nDNS Transport                  | dns\nSSH Auth Type                  | 0\nSSH Private Key (B64)          | k\nSSH Key Passphrase (B64)       | (empty)\nTor Bridge Lines (B64)         | t\nDNSTT Authoritative            | ❌ FALSE\nNaive Port                     | 1080\nNaive Username                 | u\nNaive Password (B64)           | pw\nIs Locked                      | 🔓 NO / ❌ FALSE\nLock Password Hash             | (empty)\nExpiration Date                | x\nAllow Sharing                  | ✅ TRUE\nBound Device ID                | 0\nResolvers Hidden               | did\nHidden Resolvers               | 0\nNoizDNS Stealth                | (empty)\nDNS Payload Size               | 0\nSOCKS5 Server Port             | 512\nVayDNS DNSTT Compat            | 1080\nVayDNS Record Type             | 1\nVayDNS Max Qname Len           | txt\nVayDNS RPS                     | 100\nVayDNS Idle Timeout            | 10\nVayDNS Keepalive               | 30\nVayDNS UDP Timeout             | 10\nVayDNS Max Num Labels          | 5\nVayDNS Client Id Size          | 8\nSSH TLS Enabled                | 2\nSSH TLS SNI                    | 1\nSSH HTTP Proxy Host            | sni\nSSH HTTP Proxy Port            | 1.1.1.1\nSSH HTTP Proxy Custom Host     | 8080\nSSH WS Enabled                 | h\nSSH WS Path                    | 1\nSSH WS Use TLS                 | /ws\nSSH WS Custom Host             | 1\nSSH Payload (B64)              | h\nResolver Mode                  | payload\nRR Spread Count                | rr\nVLESS UUID                     | 3\nVLESS Security                 | uuid\nVLESS Transport                | tls\nVLESS WS Path                  | ws\nCDN IP                         | /p\nCDN Port                       | 1.2.3.4\nSNI Fragment Enabled           | 443\nSNI Fragment Strategy          | 1\nSNI Fragment Delay MS          | s\nLegacy SNI (Empty)             | 100\nCH Padding Enabled             | 🔒 YES / ✅ TRUE\nWS Header Obfuscation          | 🔒 YES / ✅ TRUE\nWS Padding Enabled             | 🔒 YES / ✅ TRUE\nSNI Spoof TTL                  | 1\nFake Decoy Host                | 1\nTCP Max Seg                    | 1\nVLESS SNI                      | vsni\n",
+  "links": []
+ },
+ {
+  "name": "slip_plain",
+  "bin": "slip_plain.bin",
+  "file": "a.slip",
+  "password": "",
+  "mode": "full",
+  "expected": "\n[+] Detected Profile Version: 28\nFIELD                          | VALUE\n--------------------------------------------------------------------------------\nVersion                        | 28\nTunnel Type/Mode               | vless\nName                           | My Slip\nDomain                         | d.example.com\nResolvers                      | 1.1.1.1\nAuthMode                       | 0\nKeepAlive                      | 10\nCC                             | bbr\nPort                           | 1080\nHost                           | h\nGSO                            | ✅ TRUE\nDNSTT Public Key               | pk\nSOCKS Username                 | u\nSOCKS Password                 | p\nSSH Enabled                    | ✅ TRUE\nSSH Username                   | su\nSSH Password                   | sp\nSSH Port                       | 22\nForward DNS thru SSH           | ❌ FALSE\nSSH Host                       | sh\nUse Server DNS                 | ✅ TRUE\nDoH URL                        | (empty)\nDNS Transport                  | dns\nSSH Auth Type                  | 0\nSSH Private Key (B64)          | k\nSSH Key Passphrase (B64)       | (empty)\nTor Bridge Lines (B64)         | t\nDNSTT Authoritative            | ❌ FALSE\nNaive Port                     | 1080\nNaive Username                 | u\nNaive Password (B64)           | pw\nIs Locked                      | 🔓 NO / ❌ FALSE\nLock Password Hash             | (empty)\nExpiration Date                | x\nAllow Sharing                  | ✅ TRUE\nBound Device ID                | 0\nResolvers Hidden               | did\nHidden Resolvers               | 0\nNoizDNS Stealth                | (empty)\nDNS Payload Size               | 0\nSOCKS5 Server Port             | 512\nVayDNS DNSTT Compat            | 1080\nVayDNS Record Type             | 1\nVayDNS Max Qname Len           | txt\nVayDNS RPS                     | 100\nVayDNS Idle Timeout            | 10\nVayDNS Keepalive               | 30\nVayDNS UDP Timeout             | 10\nVayDNS Max Num Labels          | 5\nVayDNS Client Id Size          | 8\nSSH TLS Enabled                | 2\nSSH TLS SNI                    | 1\nSSH HTTP Proxy Host            | sni\nSSH HTTP Proxy Port            | 1.1.1.1\nSSH HTTP Proxy Custom Host     | 8080\nSSH WS Enabled                 | h\nSSH WS Path                    | 1\nSSH WS Use TLS                 | /ws\nSSH WS Custom Host             | 1\nSSH Payload (B64)              | h\nResolver Mode                  | payload\nRR Spread Count                | rr\nVLESS UUID                     | 3\nVLESS Security                 | uuid\nVLESS Transport                | tls\nVLESS WS Path                  | ws\nCDN IP                         | /p\nCDN Port                       | 1.2.3.4\nSNI Fragment Enabled           | 443\nSNI Fragment Strategy          | 1\nSNI Fragment Delay MS          | s\nLegacy SNI (Empty)             | 100\nCH Padding Enabled             | 🔒 YES / ✅ TRUE\nWS Header Obfuscation          | 🔒 YES / ✅ TRUE\nWS Padding Enabled             | 🔒 YES / ✅ TRUE\nSNI Spoof TTL                  | 1\nFake Decoy Host                | 1\nTCP Max Seg                    | 1\nVLESS SNI                      | vsni\n",
+  "links": []
+ }
+]

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notif_channel">اتصال VPN</string>
+    <string name="notif_connecting">در حال اتصال…</string>
+    <string name="notif_disconnect">قطع اتصال</string>
+    <string name="notif_restart">راه‌اندازی مجدد</string>
+    <string name="notif_auto">خودکار (سریع‌ترین)</string>
+    <string name="widget_on">وصل است</string>
+    <string name="widget_off">برای اتصال بزن</string>
+</resources>

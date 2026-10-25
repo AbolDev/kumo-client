@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notif_channel">VPN-подключение</string>
+    <string name="notif_connecting">Подключение…</string>
+    <string name="notif_disconnect">Отключить</string>
+    <string name="notif_restart">Перезапустить</string>
+    <string name="notif_auto">Авто (самый быстрый)</string>
+</resources>

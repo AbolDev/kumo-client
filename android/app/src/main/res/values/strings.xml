@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notif_channel">VPN connection</string>
+    <string name="notif_connecting">Connecting…</string>
+    <string name="notif_disconnect">Disconnect</string>
+    <string name="notif_restart">Restart</string>
+    <string name="notif_auto">Automatic (fastest)</string>
+    <string name="widget_on">Connected</string>
+    <string name="widget_off">Tap to connect</string>
+</resources>
