@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -81,26 +82,57 @@ Future<void> _install(BuildContext context, UpdateInfo info) async {
     await openLink(info.url);
     return;
   }
+  // Android: the permission to install apps is asked for before anything is downloaded.
+  if (!Platform.isWindows && !await _allowInstalls(context)) return;
   if (!context.mounted) return;
-  final progress = ValueNotifier<double>(0);
+  final progress = ValueNotifier<_Progress>(const _Progress(0, -1, 0));
   showDialog<void>(
     context: context,
     barrierDismissible: false,
     builder: (dialog) => AlertDialog(
       title: Text(tr(dialog, 'updateDownloading')),
-      content: ValueListenableBuilder<double>(
+      content: ValueListenableBuilder<_Progress>(
         valueListenable: progress,
-        builder: (_, v, __) => Column(mainAxisSize: MainAxisSize.min, children: [
-          LinearProgressIndicator(value: v > 0 ? v : null),
-          const SizedBox(height: 8),
-          Text('${(v * 100).round()}%'),
-        ]),
+        builder: (_, p, __) {
+          final share = p.total > 0 ? p.received / p.total : null;
+          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(asset.name, textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: share),
+            const SizedBox(height: 8),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Text(share == null ? '' : '${(share * 100).round()}%'),
+              Text(
+                p.total > 0
+                    ? '${_size(p.received)} / ${_size(p.total)}'
+                    : _size(p.received),
+                textDirection: TextDirection.ltr,
+              ),
+            ]),
+            const SizedBox(height: 4),
+            Text('${_size(p.speed.round())}/s', textDirection: TextDirection.ltr),
+          ]);
+        },
       ),
+    )
     ),
   );
   String? path;
   try {
-    path = await downloadUpdate(asset.url, asset.name, (v) => progress.value = v);
+    final clock = Stopwatch()..start();
+    var lastMs = 0, lastBytes = 0;
+    var speed = 0.0;
+    path = await downloadUpdate(asset.url, asset.name, (got, total) {
+      final ms = clock.elapsedMilliseconds;
+      if (ms - lastMs >= 500 || (total > 0 && got >= total)) {
+        final now = (got - lastBytes) * 1000 / (ms - lastMs).clamp(1, 1 << 30);
+        // Smoothed, so the figure does not jump with every chunk.
+        speed = speed == 0 ? now : speed * 0.6 + now * 0.4;
+        lastMs = ms;
+        lastBytes = got;
+      }
+      progress.value = _Progress(got, total, speed);
+    });
   } catch (_) {}
   if (!context.mounted) return;
   Navigator.of(context, rootNavigator: true).pop();
@@ -120,5 +152,50 @@ Future<void> _install(BuildContext context, UpdateInfo info) async {
     toast(context, tr(context, 'updatePermission'));
   } else if (result != 'ok') {
     toast(context, tr(context, 'updateFailed'));
+  }
+}
+/// What the download dialog shows: bytes received, the total (-1 if unknown) and bytes/second.
+class _Progress {
+  const _Progress(this.received, this.total, this.speed);
+
+  final int received;
+  final int total;
+  final double speed;
+}
+
+String _size(int bytes) {
+  if (bytes >= 1 << 20) return '${(bytes / (1 << 20)).toStringAsFixed(1)} MB';
+  if (bytes >= 1 << 10) return '${(bytes / (1 << 10)).round()} KB';
+  return '$bytes B';
+}
+
+/// Android: asks the user to allow installs from Kumo and waits until they are back from the
+/// system screen. Returns whether installing is now allowed.
+Future<bool> _allowInstalls(BuildContext context) async {
+  if (await VpnChannel.canInstallApk()) return true;
+  if (!context.mounted) return false;
+  toast(context, tr(context, 'updatePermission'));
+  final back = Completer<void>();
+  final watcher = _ResumeWatcher(back);
+  WidgetsBinding.instance.addObserver(watcher);
+  try {
+    await VpnChannel.allowInstallApk();
+    await back.future.timeout(const Duration(minutes: 5), onTimeout: () {});
+  } finally {
+    WidgetsBinding.instance.removeObserver(watcher);
+  }
+  return VpnChannel.canInstallApk();
+}
+
+class _ResumeWatcher with WidgetsBindingObserver {
+  _ResumeWatcher(this.done);
+
+  final Completer<void> done;
+  var _left = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) _left = true;
+    if (state == AppLifecycleState.resumed && _left && !done.isCompleted) done.complete();
   }
 }

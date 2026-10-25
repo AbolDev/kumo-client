@@ -163,6 +163,21 @@ class MainActivity : FlutterActivity() {
                 }
                 // CPU types this phone can run, best first (used to pick the matching update).
                 "abis" -> result.success(Build.SUPPORTED_ABIS.toList())
+                // Whether Kumo may install apps, and the system screen where the user allows it.
+                "canInstall" -> result.success(
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls(),
+                )
+                "allowInstall" -> {
+                    try {
+                        startActivity(
+                            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
                 // Opens the system installer for a downloaded update.
                 "installApk" -> {
                     try {

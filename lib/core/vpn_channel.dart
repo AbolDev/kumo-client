@@ -154,6 +154,22 @@ class VpnChannel {
     }
   }
 
+  /// Android: whether Kumo is allowed to install apps.
+  static Future<bool> canInstallApk() async {
+    try {
+      return await _control.invokeMethod<bool>('canInstall') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Android: opens the system screen where the user allows Kumo to install apps.
+  static Future<void> allowInstallApk() async {
+    try {
+      await _control.invokeMethod<bool>('allowInstall');
+    } catch (_) {}
+  }
+
   /// Android: opens the installer for a downloaded APK. Returns ok, permission (the user must
   /// first allow installs from Kumo) or failed.
   static Future<String> installApk(String path) async {

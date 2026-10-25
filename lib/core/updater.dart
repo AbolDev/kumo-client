@@ -112,8 +112,9 @@ Future<({String name, String url})?> pickAsset(UpdateInfo info) async {
   return null;
 }
 
-/// Downloads [url] into the app's folder, reporting the share done (0..1). Returns the path.
-Future<String> downloadUpdate(String url, String name, void Function(double) progress) async {
+/// Downloads [url] into the app's folder, reporting the bytes received and the total (-1 when
+/// unknown). Returns the path.
+Future<String> downloadUpdate(String url, String name, void Function(int received, int total) progress) async {
   final dir = Directory('${await VpnChannel.dataDir()}${Platform.pathSeparator}updates');
   if (await dir.exists()) await dir.delete(recursive: true);
   await dir.create(recursive: true);
@@ -131,7 +132,7 @@ Future<String> downloadUpdate(String url, String name, void Function(double) pro
       await for (final chunk in res) {
         sink.add(chunk);
         got += chunk.length;
-        if (total > 0) progress(got / total);
+        progress(got, total);
       }
     } finally {
       await sink.close();
