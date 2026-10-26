@@ -120,8 +120,8 @@ String _notesFor(BuildContext context, String raw) {
   final lines = <String>[];
   for (var line in text.split('\n')) {
     line = line.trim();
-    if (line.isEmpty || RegExp(r'^#\s').hasMatch(line)) continue; // the release title
-    line = line.replaceFirst(RegExp(r'^##+\s*'), '');
+    // The release title and the "What's new" heading are left out: the sheet has its own.
+    if (line.isEmpty || line.startsWith('#')) continue;
     line = line.replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m[1]!);
     line = line.replaceAllMapped(RegExp(r'\*(.+?)\*'), (m) => m[1]!);
     line = line.replaceAll('`', '');
@@ -246,12 +246,15 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                   Expanded(
                     child: TextButton(
                         onPressed: () => Navigator.pop(sheet),
-                        child: Text(tr(sheet, 'updLater'))),
+                        child: FittedBox(
+                            fit: BoxFit.scaleDown, child: Text(tr(sheet, 'updLater')))),
                   ),
                   Expanded(
                     child: TextButton(
                         onPressed: () => Navigator.pop(sheet, 'page'),
-                        child: Text(tr(sheet, 'updateOpen'))),
+                        child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(tr(sheet, 'updateOpen'), maxLines: 1))),
                   ),
                 ]),
               ],
@@ -293,7 +296,8 @@ Future<void> _install(BuildContext context, UpdateInfo info,
       },
       child: AlertDialog(
         icon: const Icon(Icons.downloading),
-        title: Text(tr(dialog, 'updateDownloading')),
+        title: FittedBox(
+            fit: BoxFit.scaleDown, child: Text(tr(dialog, 'updateDownloading'), maxLines: 1)),
         content: ValueListenableBuilder<_Progress>(
           valueListenable: progress,
           builder: (_, p, __) {
@@ -335,6 +339,7 @@ Future<void> _install(BuildContext context, UpdateInfo info,
             ]);
           },
         ),
+        actionsAlignment: MainAxisAlignment.center,
         actions: [
           TextButton.icon(
             autofocus: true,
