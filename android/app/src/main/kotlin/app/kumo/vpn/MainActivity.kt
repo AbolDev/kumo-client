@@ -153,9 +153,15 @@ class MainActivity : FlutterActivity() {
                 "batteryUnrestricted" ->
                     result.success(getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName))
                 "requestBatteryExemption" -> {
-                    startActivity(
-                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")),
-                    )
+                    // The app does not declare the permission that opens the direct "allow" dialog,
+                    // so the list of battery settings is shown, where Kumo is set to "Don't optimize".
+                    try {
+                        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    } catch (_: Exception) {
+                        startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                        )
+                    }
                     result.success(null)
                 }
                 "stop" -> {
