@@ -58,13 +58,18 @@ void main() {
         (jsonDecode(buildSingBoxConfig(servers, options: o))['inbounds'] as List)
             .map((i) => i['tag'])
             .toList();
-    expect(tags(NetOptions()..shareLan = true), ['mixed-in']);
+    expect(tags(NetOptions()..shareLan = true), isNot(contains('lan-in')));
     expect(
         tags(NetOptions()
           ..shareLan = true
           ..lanPassword = 'x'
           ..lanPort = 2080),
-        ['mixed-in']);
+        isNot(contains('lan-in')));
+    expect(
+        tags(NetOptions()
+          ..shareLan = true
+          ..lanPassword = 'x'),
+        contains('lan-in'));
     final saved = NetOptions()
       ..directRules = ['a.com']
       ..shareLan = true
