@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
+import 'home_page.dart' show confirmDeletion;
 
 String _size(int b) {
   if (b >= 1 << 30) return '${(b / (1 << 30)).toStringAsFixed(2)} GB';
@@ -26,7 +27,9 @@ class UsagePage extends StatelessWidget {
           IconButton(
             tooltip: tr(context, 'resetStats'),
             icon: const Icon(Icons.delete_outline),
-            onPressed: state.resetUsage,
+            onPressed: () async {
+              if (await confirmDeletion(context, state)) state.resetUsage();
+            },
           ),
         ],
       ),
