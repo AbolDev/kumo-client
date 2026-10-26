@@ -89,10 +89,19 @@ String _notesFor(BuildContext context, String raw) {
   final code = locale.languageCode == 'zh' && locale.scriptCode == 'Hant'
       ? 'zh-TW'
       : locale.languageCode;
-  // Newer releases mark each language with <!-- lang:xx -->; older ones have English first and
-  // Persian last. A language without a block falls back to English.
+  // The release page shows English only. The other languages sit in hidden comments of the form
+  // <!-- lang:xx ... --> that GitHub does not display; the text outside them is English. A
+  // language without a block falls back to English. (Older releases marked each language with
+  // a bare <!-- lang:xx --> line, and the oldest had English first and Persian last.)
+  final hidden = RegExp(r'<!--\s*lang:([\w-]+)[ \t]*\n([\s\S]*?)-->').allMatches(text).toList();
   final marks = RegExp(r'<!--\s*lang:([\w-]+)\s*-->').allMatches(text).toList();
-  if (marks.isNotEmpty) {
+  if (hidden.isNotEmpty) {
+    final blocks = <String, String>{
+      for (final m in hidden) m[1]!: m[2]!,
+      'en': text.replaceAll(RegExp(r'<!--\s*lang:[\w-]+[ \t]*\n[\s\S]*?-->'), ''),
+    };
+    text = blocks[code] ?? (code == 'zh-TW' ? blocks['zh'] : null) ?? blocks['en']!;
+  } else if (marks.isNotEmpty) {
     final blocks = <String, String>{
       for (var i = 0; i < marks.length; i++)
         marks[i][1]!: text.substring(
