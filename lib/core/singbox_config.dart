@@ -5,7 +5,7 @@ import 'proxy_config.dart';
 
 /// Builds the Xray configuration for one XHTTP server: a local SOCKS inbound on
 /// 127.0.0.1:[port] that forwards everything to the server.
-String buildXrayConfig(ProxyConfig server, int port) {
+String buildXrayConfig(ProxyConfig server, int port, {String logLevel = 'error'}) {
   assert(server.needsXray);
   final outbound =
       jsonDecode(jsonEncode(server.xrayOutbound!)) as Map<String, dynamic>;
@@ -54,7 +54,14 @@ String buildXrayConfig(ProxyConfig server, int port) {
     node['port'] = relayPort;
   }
   final config = {
-    'log': {'loglevel': 'warning'},
+    // Xray names its levels differently; the default stays at warning as before.
+    'log': {
+      'loglevel': switch (logLevel) {
+        'debug' => 'debug',
+        'info' => 'info',
+        _ => 'warning',
+      }
+    },
     'inbounds': inbounds,
     'outbounds': [
       {...outbound, 'tag': 'proxy'},
@@ -223,7 +230,7 @@ String buildSingBoxConfig(
   }
 
   final config = {
-    'log': {'level': 'error'},
+    'log': {'level': logLevels.contains(o.logLevel) ? o.logLevel : 'error'},
     'dns': {
       'servers': [
         _dnsServer(o.dnsAddress),

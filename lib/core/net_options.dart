@@ -69,6 +69,9 @@ const fingerprints = [
   'randomized',
 ];
 
+/// How much the core logs, quietest first; the first is the default.
+const logLevels = ['error', 'warn', 'info', 'debug'];
+
 /// Everything in Settings that changes how traffic is carried.
 class NetOptions {
   NetOptions();
@@ -93,6 +96,9 @@ class NetOptions {
   bool mux = false;
   int mtu = 9000;
   String fingerprint = '';
+
+  /// Log level of the core (sing-box, and Xray when it runs).
+  String logLevel = logLevels.first;
 
   /// Block the internet when the connection drops instead of leaking the real address.
   bool killSwitch = false;
@@ -126,6 +132,7 @@ class NetOptions {
         'mux': mux,
         'mtu': mtu,
         'fingerprint': fingerprint,
+        'logLevel': logLevel,
         'killSwitch': killSwitch,
         'failover': failover,
         'chain': chain,
@@ -156,6 +163,8 @@ class NetOptions {
     if (m is int && m >= 1280 && m <= 65535) mtu = m;
     final fp = j['fingerprint'];
     fingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
+    final level = j['logLevel'];
+    logLevel = level is String && logLevels.contains(level) ? level : logLevels.first;
     killSwitch = flag('killSwitch', false);
     failover = flag('failover', true);
     chain = j['chain'] is String ? j['chain'] as String : '';

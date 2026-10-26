@@ -2,6 +2,8 @@
 /// English and Persian live in extra.dart.
 const extraRu = <String, String>{
   'languageDevice': 'Как на устройстве',
+  'logLevel': 'Уровень журнала',
+  'logLevelDesc': 'Сколько ядро пишет в журнал. Высокие уровни помогают искать проблемы, но расходуют больше заряда. Применяется со следующего подключения.',
   'prereleaseUpdates': 'Предварительные версии',
   'prereleaseUpdatesDesc': 'Предлагать при проверке обновлений и тестовые версии (pre-release).',
   'sourceCode': 'Исходный код и проблемы',
@@ -113,6 +115,8 @@ const extraRu = <String, String>{
 
 const extraVi = <String, String>{
   'languageDevice': 'Theo thiết bị',
+  'logLevel': 'Mức nhật ký',
+  'logLevelDesc': 'Lượng thông tin lõi ghi vào nhật ký. Mức cao giúp tìm lỗi nhưng tốn pin hơn. Áp dụng từ lần kết nối tiếp theo.',
   'prereleaseUpdates': 'Bao gồm bản thử nghiệm',
   'prereleaseUpdatesDesc': 'Cũng đề xuất các bản thử nghiệm (pre-release) khi kiểm tra cập nhật.',
   'sourceCode': 'Mã nguồn và vấn đề',
@@ -224,6 +228,8 @@ const extraVi = <String, String>{
 
 const extraZh = <String, String>{
   'languageDevice': '跟随设备',
+  'logLevel': '日志级别',
+  'logLevelDesc': '核心写入日志的详细程度。级别越高越便于排查问题，但更耗电。下次连接时生效。',
   'prereleaseUpdates': '包含预发布版本',
   'prereleaseUpdatesDesc': '检查更新时也提供测试版本（预发布）。',
   'sourceCode': '源代码与问题反馈',
@@ -331,6 +337,8 @@ const extraZh = <String, String>{
 
 const extraAr = <String, String>{
   'languageDevice': 'مثل الجهاز',
+  'logLevel': 'مستوى السجل',
+  'logLevelDesc': 'مقدار ما تكتبه النواة في السجل. المستويات الأعلى تساعد في تتبع المشاكل لكنها تستهلك بطارية أكثر. يُطبَّق من الاتصال التالي.',
   'prereleaseUpdates': 'تضمين الإصدارات التجريبية',
   'prereleaseUpdatesDesc': 'اقتراح الإصدارات التجريبية (pre-release) أيضاً عند البحث عن تحديث.',
   'sourceCode': 'الشيفرة المصدرية والمشاكل',

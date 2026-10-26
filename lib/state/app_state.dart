@@ -1091,7 +1091,7 @@ class AppState extends ChangeNotifier {
         await VpnChannel.start(
           config(port),
           serverNames: names,
-          xrayConfig: buildXrayConfig(chosen.first, port),
+          xrayConfig: buildXrayConfig(chosen.first, port, logLevel: net.logLevel),
           xrayPort: port,
           showSpeed: showSpeed,
           showVolume: showVolume,

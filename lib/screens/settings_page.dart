@@ -10,6 +10,7 @@ import '../core/win_autostart.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/latency_tester.dart';
+import '../core/net_options.dart' show logLevels;
 import '../core/vpn_channel.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
@@ -417,6 +418,18 @@ class _SettingsPageState extends State<SettingsPage> {
                       },
                     ),
                   ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.receipt_long),
+                title: Text(tr(context, 'logLevel')),
+                subtitle: Text(tr(context, 'logLevelDesc')),
+                trailing: Text(state.net.logLevel),
+                onTap: () => _choose<String>(
+                  tr(context, 'logLevel'),
+                  state.net.logLevel,
+                  {for (final l in logLevels) l: l},
+                  (v) => state.updateNet((o) => o.logLevel = v, reconnect: false),
                 ),
               ),
             ]),

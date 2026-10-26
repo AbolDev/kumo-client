@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/net_options.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
 
@@ -126,6 +127,23 @@ void main() {
       'vless://id@h.com:443?security=tls&type=ws&path=%2Fb#three',
     ]);
     expect(servers.map((s) => s.name), ['one', 'three']);
+  });
+
+  test('the log level reaches the core configs and is saved with the options', () {
+    final servers = parseLinks(['trojan://p@h1.example.com:443#a']);
+    expect(
+        (jsonDecode(buildSingBoxConfig(servers))['log'] as Map)['level'], 'error');
+    final o = NetOptions()..logLevel = 'debug';
+    expect(
+        (jsonDecode(buildSingBoxConfig(servers, options: o))['log'] as Map)['level'],
+        'debug');
+    final restored = NetOptions()..load(o.toJson());
+    expect(restored.logLevel, 'debug');
+    expect(NetOptions()..load({'logLevel': 'nonsense'}), isA<NetOptions>());
+    final x = parseLink('vless://id@example.com:443?type=xhttp&security=tls#x')!;
+    expect(
+        (jsonDecode(buildXrayConfig(x, 31000, logLevel: 'debug'))['log'] as Map)['loglevel'],
+        'debug');
   });
 
   test('config uses urltest for several servers', () {

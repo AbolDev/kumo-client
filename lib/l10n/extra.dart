@@ -21,6 +21,8 @@ const _extra = <String, Map<String, String>>{
   'ar': extraAr,
   'en': {
     'languageDevice': 'Same as device',
+    'logLevel': 'Log level',
+    'logLevelDesc': 'How much the core writes to its log. Higher levels help find problems but use more battery. Applies from the next connection.',
     'prereleaseUpdates': 'Include pre-releases',
     'prereleaseUpdatesDesc': 'Also offer test versions (pre-releases) when checking for updates.',
     'sourceCode': 'Source code and issues',
@@ -131,6 +133,8 @@ const _extra = <String, Map<String, String>>{
   },
   'fa': {
     'languageDevice': 'مطابق دستگاه',
+    'logLevel': 'سطح لاگ',
+    'logLevelDesc': 'مقدار گزارشی که هسته می‌نویسد. سطح‌های بالاتر برای پیدا کردن مشکل مفیدند ولی باتری بیشتری مصرف می‌کنند. از اتصال بعدی اعمال می‌شود.',
     'prereleaseUpdates': 'نسخه‌های آزمایشی (Pre-release)',
     'prereleaseUpdatesDesc': 'هنگام بررسی به‌روزرسانی، نسخه‌های آزمایشی را هم پیشنهاد بده.',
     'sourceCode': 'سورس کد و گزارش مشکل',
