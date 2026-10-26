@@ -25,6 +25,8 @@ Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-know
 - **Whole device or local proxy.** On Android all traffic of the device goes through the VPN by default (*Tunnel whole device*). On Windows Kumo starts as a local proxy (HTTP/SOCKS) that it also sets as the system proxy; turn the tunnel on to send everything through the VPN.
 - **Per-app routing.** Choose which apps use the VPN, or which ones skip it.
 - **Direct countries.** Pick countries whose sites and addresses skip the VPN. None by default.
+- **Your own routing rules.** Send chosen domains or addresses always direct, or always through the VPN.
+- **Share the connection** on your local network through a password-protected proxy.
 - **Kill switch** to block the internet if the connection drops.
 - **DNS, TLS fragment, MUX, MTU, uTLS fingerprint and proxy chain** under *Advanced*.
 
@@ -43,6 +45,9 @@ Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-know
 - **Live speed** and a notification that shows the speed, the transferred data and the server name, each of which you can turn on or off.
 - **Live connections** and **usage statistics** per day and per server.
 - **IP and DNS leak check.**
+- **Service test and connection check** (the ⋮ menu): see whether ChatGPT, Netflix, YouTube, Telegram and others open through the current connection, or run a quick "why can't I connect?" check.
+- **Why it disconnected**, shown on the home screen, and **alerts** when a subscription is nearly out of data or about to expire.
+- **Android widgets** (button, icon-size, and a live speed / data widget that shows the server name when it is big enough), each with its own colour, shape and size. A *not connected* notification with a Connect button stays after a disconnect (can be turned off).
 
 **Android extras:** a Quick Settings tile, a home screen widget, and reconnect after the phone restarts.
 
