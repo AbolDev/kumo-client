@@ -85,9 +85,26 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
 /// the release has both English and Persian parts (separated by a line of dashes).
 String _notesFor(BuildContext context, String raw) {
   var text = raw.replaceAll('\r', '');
-  final parts = text.split(RegExp(r'\n-{3,}\n'));
-  if (parts.length > 1) {
-    text = Localizations.localeOf(context).languageCode == 'fa' ? parts.last : parts.first;
+  final locale = Localizations.localeOf(context);
+  final code = locale.languageCode == 'zh' && locale.scriptCode == 'Hant'
+      ? 'zh-TW'
+      : locale.languageCode;
+  // Newer releases mark each language with <!-- lang:xx -->; older ones have English first and
+  // Persian last. A language without a block falls back to English.
+  final marks = RegExp(r'<!--\s*lang:([\w-]+)\s*-->').allMatches(text).toList();
+  if (marks.isNotEmpty) {
+    final blocks = <String, String>{
+      for (var i = 0; i < marks.length; i++)
+        marks[i][1]!: text.substring(
+            marks[i].end, i + 1 < marks.length ? marks[i + 1].start : text.length),
+    };
+    text = blocks[code] ??
+        (code == 'zh-TW' ? blocks['zh'] : null) ??
+        blocks['en'] ??
+        blocks.values.first;
+  } else {
+    final parts = text.split(RegExp(r'\n-{3,}\n'));
+    if (parts.length > 1) text = code == 'fa' ? parts.last : parts.first;
   }
   final cut = RegExp(r'\n#{1,3} (Downloads|SHA-256|دانلود)').firstMatch(text);
   if (cut != null) text = text.substring(0, cut.start);
