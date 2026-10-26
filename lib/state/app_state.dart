@@ -283,8 +283,9 @@ class AppState extends ChangeNotifier {
       if (s.status == VpnStatus.started && changed) {
         _measureLive();
         _misses = 0;
+        _healthDown = 0;
         _watch?.cancel();
-        _watch = Timer.periodic(const Duration(seconds: 10), (_) => _healthTick());
+        _watch = Timer.periodic(const Duration(seconds: 20), (_) => _healthTick());
       } else if (s.status != VpnStatus.started) {
         _watch?.cancel();
         _watch = null;
@@ -1133,6 +1134,7 @@ class AppState extends ChangeNotifier {
 
   Timer? _watch;
   var _misses = 0;
+  var _healthDown = 0;
   var _failingOver = false;
 
   /// In automatic mode only: checks that traffic still flows. After two failures in a row it
@@ -1140,6 +1142,15 @@ class AppState extends ChangeNotifier {
   Future<void> _healthTick() async {
     if (!connected || !net.failover || _failingOver || _preparing) return;
     if (selected != null) return;
+    // Data that came in since the last check already proves the server works; a probe on top of
+    // it would only keep the radio busy.
+    final received = traffic.value.downTotal;
+    final flowing = received - _healthDown > 2048;
+    _healthDown = received;
+    if (flowing) {
+      _misses = 0;
+      return;
+    }
     final ms = await tunnelDelay(
         socksPort: _xrayPort,
         proxyPort: net.tun ? null : net.proxyPort,

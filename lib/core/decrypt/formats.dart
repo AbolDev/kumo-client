@@ -73,8 +73,34 @@ String decryptNetmod(Uint8List payload, String proto) {
   }
   if (plain == null) throw ConfigDecryptError('no netmod key matched: $last');
   var out = _goIndent(plain) ?? _utf8(plain);
-  if (proto.isNotEmpty) out = '$proto://$out';
+  if (proto.isNotEmpty) {
+    out = '$proto://${_netmodTrustServer(proto, out)}';
+  }
   return out;
+}
+
+/// NetMod connects without checking the server's certificate, and its trojan / vless configs rely
+/// on it: they name an SNI the server's certificate does not cover (a CDN front such as
+/// `firefox.com` on a Fastly address), so with the check on, the same config never connects here.
+/// The flag is added to the TLS ones that do not say otherwise.
+String _netmodTrustServer(String proto, String body) {
+  final scheme = proto.startsWith('nm-') ? proto.substring(3) : proto;
+  if (scheme != 'trojan' && scheme != 'vless') return body;
+  final text = body.trim();
+  if (text.startsWith('{') || text.startsWith('[')) return body;
+  final hash = text.indexOf('#');
+  final main = hash < 0 ? text : text.substring(0, hash);
+  final tail = hash < 0 ? '' : text.substring(hash);
+  final lower = main.toLowerCase();
+  if (lower.contains('insecure=') ||
+      lower.contains('security=none') ||
+      lower.contains('security=reality') ||
+      lower.contains('pcs=')) {
+    return body;
+  }
+  // vless without a security parameter is plain TCP: nothing to verify.
+  if (scheme == 'vless' && !lower.contains('security=tls')) return body;
+  return '$main${main.contains('?') ? '&' : '?'}allowInsecure=1$tail';
 }
 
 // ---------------------------------------------------------------------- Happ

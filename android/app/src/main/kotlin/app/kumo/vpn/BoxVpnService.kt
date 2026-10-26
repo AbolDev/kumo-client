@@ -257,7 +257,12 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             val parts = ArrayList<String>()
             if (showSpeed) parts.add("↓ ${formatSpeed(message.downlink)}   ↑ ${formatSpeed(message.uplink)}")
             if (showVolume) parts.add("Σ ↓ ${formatSize(message.downlinkTotal)}   ↑ ${formatSize(message.uplinkTotal)}")
-            speedText = parts.joinToString("  ·  ")
+            val text = parts.joinToString("  ·  ")
+            // With the screen off nobody reads the notification: redrawing it every second only
+            // wakes the phone's UI process, which adds up to heat and battery use.
+            val screenOn = getSystemService(PowerManager::class.java).isInteractive
+            if (text == speedText || !screenOn) return
+            speedText = text
             refreshNotification()
         }
 
