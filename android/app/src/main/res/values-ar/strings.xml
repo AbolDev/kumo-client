@@ -9,4 +9,26 @@
     <string name="notif_connect">اتصال</string>
     <string name="widget_on">متصل</string>
     <string name="widget_off">اضغط للاتصال</string>
+    <string name="widget_connecting">جارٍ الاتصال…</string>
+    <string name="widget_disconnecting">جارٍ قطع الاتصال…</string>
+    <string name="widget_name_button">زر Kumo</string>
+    <string name="widget_name_icon">أيقونة Kumo</string>
+    <string name="widget_name_stats">حركة بيانات Kumo</string>
+    <string name="widget_cfg_title">مظهر الودجت</string>
+    <string name="widget_cfg_color">اللون</string>
+    <string name="widget_cfg_auto">تلقائي (حسب الحالة)</string>
+    <string name="widget_cfg_shape">الشكل</string>
+    <string name="widget_cfg_opacity">الشفافية</string>
+    <string name="widget_cfg_size">حجم النص</string>
+    <string name="widget_cfg_content">يعرض</string>
+    <string name="widget_cfg_speed">السرعة</string>
+    <string name="widget_cfg_total">إجمالي البيانات</string>
+    <string name="widget_cfg_both">كلاهما</string>
+    <string name="widget_cfg_done">تم</string>
+    <string name="alert_channel">تنبيهات الاشتراك</string>
+    <string name="alert_data_low">%1$s: بقي %2$s فقط من البيانات.</string>
+    <string name="alert_data_out">%1$s: نفدت البيانات.</string>
+    <string name="alert_exp_soon">%1$s: ينتهي خلال %2$d أيام.</string>
+    <string name="alert_exp_today">%1$s: ينتهي اليوم.</string>
+    <string name="alert_expired">%1$s: انتهت صلاحيته.</string>
 </resources>

@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../core/net_options.dart';
+import '../core/platform.dart';
 import '../core/proxy_config.dart';
+import '../core/singbox_config.dart' show parseExtraJson;
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
@@ -21,7 +23,7 @@ typedef SectionBuilder = Widget Function(
 List<Widget> networkSections(
     BuildContext context, AppState state, SectionBuilder section) {
   final o = state.net;
-  final win = Platform.isWindows;
+  final win = isDesktop; // the desktop has no per-phone options
 
   Widget flag(String title, String desc, bool value, void Function(bool) set) =>
       SwitchListTile(
@@ -72,14 +74,24 @@ List<Widget> networkSections(
         leading: const Icon(Icons.alt_route),
         title: Text(tr(context, 'ruleTitle')),
         subtitle: Text(tr(context, 'ruleDesc')),
-        trailing: o.directRules.length + o.proxyRules.length == 0
+        trailing: o.directRules.length + o.proxyRules.length + o.blockRules.length == 0
             ? null
-            : Text('${o.directRules.length + o.proxyRules.length}'),
+            : Text('${o.directRules.length + o.proxyRules.length + o.blockRules.length}'),
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute<void>(builder: (_) => RoutingRulesPage(state: state)),
         ),
       ),
+      // Android: the connection stays off on Wi-Fi networks the user trusts.
+      if (!win)
+        ListTile(
+          leading: const Icon(Icons.wifi),
+          title: Text(tr(context, 'wifiDirect')),
+          subtitle: Text(o.directWifi.isEmpty
+              ? tr(context, 'wifiDirectDesc')
+              : o.directWifi.join(', ')),
+          onTap: () => _editWifi(context, state),
+        ),
       flag(tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),
           o.killSwitch, (v) => o.killSwitch = v),
       if (!win)
@@ -125,6 +137,8 @@ List<Widget> networkSections(
                 border: OutlineInputBorder()),
           ),
         ),
+      flag(tr(context, 'fakeIp'), tr(context, 'fakeIpDesc'), o.fakeIp,
+          (v) => o.fakeIp = v),
       ListTile(
         leading: const Icon(Icons.travel_explore),
         title: Text(tr(context, 'dnsCheck')),
@@ -134,8 +148,46 @@ List<Widget> networkSections(
     section(Icons.tune, tr(context, 'advanced'), [
       flag(tr(context, 'tlsFragment'), tr(context, 'tlsFragmentDesc'),
           o.tlsFragment, (v) => o.tlsFragment = v),
+      flag(tr(context, 'tlsRecordFragment'), tr(context, 'tlsRecordFragmentDesc'),
+          o.tlsRecordFragment, (v) => o.tlsRecordFragment = v),
       flag(tr(context, 'mux'), tr(context, 'muxDesc'), o.mux,
           (v) => o.mux = v),
+      if (o.mux)
+        ListTile(
+          leading: const Icon(Icons.call_split),
+          title: Text(tr(context, 'muxProtocol')),
+          trailing: Text(o.muxProtocol),
+          onTap: () async {
+            final v = await pickOption<String>(context, tr(context, 'muxProtocol'),
+                o.muxProtocol, {for (final m in muxProtocols) m: m});
+            if (v != null) await state.updateNet((o) => o.muxProtocol = v);
+          },
+        ),
+      flag(tr(context, 'tcpFastOpen'), tr(context, 'tcpFastOpenDesc'), o.tcpFastOpen,
+          (v) => o.tcpFastOpen = v),
+      flag(tr(context, 'tcpMultiPath'), tr(context, 'tcpMultiPathDesc'), o.tcpMultiPath,
+          (v) => o.tcpMultiPath = v),
+      ListTile(
+        leading: const Icon(Icons.timer_outlined),
+        title: Text(tr(context, 'connectTimeout')),
+        subtitle: Text(tr(context, 'connectTimeoutDesc')),
+        trailing: Text(o.connectTimeout == 0 ? '—' : '${o.connectTimeout} s'),
+        onTap: () => _editTimeout(context, state),
+      ),
+      if (!win)
+        ListTile(
+          leading: const Icon(Icons.swap_horiz),
+          title: Text(tr(context, 'networkStrategy')),
+          subtitle: Text(tr(context, 'networkStrategyDesc')),
+          trailing: Text(tr(context, 'strategy_${o.networkStrategy}')),
+          onTap: () async {
+            final v = await pickOption<String>(
+                context, tr(context, 'networkStrategy'), o.networkStrategy, {
+              for (final s in networkStrategies) s: tr(context, 'strategy_$s'),
+            });
+            if (v != null) await state.updateNet((o) => o.networkStrategy = v);
+          },
+        ),
       ListTile(
         leading: const Icon(Icons.straighten),
         title: Text(tr(context, 'mtu')),
@@ -173,6 +225,173 @@ List<Widget> networkSections(
       ),
     ]),
   ];
+}
+
+/// Shows the options as radio buttons and returns the one the user picked (null if closed).
+Future<T?> pickOption<T>(BuildContext context, String title, T current, Map<T, String> options) async {
+  final picked = await showDialog<({T value})>(
+    context: context,
+    builder: (dialog) => SimpleDialog(
+      title: Text(title),
+      children: [
+        for (final e in options.entries)
+          RadioListTile<T>(
+            value: e.key,
+            groupValue: current,
+            title: Text(e.value),
+            onChanged: (v) => Navigator.pop(dialog, (value: e.key)),
+          ),
+      ],
+    ),
+  );
+  return picked?.value;
+}
+
+/// A multi-line box for a JSON object; returns the text (empty = none), or null if cancelled.
+Future<String?> editJson(BuildContext context, String title, String description, String initial) {
+  final controller = TextEditingController(text: initial);
+  String? error;
+  return showDialog<String>(
+    context: context,
+    builder: (dialog) => StatefulBuilder(
+      builder: (dialog, setState) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 420,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(description, style: Theme.of(dialog).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              minLines: 5,
+              maxLines: 10,
+              autocorrect: false,
+              textDirection: TextDirection.ltr,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+              decoration: InputDecoration(
+                hintText: '{ }',
+                errorText: error,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
+          FilledButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isNotEmpty && parseExtraJson(text) == null) {
+                setState(() => error = tr(dialog, 'jsonInvalid'));
+                return;
+              }
+              Navigator.pop(dialog, text);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    ),
+  ).whenComplete(controller.dispose);
+}
+
+Future<void> _editTimeout(BuildContext context, AppState state) async {
+  final controller = TextEditingController(text: '${state.net.connectTimeout}');
+  final seconds = await showDialog<int>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: Text(tr(dialog, 'connectTimeout')),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(hintText: '0 – 120', border: OutlineInputBorder()),
+        onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v)),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
+        FilledButton(
+            onPressed: () => Navigator.pop(dialog, int.tryParse(controller.text)),
+            child: const Text('OK')),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (seconds == null || seconds < 0 || seconds > 120) return;
+  await state.updateNet((o) => o.connectTimeout = seconds);
+}
+
+/// Android: the Wi-Fi networks on which the connection stays off.
+Future<void> _editWifi(BuildContext context, AppState state) async {
+  final names = List<String>.of(state.net.directWifi);
+  final input = TextEditingController();
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (dialog) => StatefulBuilder(
+      builder: (dialog, setState) {
+        void add(String name) {
+          final n = name.trim();
+          if (n.isNotEmpty && !names.contains(n)) setState(() => names.add(n));
+          input.clear();
+        }
+
+        return AlertDialog(
+          title: Text(tr(dialog, 'wifiDirect')),
+          content: SizedBox(
+            width: 380,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(tr(dialog, 'wifiNote'), style: Theme.of(dialog).textTheme.bodySmall),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: input,
+                  onSubmitted: add,
+                  decoration: InputDecoration(
+                    labelText: tr(dialog, 'wifiName'),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: IconButton(icon: const Icon(Icons.add), onPressed: () => add(input.text)),
+                  ),
+                ),
+                TextButton.icon(
+                  icon: const Icon(Icons.wifi_find),
+                  label: Text(tr(dialog, 'wifiAddCurrent')),
+                  onPressed: () async {
+                    final access = await VpnChannel.wifiAccess(request: true);
+                    if (!dialog.mounted) return;
+                    if (access.name != null) {
+                      add(access.name!);
+                    } else {
+                      toast(dialog, tr(dialog, access.granted ? 'wifiNoName' : 'wifiNeedsPermission'));
+                    }
+                  },
+                ),
+                for (final n in names)
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.wifi),
+                    title: Text(n),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => setState(() => names.remove(n)),
+                    ),
+                  ),
+              ]),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('✕')),
+            FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('OK')),
+          ],
+        );
+      },
+    ),
+  );
+  input.dispose();
+  if (saved != true) return;
+  // The name of a network can only be read with the location permission.
+  if (names.isNotEmpty) await VpnChannel.wifiAccess(request: true);
+  await state.updateNet((o) => o.directWifi = names);
 }
 
 String _newPassword() {
@@ -416,7 +635,7 @@ Future<void> _pickChain(BuildContext context, AppState state) async {
     for (final g in state.groups)
       if (g.kind != GroupKind.collector)
         for (final c in g.configs)
-          if (!c.needsXray) c,
+          if (c.canSingBox && c.outbound['type'] != 'wireguard') c,
   ];
   final picked = await showDialog<ProxyConfig>(
     context: context,

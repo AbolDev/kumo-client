@@ -1,0 +1,11 @@
+Package: kumo
+Version: @VERSION@
+Section: net
+Priority: optional
+Architecture: amd64
+Maintainer: AbolDev <abolfazlbaghery07@gmail.com>
+Depends: libgtk-3-0, libayatana-appindicator3-1 | libappindicator3-1, policykit-1 | pkexec
+Homepage: https://github.com/AbolDev/kumo-client
+Description: Free VPN client powered by sing-box and Xray
+ Kumo connects to the servers and subscriptions you choose. It can run as a
+ local proxy (also set as the system proxy) or tunnel the whole computer.

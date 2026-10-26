@@ -1,8 +1,7 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/services.dart';
 
-import 'windows_vpn.dart';
+import 'desktop_vpn.dart';
+import 'platform.dart';
 
 enum VpnStatus { stopped, starting, started, stopping, error }
 
@@ -20,24 +19,24 @@ class Traffic {
 }
 
 /// Bridge to the native sing-box VPN: the Android service (see BoxVpnService.kt), or the
-/// child process managed by [WindowsVpn] on Windows.
+/// child process managed by [DesktopVpn] on Windows.
 class VpnChannel {
   static const _control = MethodChannel('kumo/control');
   static const _events = EventChannel('kumo/status');
 
   static const _traffic = EventChannel('kumo/traffic');
 
-  static final bool _win = Platform.isWindows;
+  static final bool _win = isDesktop;
 
   static Stream<Traffic> get traffic => _win
-      ? WindowsVpn.instance.traffic
+      ? DesktopVpn.instance.traffic
       : _traffic.receiveBroadcastStream().map((e) {
         final l = (e as List).map((v) => (v as num).toInt()).toList();
         return Traffic(l[0], l[1], l[2], l[3]);
       });
 
   static Stream<VpnState> get states => _win
-      ? WindowsVpn.instance.states
+      ? DesktopVpn.instance.states
       : _events.receiveBroadcastStream().map((e) {
         final m = Map<String, dynamic>.from(e as Map);
         return VpnState(
@@ -71,7 +70,7 @@ class VpnChannel {
     bool killSwitch = false,
   }) =>
       _win
-      ? WindowsVpn.instance.start(configJson,
+      ? DesktopVpn.instance.start(configJson,
           xrayConfig: xrayConfig,
           xrayPort: xrayPort,
           apiPort: apiPort ?? 9090,
@@ -94,17 +93,29 @@ class VpnChannel {
   static Future<int> delay(String configJson, String url,
           {int timeoutMs = 8000}) async =>
       _win
-          ? WindowsVpn.instance.delay(configJson, url, timeoutMs)
+          ? DesktopVpn.instance.delay(configJson, url, timeoutMs)
           : (await _control.invokeMethod<int>(
           'delay', {'config': configJson, 'url': url, 'timeout': timeoutMs})) ??
       -1;
 
   static Future<void> stop() =>
-      _win ? WindowsVpn.instance.stop() : _control.invokeMethod('stop');
+      _win ? DesktopVpn.instance.stop() : _control.invokeMethod('stop');
 
   /// Turns the background subscription download job on or off.
   static Future<void> scheduleSubUpdates(bool enabled) async =>
       _win ? null : _control.invokeMethod('scheduleSubUpdates', {'enabled': enabled});
+
+  /// Android: whether the Wi-Fi network's name can be read (it needs the location permission,
+  /// which is asked for when [request] is true), and the name of the network the phone is on.
+  static Future<({bool granted, String? name})> wifiAccess({bool request = false}) async {
+    if (_win) return (granted: false, name: null);
+    try {
+      final m = await _control.invokeMapMethod<String, dynamic>('wifiAccess', {'request': request});
+      return (granted: m?['granted'] == true, name: m?['name'] as String?);
+    } catch (_) {
+      return (granted: false, name: null);
+    }
+  }
 
   /// Android: lets the phone warn about a subscription that is nearly out of data or time.
   static Future<void> checkUsage(
@@ -140,11 +151,11 @@ class VpnChannel {
 
   /// Reads a small text file from the app's private storage, null if missing.
   static Future<String?> readFile(String name) => _win
-      ? WindowsVpn.instance.readFile(name)
+      ? DesktopVpn.instance.readFile(name)
       : _control.invokeMethod<String>('readFile', {'name': name});
 
   static Future<void> writeFile(String name, String content) => _win
-      ? WindowsVpn.instance.writeFile(name, content)
+      ? DesktopVpn.instance.writeFile(name, content)
       : _control.invokeMethod('writeFile', {'name': name, 'content': content});
 
   /// Android: opens the system VPN settings, where Always-on VPN and blocking can be set.
@@ -154,13 +165,13 @@ class VpnChannel {
 
   /// The app's private folder (rule sets and other downloaded files live there).
   static Future<String> dataDir() async => _win
-      ? WindowsVpn.instance.dataDir
+      ? DesktopVpn.instance.dataDir
       : (await _control.invokeMethod<String>('filesDir'))!;
 
   /// Apps that can be chosen for per-app routing: installed apps on Android, running
   /// programs on Windows.
   static Future<List<AppEntry>> listApps() async {
-    if (_win) return WindowsVpn.instance.runningProcesses();
+    if (_win) return DesktopVpn.instance.runningProcesses();
     final raw = await _control.invokeListMethod<Map>('apps') ?? const [];
     return [
       for (final m in raw) AppEntry('${m['id']}', '${m['label']}'),

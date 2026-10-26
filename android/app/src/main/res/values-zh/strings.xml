@@ -9,4 +9,26 @@
     <string name="notif_connect">连接</string>
     <string name="widget_on">已连接</string>
     <string name="widget_off">点按以连接</string>
+    <string name="widget_connecting">正在连接…</string>
+    <string name="widget_disconnecting">正在断开…</string>
+    <string name="widget_name_button">Kumo 按钮</string>
+    <string name="widget_name_icon">Kumo 图标</string>
+    <string name="widget_name_stats">Kumo 流量</string>
+    <string name="widget_cfg_title">小组件样式</string>
+    <string name="widget_cfg_color">颜色</string>
+    <string name="widget_cfg_auto">自动（随状态）</string>
+    <string name="widget_cfg_shape">形状</string>
+    <string name="widget_cfg_opacity">不透明度</string>
+    <string name="widget_cfg_size">文字大小</string>
+    <string name="widget_cfg_content">显示内容</string>
+    <string name="widget_cfg_speed">速度</string>
+    <string name="widget_cfg_total">总流量</string>
+    <string name="widget_cfg_both">两者</string>
+    <string name="widget_cfg_done">完成</string>
+    <string name="alert_channel">订阅提醒</string>
+    <string name="alert_data_low">%1$s：流量仅剩 %2$s。</string>
+    <string name="alert_data_out">%1$s：流量已用完。</string>
+    <string name="alert_exp_soon">%1$s：%2$d 天后到期。</string>
+    <string name="alert_exp_today">%1$s：今天到期。</string>
+    <string name="alert_expired">%1$s：已到期。</string>
 </resources>

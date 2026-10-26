@@ -16,8 +16,8 @@ import 'package:flutter/material.dart';
   return (null, name);
 }
 
-/// A server name. Windows has no flag emoji (they show as two letters), so there the flag is
-/// drawn as a picture in front of the name.
+/// A server name. Windows has no flag emoji (they show as two letters) and Linux often lacks the
+/// font, so there the flag is drawn as a picture in front of the name.
 class FlagName extends StatelessWidget {
   const FlagName(this.name, {super.key, this.style});
 
@@ -26,7 +26,8 @@ class FlagName extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (code, rest) = Platform.isWindows ? splitFlag(name) : (null, name);
+    final (code, rest) =
+        Platform.isWindows || Platform.isLinux ? splitFlag(name) : (null, name);
     final text = Text(code == null ? name : rest,
         maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
     if (code == null) return text;

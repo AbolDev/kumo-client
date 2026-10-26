@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/platform.dart';
 import 'core/vpn_channel.dart';
 import 'l10n/extra.dart';
 import 'l10n/strings.dart';
@@ -15,15 +16,16 @@ import 'state/app_state.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isWindows) {
+  if (isDesktop) {
     await windowManager.ensureInitialized();
     await windowManager.waitUntilReadyToShow(
-      const WindowOptions(
-          size: Size(800, 580),
-          minimumSize: Size(420, 520),
+      WindowOptions(
+          size: const Size(800, 580),
+          minimumSize: const Size(420, 520),
           title: 'Kumo',
-          titleBarStyle: TitleBarStyle.hidden,
-          windowButtonVisibility: false),
+          // Windows draws its own title bar; Linux and macOS keep the system one.
+          titleBarStyle: Platform.isWindows ? TitleBarStyle.hidden : TitleBarStyle.normal,
+          windowButtonVisibility: !Platform.isWindows),
       () async {
         // Started by Windows at sign-in: stay in the tray.
         if (!args.contains('--minimized')) {
@@ -60,11 +62,11 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
         if (context != null && context.mounted) checkAndPrompt(context, silent: true);
       });
       // Connect on startup (the phone does this from its boot receiver).
-      if (Platform.isWindows && _state.autoConnect && !_state.connected) {
+      if (isDesktop && _state.autoConnect && !_state.connected) {
         _state.toggle();
       }
     });
-    if (Platform.isWindows) {
+    if (isDesktop) {
       windowManager.addListener(this);
       trayManager.addListener(this);
       _setupTray();
@@ -74,7 +76,7 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
 
   @override
   void dispose() {
-    if (Platform.isWindows) {
+    if (isDesktop) {
       windowManager.removeListener(this);
       trayManager.removeListener(this);
       _state.removeListener(_refreshTrayMenu);
@@ -91,7 +93,8 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
 
   Future<void> _setupTray() async {
     try {
-      await trayManager.setIcon('assets/tray_icon.ico');
+      await trayManager.setIcon(
+          Platform.isWindows ? 'assets/tray_icon.ico' : 'assets/tray_icon.png');
       await trayManager.setToolTip('Kumo');
     } catch (_) {
       // without a tray icon the window just stays on the taskbar
@@ -200,11 +203,11 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
         title: 'Kumo',
         navigatorKey: _navigator,
         // A very wide desktop window keeps its content in the middle, on the same background.
-        builder: (context, child) => Platform.isWindows
+        builder: (context, child) => isDesktop
             ? ColoredBox(
                 color: Theme.of(context).colorScheme.surface,
                 child: Column(children: [
-                  const AppTitleBar(),
+                  if (Platform.isWindows) const AppTitleBar(),
                   Expanded(
                     child: Center(
                         child: ConstrainedBox(

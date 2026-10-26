@@ -9,4 +9,26 @@
     <string name="notif_connect">Kết nối</string>
     <string name="widget_on">Đã kết nối</string>
     <string name="widget_off">Chạm để kết nối</string>
+    <string name="widget_connecting">Đang kết nối…</string>
+    <string name="widget_disconnecting">Đang ngắt kết nối…</string>
+    <string name="widget_name_button">Kumo — nút</string>
+    <string name="widget_name_icon">Kumo — biểu tượng</string>
+    <string name="widget_name_stats">Kumo — lưu lượng</string>
+    <string name="widget_cfg_title">Kiểu widget</string>
+    <string name="widget_cfg_color">Màu</string>
+    <string name="widget_cfg_auto">Tự động (theo trạng thái)</string>
+    <string name="widget_cfg_shape">Hình dạng</string>
+    <string name="widget_cfg_opacity">Độ trong suốt</string>
+    <string name="widget_cfg_size">Cỡ chữ</string>
+    <string name="widget_cfg_content">Hiển thị</string>
+    <string name="widget_cfg_speed">Tốc độ</string>
+    <string name="widget_cfg_total">Tổng dung lượng</string>
+    <string name="widget_cfg_both">Cả hai</string>
+    <string name="widget_cfg_done">Xong</string>
+    <string name="alert_channel">Cảnh báo đăng ký</string>
+    <string name="alert_data_low">%1$s: chỉ còn %2$s dung lượng.</string>
+    <string name="alert_data_out">%1$s: đã hết dung lượng.</string>
+    <string name="alert_exp_soon">%1$s: hết hạn sau %2$d ngày.</string>
+    <string name="alert_exp_today">%1$s: hết hạn hôm nay.</string>
+    <string name="alert_expired">%1$s: đã hết hạn.</string>
 </resources>

@@ -11,7 +11,9 @@ class DnsPreset {
   final String id;
   final String name;
 
-  /// `https://host/path` = DNS over HTTPS, `tls://host` = DNS over TLS, otherwise plain UDP.
+  /// `https://host/path` = DNS over HTTPS, `h3://host/path` = DoH over HTTP/3, `tls://host` =
+  /// DNS over TLS, `quic://host` = DNS over QUIC, `tcp://host` = plain DNS over TCP, otherwise
+  /// plain UDP.
   final String address;
 }
 
@@ -22,7 +24,22 @@ const dnsPresets = [
   DnsPreset('adguard', 'AdGuard', 'https://dns.adguard-dns.com/dns-query'),
   DnsPreset('cloudflare-dot', 'Cloudflare (DoT)', 'tls://1.1.1.1'),
   DnsPreset('google-dot', 'Google (DoT)', 'tls://8.8.8.8'),
+  DnsPreset('cloudflare-h3', 'Cloudflare (DoH3)', 'h3://1.1.1.1/dns-query'),
+  DnsPreset('adguard-quic', 'AdGuard (DoQ)', 'quic://dns.adguard-dns.com'),
+  DnsPreset('cloudflare-tcp', 'Cloudflare (TCP)', 'tcp://1.1.1.1'),
 ];
+
+/// Multiplexing protocols sing-box offers on the TCP-based outbounds.
+const muxProtocols = ['h2mux', 'smux', 'yamux'];
+
+/// Where the CA certificates for checking servers come from.
+const certStores = ['system', 'mozilla', 'chrome'];
+
+/// Android: how the phone picks between Wi-Fi and mobile data for the connection.
+const networkStrategies = ['default', 'hybrid', 'fallback'];
+
+/// The core a server is run with when both can carry it.
+const cores = ['singbox', 'xray'];
 
 /// Countries whose sites can go direct (code, English name).
 const bypassCountries = {
@@ -78,9 +95,9 @@ const logLevels = ['error', 'warn', 'info', 'debug'];
 class NetOptions {
   NetOptions();
 
-  /// Tunnel the whole device: on by default on Android, off on Windows. Off: a local proxy only
-  /// (on Windows it is also set as the system proxy).
-  bool tun = !Platform.isWindows;
+  /// Tunnel the whole device: on by default on Android, off on the desktop (where it needs
+  /// administrator rights). Off: a local proxy only, also set as the system proxy on the desktop.
+  bool tun = Platform.isAndroid;
   int proxyPort = 2080;
 
   AppMode appMode = AppMode.all;
@@ -102,10 +119,49 @@ class NetOptions {
   /// Log level of the core (sing-box, and Xray when it runs).
   String logLevel = logLevels.first;
 
+  /// The core for a server both can carry: sing-box (default) or Xray. A server only one of
+  /// them can carry always uses that one. Xray runs one chosen server at a time; the automatic
+  /// group is always sing-box.
+  String core = cores.first;
+
+  /// Multiplexing protocol when MUX is on, and a TLS record split besides the handshake split.
+  String muxProtocol = muxProtocols.first;
+  bool tlsRecordFragment = false;
+
+  /// Socket options for the connections to the server.
+  bool tcpFastOpen = false;
+  bool tcpMultiPath = false;
+
+  /// Seconds to wait for a server to connect; 0 keeps the core's own default.
+  int connectTimeout = 0;
+
+  /// The CA list used to check servers (system / mozilla / chrome).
+  String certStore = certStores.first;
+
+  /// Look up names with fake addresses (TUN only): the real lookup happens at the server.
+  bool fakeIp = false;
+
+  /// Let the core set its own clock from a time server (protocols with time checks need it).
+  bool ntp = false;
+
+  /// Android: how Wi-Fi and mobile data are used together.
+  String networkStrategy = networkStrategies.first;
+
+  /// Android: the connection stays off (direct) while the phone is on one of these Wi-Fi names.
+  List<String> directWifi = [];
+
+  /// Your own JSON, merged into every sing-box proxy outbound and into the stream settings of
+  /// the Xray outbound (for options the app has no switch for: fragmenting, final masks ...).
+  String extraSingbox = '';
+  String extraXray = '';
+
   /// Domains and addresses the user sends straight out, or always through the VPN, whatever the
   /// country and app settings say (stored as `example.com` or `10.0.0.0/8`).
   List<String> directRules = [];
   List<String> proxyRules = [];
+
+  /// Domains, addresses and ports that are always refused (an ad and tracker block list).
+  List<String> blockRules = [];
 
   /// Share the connection with other devices on the same network: a second proxy that listens on
   /// all addresses, always with a user name and password.
@@ -147,8 +203,22 @@ class NetOptions {
         'mtu': mtu,
         'fingerprint': fingerprint,
         'logLevel': logLevel,
+        'core': core,
+        'muxProtocol': muxProtocol,
+        'tlsRecordFragment': tlsRecordFragment,
+        'tcpFastOpen': tcpFastOpen,
+        'tcpMultiPath': tcpMultiPath,
+        'connectTimeout': connectTimeout,
+        'certStore': certStore,
+        'fakeIp': fakeIp,
+        'ntp': ntp,
+        'networkStrategy': networkStrategy,
+        'directWifi': directWifi,
+        'extraSingbox': extraSingbox,
+        'extraXray': extraXray,
         'directRules': directRules,
         'proxyRules': proxyRules,
+        'blockRules': blockRules,
         'shareLan': shareLan,
         'lanPort': lanPort,
         'lanUser': lanUser,
@@ -162,7 +232,7 @@ class NetOptions {
 
   void load(Map<String, dynamic> j) {
     bool flag(String k, bool d) => j[k] is bool ? j[k] as bool : d;
-    tun = flag('tun', !Platform.isWindows);
+    tun = flag('tun', Platform.isAndroid);
     final port = j['proxyPort'];
     if (port is int && port > 0 && port < 65536) proxyPort = port;
     appMode = AppMode.values.firstWhere((m) => m.name == j['appMode'],
@@ -189,6 +259,24 @@ class NetOptions {
         v is List ? v.whereType<String>().map(normalizeRouteRule).whereType<String>().toList() : [];
     directRules = rules(j['directRules']);
     proxyRules = rules(j['proxyRules']);
+    blockRules = rules(j['blockRules']);
+    String pick(String key, List<String> allowed) =>
+        j[key] is String && allowed.contains(j[key]) ? j[key] as String : allowed.first;
+    core = pick('core', cores);
+    muxProtocol = pick('muxProtocol', muxProtocols);
+    certStore = pick('certStore', certStores);
+    networkStrategy = pick('networkStrategy', networkStrategies);
+    tlsRecordFragment = flag('tlsRecordFragment', false);
+    tcpFastOpen = flag('tcpFastOpen', false);
+    tcpMultiPath = flag('tcpMultiPath', false);
+    fakeIp = flag('fakeIp', false);
+    ntp = flag('ntp', false);
+    final timeout = j['connectTimeout'];
+    connectTimeout = timeout is int && timeout >= 0 && timeout <= 120 ? timeout : 0;
+    final wifi = j['directWifi'];
+    directWifi = wifi is List ? wifi.whereType<String>().toList() : [];
+    extraSingbox = j['extraSingbox'] is String ? j['extraSingbox'] as String : '';
+    extraXray = j['extraXray'] is String ? j['extraXray'] as String : '';
     shareLan = flag('shareLan', false);
     final lp = j['lanPort'];
     if (lp is int && lp > 1023 && lp < 65536) lanPort = lp;

@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/net_options.dart';
+import '../core/platform.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
@@ -67,7 +68,9 @@ class _AppRoutingPageState extends State<AppRoutingPage> {
 
   Future<void> _pickProgram() async {
     final picked = await FilePicker.platform.pickFiles(
-        type: FileType.custom, allowedExtensions: ['exe'], allowMultiple: true);
+        type: Platform.isWindows ? FileType.custom : FileType.any,
+        allowedExtensions: Platform.isWindows ? ['exe'] : null,
+        allowMultiple: true);
     if (picked != null) _addFiles(picked.paths.whereType<String>());
   }
 
@@ -125,7 +128,7 @@ class _AppRoutingPageState extends State<AppRoutingPage> {
                 ),
               ),
             ),
-            if (Platform.isWindows)
+            if (isDesktop)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                 child: TextField(
@@ -154,7 +157,7 @@ class _AppRoutingPageState extends State<AppRoutingPage> {
                       children: [
                         for (final a in all)
                           CheckboxListTile(
-                            secondary: Platform.isWindows
+                            secondary: isDesktop
                                 ? const Icon(Icons.apps)
                                 : _AppIcon(id: a.id),
                             value: selected.contains(a.id),
@@ -170,7 +173,7 @@ class _AppRoutingPageState extends State<AppRoutingPage> {
         ),
       ),
     );
-    if (!Platform.isWindows) return page;
+    if (!isDesktop) return page;
     return DropTarget(
       onDragDone: (d) => _addFiles(d.files.map((f) => f.path)),
       child: page,

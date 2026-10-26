@@ -4,7 +4,7 @@ import 'dart:isolate';
 import 'package:yaml/yaml.dart';
 
 import 'config_decryptor.dart' show xrayJsonToLinks;
-import 'proxy_config.dart' show extractLinks;
+import 'proxy_config.dart' show extractLinks, wireguardConfToLinks;
 
 /// Turns the body of a subscription, in whichever format the provider serves it, into
 /// share links: a plain or base64 list of links, a Clash / Mihomo YAML, a sing-box or
@@ -14,6 +14,9 @@ List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
   if (text.isEmpty) return const [];
   final links = extractLinks(text);
   if (links.isNotEmpty) return links;
+  // The text of a WireGuard configuration file.
+  final wireguard = wireguardConfToLinks(text);
+  if (wireguard.isNotEmpty) return wireguard;
 
   // Decrypted profiles (.bpf, .zsx ...) start with `// name: ...` comment lines before the JSON.
   final bare = text.startsWith('//')
@@ -279,6 +282,31 @@ String? _clashLink(Map p) {
             'alpn': _alpn(p['alpn']),
             'mport': _s(p['ports'] ?? p['mport']),
           })}#${_tag(name)}';
+    case 'anytls':
+      final pw = _s(p['password']);
+      if (pw == null) return null;
+      return 'anytls://${Uri.encodeComponent(pw)}@${_host(server)}:$port${_query({
+            'sni': sni,
+            'insecure': insecure,
+            'alpn': _alpn(p['alpn']),
+            'fp': _s(p['client-fingerprint']),
+          })}#${_tag(name)}';
+    case 'socks5' || 'socks':
+      final user = _s(p['username']);
+      final auth = user == null
+          ? ''
+          : '${Uri.encodeComponent(user)}:${Uri.encodeComponent(_s(p['password']) ?? '')}@';
+      return 'socks5://$auth${_host(server)}:$port#${_tag(name)}';
+    case 'hysteria':
+      return 'hysteria://${_host(server)}:$port${_query({
+            'auth': _s(p['auth-str'] ?? p['auth_str']),
+            'peer': sni,
+            'insecure': insecure,
+            'upmbps': _s(p['up']),
+            'downmbps': _s(p['down']),
+            'alpn': _alpn(p['alpn']),
+            'obfsParam': _s(p['obfs']),
+          })}#${_tag(name)}';
     case 'tuic':
       final id = _s(p['uuid']);
       if (id == null) return null;
@@ -390,6 +418,35 @@ String? _singBoxLink(Map o) {
                     .join(',')
                 : null,
           })}#${_tag(name)}';
+    case 'anytls':
+      final pw = _s(o['password']);
+      if (pw == null) return null;
+      return 'anytls://${Uri.encodeComponent(pw)}@${_host(server)}:$port${_query({
+            'sni': sni,
+            'insecure': insecure,
+            'alpn': _alpn(tlsMap['alpn']),
+            'fp': _s(utls['fingerprint']),
+          })}#${_tag(name)}';
+    case 'socks':
+      final user = _s(o['username']);
+      final auth = user == null
+          ? ''
+          : '${Uri.encodeComponent(user)}:${Uri.encodeComponent(_s(o['password']) ?? '')}@';
+      return 'socks5://$auth${_host(server)}:$port#${_tag(name)}';
+    case 'hysteria':
+      return 'hysteria://${_host(server)}:$port${_query({
+            'auth': _s(o['auth_str']),
+            'peer': sni,
+            'insecure': insecure,
+            'upmbps': _s(o['up_mbps']),
+            'downmbps': _s(o['down_mbps']),
+            'alpn': _alpn(tlsMap['alpn']),
+            'obfsParam': _s(o['obfs']),
+          })}#${_tag(name)}';
+    case 'ssh':
+      final user = _s(o['user']);
+      if (user == null) return null;
+      return 'ssh://${Uri.encodeComponent(user)}:${Uri.encodeComponent(_s(o['password']) ?? '')}@${_host(server)}:$port#${_tag(name)}';
     case 'tuic':
       final id = _s(o['uuid']);
       if (id == null) return null;

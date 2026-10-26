@@ -6,16 +6,22 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/updater.dart';
 import '../core/vpn_channel.dart';
-import '../core/windows_vpn.dart' show WindowsVpn;
+import '../core/desktop_vpn.dart' show DesktopVpn;
 import '../l10n/extra.dart';
 import 'share_sheet.dart';
 
 Future<void> openLink(String url) async {
-  if (Platform.isWindows) {
-    await Process.run('cmd', ['/c', 'start', '', url]);
-  } else {
-    await VpnChannel.openUrl(url);
-  }
+  try {
+    if (Platform.isWindows) {
+      await Process.run('cmd', ['/c', 'start', '', url]);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', [url]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [url]);
+    } else {
+      await VpnChannel.openUrl(url);
+    }
+  } catch (_) {}
 }
 
 /// Looks for a newer stable release. With [silent] nothing is shown unless there is one
@@ -80,12 +86,12 @@ Future<void> _offer(BuildContext context, UpdateInfo info) async {
 Future<void> _install(BuildContext context, UpdateInfo info) async {
   final asset = await pickAsset(info);
   // The portable build is not installed by the setup file: the new zip is taken from the page.
-  if (asset == null || (Platform.isWindows && WindowsVpn.portable)) {
+  if (asset == null || (Platform.isWindows && DesktopVpn.portable)) {
     await openLink(info.url);
     return;
   }
   // Android: the permission to install apps is asked for before anything is downloaded.
-  if (!Platform.isWindows && !await _allowInstalls(context)) return;
+  if (Platform.isAndroid && !await _allowInstalls(context)) return;
   if (!context.mounted) return;
   final progress = ValueNotifier<_Progress>(const _Progress(0, -1, 0));
   showDialog<void>(

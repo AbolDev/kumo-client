@@ -98,6 +98,9 @@ Future<({String name, String url})?> pickAsset(UpdateInfo info) async {
         .toUpperCase()
         .contains('ARM64');
     wanted = [if (arm) 'kumo-windows-arm64-setup.exe', 'kumo-windows-x64-setup.exe'];
+  } else if (Platform.isLinux || Platform.isMacOS) {
+    // The Linux and macOS builds are not installed by the app: the release page is opened.
+    return null;
   } else {
     final abis = await VpnChannel.abis();
     wanted = [

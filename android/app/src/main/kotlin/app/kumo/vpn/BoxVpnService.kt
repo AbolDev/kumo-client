@@ -419,8 +419,25 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         // Go's resolver cannot read Android's DNS settings, so the server name is resolved here.
         val config = JSONObject(File(configFile).readText())
         val settings = config.getJSONArray("outbounds").getJSONObject(0).getJSONObject("settings")
-        val target = (settings.optJSONArray("vnext") ?: settings.getJSONArray("servers")).getJSONObject(0)
-        target.put("address", InetAddress.getByName(target.getString("address")).hostAddress)
+        fun resolve(host: String): String = InetAddress.getByName(host).hostAddress ?: host
+        val target = (settings.optJSONArray("vnext") ?: settings.optJSONArray("servers"))?.getJSONObject(0)
+        if (target != null) {
+            // vless / vmess / trojan / shadowsocks / socks
+            target.put("address", resolve(target.getString("address")))
+        } else if (settings.has("address") && settings.has("port")) {
+            // hysteria
+            settings.put("address", resolve(settings.getString("address")))
+        }
+        // WireGuard: the peers hold "host:port"
+        val peers = settings.optJSONArray("peers")
+        for (i in 0 until (peers?.length() ?: 0)) {
+            val peer = peers!!.getJSONObject(i)
+            val endpoint = peer.optString("endpoint")
+            val colon = endpoint.lastIndexOf(':')
+            if (colon > 0 && !endpoint.startsWith("[")) {
+                peer.put("endpoint", resolve(endpoint.substring(0, colon)) + endpoint.substring(colon))
+            }
+        }
         // A loopback relay (plain VLESS) carries the real server address on its inbound.
         val inbounds = config.optJSONArray("inbounds")
         for (i in 0 until (inbounds?.length() ?: 0)) {
@@ -723,7 +740,19 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     override fun clearDNSCache() {}
 
-    override fun readWIFIState(): WIFIState? = null
+    // The name of the Wi-Fi network, for the rule "stay off on these networks". Android only gives
+    // it out with the location permission (and the location switch on).
+    @Suppress("DEPRECATION")
+    override fun readWIFIState(): WIFIState? {
+        return try {
+            val info = applicationContext.getSystemService(android.net.wifi.WifiManager::class.java)
+                ?.connectionInfo ?: return null
+            val ssid = info.ssid?.trim('"') ?: return null
+            if (ssid.isEmpty() || ssid == "<unknown ssid>") null else WIFIState(ssid, info.bssid ?: "")
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     override fun localDNSTransport(): LocalDNSTransport = LocalResolver
 

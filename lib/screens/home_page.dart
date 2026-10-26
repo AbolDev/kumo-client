@@ -21,6 +21,7 @@ import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
 import 'edit_config_page.dart';
+import '../core/platform.dart';
 import 'scan_page.dart';
 import 'settings_page.dart';
 import 'region_picker.dart';
@@ -58,7 +59,7 @@ class HomePage extends StatelessWidget {
       listenable: state,
       builder: (context, _) => Scaffold(
         // The tint of the connection card reaches up behind the title bar, with no seam.
-        extendBodyBehindAppBar: !Platform.isWindows,
+        extendBodyBehindAppBar: Platform.isAndroid,
         appBar: AppBar(
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
@@ -81,7 +82,7 @@ class HomePage extends StatelessWidget {
                   value: () => _addFromFile(context),
                   child: _MenuRow(Icons.file_open, t.addFromFile),
                 ),
-                if (!Platform.isWindows)
+                if (Platform.isAndroid)
                   PopupMenuItem(
                     value: () => _scan(context),
                     child: _MenuRow(Icons.qr_code_scanner, t.scanQr),
@@ -130,7 +131,7 @@ class HomePage extends StatelessWidget {
         ),
         body: _withDrop(context, LayoutBuilder(builder: (context, box) {
           // A wide desktop window puts the controls beside the server list.
-          if (Platform.isWindows && box.maxWidth >= 760) {
+          if (isDesktop && box.maxWidth >= 760) {
             final scheme = Theme.of(context).colorScheme;
             final count = state.groups.fold<int>(0, (n, g) => n + g.configs.length);
             return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -175,7 +176,7 @@ class HomePage extends StatelessWidget {
 
   /// Windows: files and pictures dropped on the window are added like the Add menu does.
   Widget _withDrop(BuildContext context, Widget child) {
-    if (!Platform.isWindows) return child;
+    if (!isDesktop) return child;
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyV, control: true): () => _addFromClipboard(context),
@@ -512,7 +513,7 @@ class _ConnectCard extends StatelessWidget {
       ),
       child: Padding(
       padding: EdgeInsets.fromLTRB(16,
-          Platform.isWindows ? 24 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
+          isDesktop ? 24 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
       child: Column(
         children: [
           _PowerButton(
@@ -646,7 +647,7 @@ class _ConnectCard extends StatelessWidget {
             ),
           ),
           // On the desktop the tunnel switch sits here; on the phone it is in Settings.
-          if (Platform.isWindows)
+          if (isDesktop)
             SwitchListTile(
               dense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
@@ -656,7 +657,7 @@ class _ConnectCard extends StatelessWidget {
                   : (v) => state.updateNet((o) => o.tun = v),
               title: Text(tr(context, 'tunShort')),
               subtitle: Text(state.net.tun
-                  ? tr(context, 'tunOnNote')
+                  ? tr(context, Platform.isWindows ? 'tunOnNote' : 'tunPasswordNote')
                   : tr(context, 'proxyNote', {'port': state.net.proxyPort})),
             ),
         ],

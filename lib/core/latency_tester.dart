@@ -18,29 +18,64 @@ const oldDefaultDelayUrl = 'https://www.google.com/generate_204';
 String delayTestUrl = defaultDelayUrl;
 
 /// Protocols that run over UDP: a TCP connect to their port always fails, so they skip that stage.
-const _udpProtocols = {'hysteria2', 'tuic'};
+const _udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
 
-/// Minimal sing-box config holding only [c], used by the throw-away test core.
-String _delayConfig(Map<String, dynamic> outbound) => jsonEncode({
-      'log': {'level': 'error'},
-      'dns': {
-        'servers': [
-          {'type': 'udp', 'tag': 'dns', 'server': '1.1.1.1'},
-        ],
-        'final': 'dns',
-      },
-      'outbounds': [
-        {...outbound, 'tag': 'proxy'},
+/// Minimal sing-box config holding only [c] (and the layers it is dialled through), used by the
+/// throw-away test core. WireGuard is an endpoint there, everything else an outbound.
+String _delayConfig(List<Map<String, dynamic>> layers) {
+  final wireguard = layers.first['type'] == 'wireguard';
+  return jsonEncode({
+    'log': {'level': 'error'},
+    'dns': {
+      'servers': [
+        {'type': 'udp', 'tag': 'dns', 'server': '1.1.1.1'},
       ],
-      'route': {'default_domain_resolver': 'dns'},
-    });
+      'final': 'dns',
+    },
+    if (!wireguard)
+      'outbounds': [
+        for (var i = 0; i < layers.length; i++)
+          {
+            ...layers[i],
+            'tag': i == 0 ? 'proxy' : 'proxy-l$i',
+            if (i + 1 < layers.length) 'detour': 'proxy-l${i + 1}',
+          },
+      ],
+    if (wireguard)
+      'endpoints': [
+        {...layers.first, 'tag': 'proxy'},
+      ],
+    'route': {'default_domain_resolver': 'dns'},
+  });
+}
 
-/// The outbound with its server name already resolved by the system resolver. Resolving it inside
-/// the throw-away core went through a fixed public DNS server, which is slow or blocked on many
-/// networks and was counted in every result. The name stays where a server needs it (TLS server
-/// name, Host header).
-Future<Map<String, dynamic>> _resolved(ProxyConfig c) async {
-  final out = Map<String, dynamic>.of(c.outbound);
+/// The server and the layers under it with their names already resolved by the system resolver.
+/// Resolving them inside the throw-away core went through a fixed public DNS server, which is slow
+/// or blocked on many networks and was counted in every result. The name stays where a server
+/// needs it (TLS server name, Host header).
+Future<List<Map<String, dynamic>>> _resolvedLayers(ProxyConfig c) async => [
+      await _resolved(c.outbound),
+      for (final layer in c.inner) await _resolved(layer),
+    ];
+
+Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) async {
+  final out = Map<String, dynamic>.of(outbound);
+  // A WireGuard endpoint keeps its server in the peer.
+  if (out['type'] == 'wireguard') {
+    final peers = out['peers'];
+    if (peers is List && peers.isNotEmpty && peers.first is Map) {
+      final peer = Map<String, dynamic>.from(peers.first as Map);
+      final host = peer['address'];
+      if (host is String && InternetAddress.tryParse(host) == null) {
+        try {
+          final found = await InternetAddress.lookup(host).timeout(const Duration(seconds: 3));
+          if (found.isNotEmpty) peer['address'] = found.first.address;
+          out['peers'] = [peer, ...peers.skip(1)];
+        } catch (_) {}
+      }
+    }
+    return out;
+  }
   final server = out['server'];
   if (server is! String || InternetAddress.tryParse(server) != null) return out;
   try {
@@ -77,8 +112,8 @@ Future<Map<String, dynamic>> _resolved(ProxyConfig c) async {
 /// XHTTP servers need Xray, which only runs with the VPN, so they keep the TCP time.
 Future<int> realDelay(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 8)}) async {
-  if (c.needsXray) return tcpLatency(c);
-  final ms = await VpnChannel.delay(_delayConfig(await _resolved(c)), delayTestUrl,
+  if (!c.canSingBox) return tcpLatency(c);
+  final ms = await VpnChannel.delay(_delayConfig(await _resolvedLayers(c)), delayTestUrl,
       timeoutMs: timeout.inMilliseconds);
   return ms == -2 ? tcpLatency(c) : ms;
 }

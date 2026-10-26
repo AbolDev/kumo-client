@@ -2,13 +2,13 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
-import 'package:ffi/ffi.dart';
+import 'system_proxy.dart';
 
 const _key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
 
 /// The Windows system proxy (what browsers and most programs follow). The previous setting is
 /// written to a file first, so it can be restored even after the app was killed.
-class WinProxy {
+class WinProxy implements SystemProxy {
   WinProxy(this.dataDir);
 
   final String dataDir;
@@ -43,6 +43,7 @@ class WinProxy {
   }
 
   /// Points the system proxy at 127.0.0.1:[port].
+  @override
   Future<void> enable(int port) async {
     try {
       if (!await _backup.exists()) {
@@ -57,11 +58,15 @@ class WinProxy {
       await _set('ProxyServer', 'REG_SZ', '127.0.0.1:$port');
       await _set('ProxyOverride', 'REG_SZ', 'localhost;127.*;10.*;172.16.*;192.168.*;<local>');
       await _set('ProxyEnable', 'REG_DWORD', '1');
+      // A setup script (PAC) wins over the manual proxy: it is switched off while connected and
+      // put back afterwards (restore).
+      await _set('AutoConfigURL', 'REG_SZ', null);
       _notify();
     } catch (_) {}
   }
 
   /// Puts back what was there before (also used at startup after a crash).
+  @override
   Future<void> restore() async {
     try {
       if (!await _backup.exists()) return;
@@ -73,6 +78,7 @@ class WinProxy {
             enable == null ? '0' : '${int.tryParse(enable.replaceFirst('0x', ''), radix: 16) ?? 0}'),
         _set('ProxyServer', 'REG_SZ', j['server'] as String?),
         _set('ProxyOverride', 'REG_SZ', j['override'] as String?),
+        if (j['auto'] is String) _set('AutoConfigURL', 'REG_SZ', j['auto'] as String),
       ]);
       await _backup.delete();
       _notify();

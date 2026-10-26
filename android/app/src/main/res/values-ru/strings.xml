@@ -9,4 +9,26 @@
     <string name="notif_connect">Подключить</string>
     <string name="widget_on">Подключено</string>
     <string name="widget_off">Нажмите, чтобы подключить</string>
+    <string name="widget_connecting">Подключение…</string>
+    <string name="widget_disconnecting">Отключение…</string>
+    <string name="widget_name_button">Kumo — кнопка</string>
+    <string name="widget_name_icon">Kumo — значок</string>
+    <string name="widget_name_stats">Kumo — трафик</string>
+    <string name="widget_cfg_title">Вид виджета</string>
+    <string name="widget_cfg_color">Цвет</string>
+    <string name="widget_cfg_auto">Авто (по состоянию)</string>
+    <string name="widget_cfg_shape">Форма</string>
+    <string name="widget_cfg_opacity">Прозрачность</string>
+    <string name="widget_cfg_size">Размер текста</string>
+    <string name="widget_cfg_content">Показывать</string>
+    <string name="widget_cfg_speed">Скорость</string>
+    <string name="widget_cfg_total">Весь трафик</string>
+    <string name="widget_cfg_both">Оба</string>
+    <string name="widget_cfg_done">Готово</string>
+    <string name="alert_channel">Уведомления о подписках</string>
+    <string name="alert_data_low">%1$s: осталось всего %2$s трафика.</string>
+    <string name="alert_data_out">%1$s: трафик исчерпан.</string>
+    <string name="alert_exp_soon">%1$s: истекает через %2$d дн.</string>
+    <string name="alert_exp_today">%1$s: истекает сегодня.</string>
+    <string name="alert_expired">%1$s: срок истёк.</string>
 </resources>

@@ -10,7 +10,8 @@ import '../core/win_autostart.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/latency_tester.dart';
-import '../core/net_options.dart' show logLevels;
+import '../core/net_options.dart' show certStores, logLevels;
+import '../core/platform.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
@@ -132,7 +133,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// On Windows the language follows the PC, not a phone.
   String _systemLanguage(S t) =>
-      Platform.isWindows ? tr(context, 'languageDevice') : t.languageSystem;
+      isDesktop ? tr(context, 'languageDevice') : t.languageSystem;
 
   Widget _switch(String key, bool value, String title, String desc) =>
       SwitchListTile(
@@ -257,7 +258,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   t.restartOnChange, t.restartOnChangeDesc),
               _switch('confirmDelete', state.confirmDelete, t.confirmDelete,
                   t.confirmDeleteDesc),
-              if (!Platform.isWindows)
+              if (Platform.isAndroid)
               ListTile(
                 leading: const Icon(Icons.battery_saver),
                 title: Text(t.batteryTitle),
@@ -271,8 +272,8 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ]),
             ...networkSections(context, state, _section).cast<_Section>(),
-            if (Platform.isWindows)
-              _section(Icons.desktop_windows, tr(context, 'windows'), [
+            if (isDesktop)
+              _section(Icons.desktop_windows, tr(context, Platform.isWindows ? 'windows' : 'desktop'), [
                 SwitchListTile(
                   value: state.net.minimizeToTray,
                   onChanged: (v) =>
@@ -285,8 +286,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     WinAutostart.set(v);
                     state.updateNet((o) => o.startWithWindows = v, reconnect: false);
                   },
-                  title: Text(tr(context, 'startWithWindows')),
-                  subtitle: Text(tr(context, 'startWithWindowsDesc')),
+                  title: Text(tr(context, Platform.isWindows ? 'startWithWindows' : 'startWithSystem')),
+                  subtitle: Text(tr(context, Platform.isWindows ? 'startWithWindowsDesc' : 'startWithSystemDesc')),
                 ),
               ]),
             _section(Icons.palette_outlined, t.uiSettings, [
@@ -321,7 +322,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   tr(context, 'notifVolumeDesc')),
               _switch('showName', state.showName, tr(context, 'notifName'),
                   tr(context, 'notifNameDesc')),
-              if (!Platform.isWindows)
+              if (Platform.isAndroid)
                 _switch('idleNotification', state.idleNotification,
                     tr(context, 'notifIdle'), tr(context, 'notifIdleDesc')),
             ]),
@@ -424,6 +425,60 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                 ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.memory),
+                title: Text(tr(context, 'coreChoice')),
+                subtitle: Text(tr(context, 'coreChoiceDesc')),
+                trailing: Text(state.net.core == 'xray' ? 'Xray' : 'sing-box'),
+                onTap: () async {
+                  final v = await pickOption<String>(
+                      context, tr(context, 'coreChoice'), state.net.core,
+                      {'singbox': 'sing-box', 'xray': 'Xray'});
+                  if (v != null) await state.updateNet((o) => o.core = v);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.verified_user_outlined),
+                title: Text(tr(context, 'certStore')),
+                subtitle: Text(tr(context, 'certStoreDesc')),
+                trailing: Text(tr(context, 'store_${state.net.certStore}')),
+                onTap: () async {
+                  final v = await pickOption<String>(
+                      context, tr(context, 'certStore'), state.net.certStore, {
+                    for (final s in certStores) s: tr(context, 'store_$s'),
+                  });
+                  if (v != null) await state.updateNet((o) => o.certStore = v);
+                },
+              ),
+              SwitchListTile(
+                secondary: const Icon(Icons.schedule),
+                value: state.net.ntp,
+                onChanged: (v) => state.updateNet((o) => o.ntp = v),
+                title: Text(tr(context, 'ntp')),
+                subtitle: Text(tr(context, 'ntpDesc')),
+              ),
+              ListTile(
+                leading: const Icon(Icons.data_object),
+                title: Text(tr(context, 'extraSingbox')),
+                subtitle: Text(tr(context, 'extraSingboxDesc')),
+                trailing: state.net.extraSingbox.isEmpty ? null : const Icon(Icons.check),
+                onTap: () async {
+                  final v = await editJson(context, tr(context, 'extraSingbox'),
+                      tr(context, 'extraSingboxDesc'), state.net.extraSingbox);
+                  if (v != null) await state.updateNet((o) => o.extraSingbox = v);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.data_object),
+                title: Text(tr(context, 'extraXray')),
+                subtitle: Text(tr(context, 'extraXrayDesc')),
+                trailing: state.net.extraXray.isEmpty ? null : const Icon(Icons.check),
+                onTap: () async {
+                  final v = await editJson(context, tr(context, 'extraXray'),
+                      tr(context, 'extraXrayDesc'), state.net.extraXray);
+                  if (v != null) await state.updateNet((o) => o.extraXray = v);
+                },
               ),
               ListTile(
                 leading: const Icon(Icons.receipt_long),

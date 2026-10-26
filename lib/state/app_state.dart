@@ -9,6 +9,7 @@ import '../core/backup.dart';
 import '../core/core_api.dart';
 import '../core/latency_tester.dart';
 import '../core/net_options.dart';
+import '../core/platform.dart';
 import '../core/proxy_config.dart';
 import '../core/rule_sets.dart';
 import '../core/singbox_config.dart';
@@ -233,7 +234,7 @@ class AppState extends ChangeNotifier {
   void checkUsage(ServerGroup g) {
     final info = g.info;
     if (!usageAlerts || info == null) return;
-    if (!Platform.isWindows) {
+    if (Platform.isAndroid) {
       VpnChannel.checkUsage(g.id, g.name, info.used, info.total, info.expire);
       return;
     }
@@ -965,7 +966,7 @@ class AppState extends ChangeNotifier {
   ProxyConfig? get autoPick {
     ProxyConfig? best;
     for (final c in all) {
-      if (c.needsXray || !c.isAlive) continue;
+      if (!c.canSingBox || !c.isAlive) continue;
       if (best == null || c.latencyMs! < best.latencyMs!) best = c;
     }
     return best;
@@ -1182,9 +1183,10 @@ class AppState extends ChangeNotifier {
         return;
       }
     }
-    // Automatic mode only groups sing-box servers; XHTTP ones need their own Xray process,
-    // so they are used when picked by hand (or when nothing else is available).
-    final plain = all.where((c) => !c.needsXray).toList();
+    // Automatic mode only groups sing-box servers; the ones only Xray can carry (XHTTP, mKCP ...)
+    // need their own Xray process, so they are used when picked by hand (or when nothing else
+    // is available).
+    final plain = all.where((c) => c.canSingBox).toList();
     final alive = plain.where((c) => c.isAlive).toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
     final auto =
@@ -1212,23 +1214,29 @@ class AppState extends ChangeNotifier {
       apiPort = await _freePort();
       apiSecret = _randomSecret();
       final chain = net.chain.isEmpty ? null : parseLink(net.chain);
+      // One chosen server runs on Xray when only Xray can carry it, or when Xray is the default
+      // core and can. A group of servers (automatic mode) is always sing-box.
+      final viaXray = chosen.length == 1 &&
+          chosen.first.canXray &&
+          (chosen.first.needsXray || net.core == 'xray');
       String config(int? xray) => buildSingBoxConfig(chosen,
           xrayPort: xray,
           options: net,
           ruleSets: sets,
           apiPort: apiPort,
           apiSecret: apiSecret,
-          windows: Platform.isWindows,
-          chain: chain);
+          windows: isDesktop,
+          chain: chain,
+          viaXray: viaXray);
       final proxyPort =
-          Platform.isWindows && !net.tun ? net.proxyPort : null;
-      if (chosen.first.needsXray) {
+          isDesktop && !net.tun ? net.proxyPort : null;
+      if (viaXray) {
         final port = 30000 + Random().nextInt(30000);
         _xrayPort = port;
         await VpnChannel.start(
           config(port),
           serverNames: names,
-          xrayConfig: buildXrayConfig(chosen.first, port, logLevel: net.logLevel),
+          xrayConfig: buildXrayConfig(chosen.first, port, options: net),
           xrayPort: port,
           showSpeed: showSpeed,
           showVolume: showVolume,

@@ -75,9 +75,11 @@ void main() {
     expect(parseLink('ss://$legacy#ss2')!.port, 8399);
   });
 
-  test('unsupported transports are skipped', () {
-    expect(
-        parseLink('vless://id@example.com:443?type=kcp&security=tls'), isNull);
+  test('transports sing-box lacks go to Xray, broken ones are skipped', () {
+    final kcp = parseLink('vless://id@example.com:443?type=kcp&security=tls')!;
+    expect(kcp.needsXray, isTrue);
+    expect(kcp.label, 'vless + kcp');
+    expect(parseLink('vless://id@example.com:443?type=domainsocket'), isNull);
     expect(parseLink('vless://id@example.com:0?security=tls'), isNull);
   });
 

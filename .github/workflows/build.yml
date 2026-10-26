@@ -71,7 +71,7 @@ jobs:
             -target android/arm64,android/arm,android/amd64 -androidapi 23 \
             -javapkg=io.nekohasekai -libname=box -trimpath -buildvcs=false \
             -ldflags "-X github.com/sagernet/sing-box/constant.Version=$SING_BOX -X internal/godebug.defaultGODEBUG=multipathtcp=0 -s -w -buildid= -checklinkname=0" \
-            -tags "with_gvisor,with_quic,with_utls,with_clash_api,badlinkname,tfogo_checklinkname0" \
+            -tags "with_gvisor,with_quic,with_utls,with_clash_api,with_wireguard,with_dhcp,badlinkname,tfogo_checklinkname0" \
             ./experimental/libbox)
           cp sb/libbox.aar native-out/libbox.aar
 
@@ -264,10 +264,102 @@ jobs:
           path: dist/kumo-windows-${{ matrix.arch }}-portable.zip
           archive: false
 
-  # A pushed version tag becomes a release holding the four APKs and the Windows installers.
+  # Linux: a tar.gz of the program folder and a .deb that also lets the core open the tunnel
+  # without a password. Built on Ubuntu 22.04 so it runs on older systems too.
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build tools and libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libayatana-appindicator3-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      - run: flutter config --enable-linux-desktop
+      - run: flutter pub get
+
+      # sing-box, Xray and the library NaiveProxy needs, next to the program.
+      - run: bash tools/fetch_unix_core.sh linux
+
+      - run: flutter build linux --release --no-pub
+
+      - name: Package
+        run: |
+          mkdir dist
+          tar -czf dist/kumo-linux-x64.tar.gz -C build/linux/x64/release --transform 's,^bundle,kumo,' bundle
+          version="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"
+          pkg="deb/kumo_${version}_amd64"
+          mkdir -p "$pkg/opt/kumo" "$pkg/usr/share/applications" "$pkg/usr/share/pixmaps" "$pkg/DEBIAN"
+          cp -r build/linux/x64/release/bundle/. "$pkg/opt/kumo/"
+          install -m644 packaging/linux/kumo.desktop "$pkg/usr/share/applications/kumo.desktop"
+          install -m644 linux/runner/resources/kumo.png "$pkg/usr/share/pixmaps/kumo.png"
+          sed "s/@VERSION@/$version/" packaging/linux/control > "$pkg/DEBIAN/control"
+          install -m755 packaging/linux/postinst "$pkg/DEBIAN/postinst"
+          dpkg-deb --build --root-owner-group "$pkg" dist/kumo-linux-x64.deb
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-linux-x64.tar.gz
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-linux-x64.deb
+          archive: false
+
+  # macOS: one universal app (Intel and Apple silicon) in a zip. It is signed ad hoc only, so
+  # macOS asks the user to allow it the first time.
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      - run: flutter config --enable-macos-desktop
+      - run: flutter pub get
+
+      # sing-box and Xray as universal binaries.
+      - run: bash tools/fetch_unix_core.sh macos
+
+      - run: flutter build macos --release --no-pub
+
+      - name: Put the cores in the app and sign it
+        run: |
+          app="build/macos/Build/Products/Release/Kumo.app"
+          cp macos/core/kumo-core macos/core/kumo-xray "$app/Contents/MacOS/"
+          codesign --force --deep --sign - "$app"
+          mkdir dist
+          ditto -c -k --sequesterRsrc --keepParent "$app" dist/kumo-macos-universal.zip
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-macos-universal.zip
+          archive: false
+
+  # A pushed version tag becomes a release holding the four APKs, the Windows installer and
+  # portable zip, and the Linux and macOS packages.
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [apk, windows, test]
+    # The Linux and macOS packages are added when they were built; if one of those jobs fails the
+    # Android and Windows files are still released.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') && !cancelled() &&
+      needs.apk.result == 'success' && needs.windows.result == 'success' &&
+      needs.test.result == 'success'
+    needs: [apk, windows, linux, macos, test]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -4,10 +4,37 @@ import 'net_options.dart';
 import 'proxy_config.dart';
 import 'routing_rules.dart';
 
-/// Builds the Xray configuration for one XHTTP server: a local SOCKS inbound on
-/// 127.0.0.1:[port] that forwards everything to the server.
-String buildXrayConfig(ProxyConfig server, int port, {String logLevel = 'error'}) {
-  assert(server.needsXray);
+/// Merges [extra] (a JSON object the user typed) into [target], map by map; lists and values from
+/// [extra] replace the ones in [target].
+Map<String, dynamic> mergeJson(Map<String, dynamic> target, Map<String, dynamic> extra) {
+  final out = {...target};
+  extra.forEach((key, value) {
+    final current = out[key];
+    out[key] = current is Map<String, dynamic> && value is Map<String, dynamic>
+        ? mergeJson(current, value)
+        : value;
+  });
+  return out;
+}
+
+/// The JSON object in [text], or null when it is empty or not a JSON object.
+Map<String, dynamic>? parseExtraJson(String text) {
+  final t = text.trim();
+  if (t.isEmpty) return null;
+  try {
+    final v = jsonDecode(t);
+    return v is Map<String, dynamic> ? v : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Builds the Xray configuration for one server: a local SOCKS inbound on 127.0.0.1:[port] that
+/// forwards everything to it. sing-box connects to that port.
+String buildXrayConfig(ProxyConfig server, int port,
+    {String logLevel = 'error', NetOptions? options}) {
+  assert(server.canXray);
+  final o = options ?? NetOptions();
   final outbound =
       jsonDecode(jsonEncode(server.xrayOutbound!)) as Map<String, dynamic>;
   final inbounds = <Map<String, dynamic>>[
@@ -21,16 +48,86 @@ String buildXrayConfig(ProxyConfig server, int port, {String logLevel = 'error'}
   ];
   final outbounds = <Map<String, dynamic>>[];
   final rules = <Map<String, dynamic>>[];
-  // Xray refuses VLESS without TLS towards a public address. Such servers are reached
-  // through a loopback relay inside the same process, which Xray treats as private.
-  final vnext = outbound['settings'] is Map
-      ? (outbound['settings']['vnext'] as List?)
+  final settings = outbound['settings'] is Map<String, dynamic>
+      ? outbound['settings'] as Map<String, dynamic>
+      : <String, dynamic>{};
+  final vnext = settings['vnext'] as List?;
+  final stream = outbound['streamSettings'] is Map<String, dynamic>
+      ? outbound['streamSettings'] as Map<String, dynamic>
       : null;
-  final security =
-      '${(outbound['streamSettings'] as Map?)?['security'] ?? 'none'}';
-  if (outbound['protocol'] == 'vless' &&
+  final security = '${stream?['security'] ?? 'none'}';
+
+  // The options of Settings that apply to Xray too.
+  if (stream != null) {
+    final tls = stream['tlsSettings'];
+    if (tls is Map<String, dynamic> && o.fingerprint.isNotEmpty) {
+      tls['fingerprint'] = o.fingerprint;
+    }
+    final reality = stream['realitySettings'];
+    if (reality is Map<String, dynamic> && o.fingerprint.isNotEmpty) {
+      reality['fingerprint'] = o.fingerprint;
+    }
+    final sockopt = <String, dynamic>{
+      if (o.tcpFastOpen) 'tcpFastOpen': true,
+      if (o.tcpMultiPath) 'tcpMptcp': true,
+    };
+    if (sockopt.isNotEmpty) {
+      stream['sockopt'] = mergeJson(
+          stream['sockopt'] is Map<String, dynamic>
+              ? stream['sockopt'] as Map<String, dynamic>
+              : <String, dynamic>{},
+          sockopt);
+    }
+    // Splitting the TLS hello is a TCP final mask in Xray.
+    if (o.tlsFragment && security == 'tls') {
+      final fm = stream['finalmask'] is Map<String, dynamic>
+          ? stream['finalmask'] as Map<String, dynamic>
+          : <String, dynamic>{};
+      final tcp = fm['tcp'] is List ? List.of(fm['tcp'] as List) : <dynamic>[];
+      tcp.add({
+        'type': 'fragment',
+        'settings': {
+          'packets': 'tlshello',
+          'lengths': ['3-5', '6-8', '10-20'],
+          'delays': ['10-20'],
+          'maxSplit': '3-6',
+        },
+      });
+      fm['tcp'] = tcp;
+      stream['finalmask'] = fm;
+    }
+    final extra = parseExtraJson(o.extraXray);
+    if (extra != null) {
+      outbound['streamSettings'] = mergeJson(stream, extra);
+    }
+  }
+  final protocol = outbound['protocol'];
+  final hasFlow = vnext != null &&
+      vnext.isNotEmpty &&
+      ((vnext.first as Map)['users'] as List).any((u) => (u as Map)['flow'] != null);
+  if (o.mux &&
+      !hasFlow &&
+      (protocol == 'vless' || protocol == 'vmess' || protocol == 'trojan' || protocol == 'shadowsocks')) {
+    outbound['mux'] = {
+      'enabled': true,
+      'concurrency': 8,
+      'xudpConcurrency': 16,
+      'xudpProxyUDP443': 'reject',
+    };
+  }
+
+  // Xray refuses VLESS without TLS (or encryption) towards a public address. Such servers are
+  // reached through a loopback relay inside the same process, which Xray treats as private.
+  final encrypted = vnext != null &&
+      vnext.isNotEmpty &&
+      ((vnext.first as Map)['users'] as List).any((u) {
+        final e = '${(u as Map)['encryption'] ?? 'none'}';
+        return e.isNotEmpty && e != 'none';
+      });
+  if (protocol == 'vless' &&
       vnext != null &&
       vnext.isNotEmpty &&
+      !encrypted &&
       (security == 'none' || security.isEmpty)) {
     final node = vnext.first as Map<String, dynamic>;
     final relayPort = port == 65535 ? port - 1 : port + 1;
@@ -57,7 +154,7 @@ String buildXrayConfig(ProxyConfig server, int port, {String logLevel = 'error'}
   final config = {
     // Xray names its levels differently; the default stays at warning as before.
     'log': {
-      'loglevel': switch (logLevel) {
+      'loglevel': switch (options != null ? o.logLevel : logLevel) {
         'debug' => 'debug',
         'info' => 'info',
         _ => 'warning',
@@ -76,52 +173,126 @@ String buildXrayConfig(ProxyConfig server, int port, {String logLevel = 'error'}
 /// Protocols that run over TLS on TCP, where uTLS and fragmenting apply.
 const _tlsTcp = {'vless', 'vmess', 'trojan'};
 
-/// Applies the advanced options to one outbound.
+/// Applies the advanced options to one outbound. [dials] is true for the outbound that opens the
+/// connection to the network (the last one of a chain), which gets the socket options.
 Map<String, dynamic> _tweak(Map<String, dynamic> source, NetOptions o,
-    {String? detour}) {
+    {String? detour, bool dials = true, bool first = true}) {
   final out = {...source};
   final type = out['type'];
   final tls = out['tls'];
-  if (tls is Map && tls['enabled'] == true && _tlsTcp.contains(type)) {
+  if (first && tls is Map && tls['enabled'] == true && _tlsTcp.contains(type)) {
     final t = Map<String, dynamic>.from(tls);
     if (o.fingerprint.isNotEmpty) {
       t['utls'] = {'enabled': true, 'fingerprint': o.fingerprint};
     }
-    if (o.tlsFragment && t['reality'] == null) t['fragment'] = true;
+    if (t['reality'] == null) {
+      if (o.tlsFragment) t['fragment'] = true;
+      if (o.tlsRecordFragment) t['record_fragment'] = true;
+    }
     out['tls'] = t;
   }
-  if (o.mux &&
+  if (first &&
+      o.mux &&
       (_tlsTcp.contains(type) || type == 'shadowsocks') &&
       out['flow'] == null &&
       out['multiplex'] == null) {
-    out['multiplex'] = {'enabled': true, 'protocol': 'h2mux', 'padding': true};
+    out['multiplex'] = {'enabled': true, 'protocol': o.muxProtocol, 'padding': true};
+  }
+  if (dials) {
+    if (o.tcpFastOpen) out['tcp_fast_open'] = true;
+    if (o.tcpMultiPath) out['tcp_multi_path'] = true;
+    if (o.connectTimeout > 0) out['connect_timeout'] = '${o.connectTimeout}s';
   }
   if (detour != null) out['detour'] = detour;
+  if (first) {
+    final extra = parseExtraJson(o.extraSingbox);
+    if (extra != null) {
+      final protectedKeys = {'tag', 'type'};
+      return mergeJson(out, {
+        for (final e in extra.entries)
+          if (!protectedKeys.contains(e.key)) e.key: e.value,
+      });
+    }
+  }
   return out;
 }
 
+/// The DNS server for the chosen address: plain UDP, `tcp://`, `tls://` (DoT), `quic://` (DoQ),
+/// `https://` (DoH) or `h3://` (DoH over HTTP/3). It is always reached through the proxy.
 Map<String, dynamic> _dnsServer(String address) {
-  if (address.startsWith('https://') || address.startsWith('tls://')) {
-    final uri = Uri.parse(address);
-    final https = uri.scheme == 'https';
+  final scheme = RegExp(r'^(https|h3|tls|quic|tcp|udp)://').firstMatch(address)?[1];
+  if (scheme == null) {
     return {
-      'type': https ? 'https' : 'tls',
+      'type': 'udp',
       'tag': 'dns-remote',
-      'server': uri.host,
-      if (uri.hasPort) 'server_port': uri.port,
-      if (https && uri.path.isNotEmpty && uri.path != '/dns-query')
-        'path': uri.path,
+      'server': address,
       'domain_resolver': 'dns-local',
       'detour': 'proxy',
     };
   }
+  final uri = Uri.parse(address);
   return {
-    'type': 'udp',
+    'type': scheme,
     'tag': 'dns-remote',
-    'server': address,
+    'server': uri.host,
+    if (uri.hasPort) 'server_port': uri.port,
+    if ((scheme == 'https' || scheme == 'h3') &&
+        uri.path.isNotEmpty &&
+        uri.path != '/dns-query')
+      'path': uri.path,
     'domain_resolver': 'dns-local',
     'detour': 'proxy',
   };
+}
+
+/// Splits stored rule texts into the sing-box rule fields they belong to.
+class _RuleFields {
+  final suffix = <String>[];
+  final full = <String>[];
+  final keyword = <String>[];
+  final regex = <String>[];
+  final cidr = <String>[];
+  final ports = <int>[];
+  final ranges = <String>[];
+
+  _RuleFields(List<String> texts) {
+    for (final t in texts) {
+      final r = parseRouteRule(t);
+      if (r == null) continue;
+      switch (r.kind) {
+        case RuleKind.domain:
+          suffix.add(r.value);
+        case RuleKind.full:
+          full.add(r.value);
+        case RuleKind.keyword:
+          keyword.add(r.value);
+        case RuleKind.regex:
+          regex.add(r.value);
+        case RuleKind.ip:
+          cidr.add(r.value);
+        case RuleKind.port:
+          if (r.value.contains('-')) {
+            ranges.add(r.value.replaceFirst('-', ':'));
+          } else {
+            ports.add(int.parse(r.value));
+          }
+      }
+    }
+  }
+
+  bool get hasDomains =>
+      suffix.isNotEmpty || full.isNotEmpty || keyword.isNotEmpty || regex.isNotEmpty;
+
+  /// Rules sending what matches to [target] (an `outbound` or an `action`).
+  List<Map<String, dynamic>> rules(Map<String, dynamic> target, {bool domainsOnly = false}) => [
+        if (suffix.isNotEmpty) {'domain_suffix': suffix, ...target},
+        if (full.isNotEmpty) {'domain': full, ...target},
+        if (keyword.isNotEmpty) {'domain_keyword': keyword, ...target},
+        if (regex.isNotEmpty) {'domain_regex': regex, ...target},
+        if (!domainsOnly && cidr.isNotEmpty) {'ip_cidr': cidr, ...target},
+        if (!domainsOnly && ports.isNotEmpty) {'port': ports, ...target},
+        if (!domainsOnly && ranges.isNotEmpty) {'port_range': ranges, ...target},
+      ];
 }
 
 /// Builds the full sing-box configuration: a local mixed (HTTP + SOCKS) proxy on
@@ -131,8 +302,9 @@ Map<String, dynamic> _dnsServer(String address) {
 /// One config => a plain outbound named `proxy`. Several => a `urltest` group
 /// named `proxy` that always picks the fastest reachable member.
 ///
-/// A single XHTTP server is reached through the local SOCKS inbound of Xray ([xrayPort]).
-/// [ruleSets] maps rule-set tags to downloaded files; [apiPort] opens the local control API.
+/// With [viaXray] (or a single server that only Xray can carry) the server is reached through the
+/// local SOCKS inbound of Xray ([xrayPort]). [ruleSets] maps rule-set tags to downloaded files;
+/// [apiPort] opens the local control API.
 String buildSingBoxConfig(
   List<ProxyConfig> servers, {
   int? xrayPort,
@@ -142,13 +314,40 @@ String buildSingBoxConfig(
   String? apiSecret,
   bool windows = false,
   ProxyConfig? chain,
+  bool viaXray = false,
 }) {
   assert(servers.isNotEmpty);
   final o = options ?? NetOptions();
-  final useChain = chain != null && !chain.needsXray;
+  final useChain = chain != null && !chain.needsXray && chain.outbound['type'] != 'wireguard';
   final detour = useChain ? 'chain-entry' : null;
   final outbounds = <Map<String, dynamic>>[];
-  if (servers.length == 1 && servers.first.needsXray) {
+  final endpoints = <Map<String, dynamic>>[];
+
+  /// Adds one server (and the layers it is dialled through) under [tag].
+  void addServer(ProxyConfig s, String tag) {
+    final layers = [s.outbound, ...s.inner];
+    if (layers.first['type'] == 'wireguard') {
+      // WireGuard is an endpoint in sing-box, usable like an outbound by its tag.
+      endpoints.add(_tweak({...layers.first, 'tag': tag}, o,
+          detour: detour, first: false));
+      return;
+    }
+    for (var i = 0; i < layers.length; i++) {
+      final last = i == layers.length - 1;
+      final layerTag = i == 0 ? tag : '$tag-l$i';
+      outbounds.add(_tweak(
+        {...layers[i], 'tag': layerTag},
+        o,
+        detour: last ? detour : '$tag-l${i + 1}',
+        dials: last,
+        first: i == 0,
+      ));
+    }
+  }
+
+  final useXray =
+      viaXray || (servers.length == 1 && servers.first.needsXray);
+  if (useXray) {
     outbounds.add({
       'type': 'socks',
       'tag': 'proxy',
@@ -157,15 +356,15 @@ String buildSingBoxConfig(
       'version': '5',
     });
   } else if (servers.length == 1) {
-    outbounds
-        .add(_tweak({...servers.first.outbound, 'tag': 'proxy'}, o, detour: detour));
+    addServer(servers.first, 'proxy');
   } else {
     final tags = <String>[];
-    for (var i = 0; i < servers.length; i++) {
-      final tag = 'server-$i';
+    var n = 0;
+    for (final s in servers) {
+      if (!s.canSingBox) continue;
+      final tag = 'server-${n++}';
       tags.add(tag);
-      outbounds
-          .add(_tweak({...servers[i].outbound, 'tag': tag}, o, detour: detour));
+      addServer(s, tag);
     }
     outbounds.insert(0, {
       'type': 'urltest',
@@ -179,7 +378,7 @@ String buildSingBoxConfig(
     });
   }
   if (useChain) {
-    outbounds.add(_tweak({...chain.outbound, 'tag': 'chain-entry'}, o));
+    outbounds.add(_tweak({...chain.outbound, 'tag': 'chain-entry'}, o, first: false));
   }
   outbounds.add({'type': 'direct', 'tag': 'direct'});
 
@@ -224,23 +423,20 @@ String buildSingBoxConfig(
   final sets = ruleSets.keys.toList();
   final iran = o.bypass.isNotEmpty;
   final suffixes = [for (final c in o.bypass) '.$c'];
-  // The user's own rules come before everything else; "through the VPN" wins over "direct" if a
-  // domain is in both lists.
-  List<String> ofKind(List<String> list, {required bool ip}) => [
-        for (final r in list)
-          if (parseRouteRule(r) case final rule? when rule.ip == ip) rule.value,
-      ];
-  final directDomains = ofKind(o.directRules, ip: false);
-  final directIps = ofKind(o.directRules, ip: true);
-  final proxyDomains = ofKind(o.proxyRules, ip: false);
-  final proxyIps = ofKind(o.proxyRules, ip: true);
+  final block = _RuleFields(o.blockRules);
+  final proxy = _RuleFields(o.proxyRules);
+  final direct = _RuleFields(o.directRules);
+  final wifi = !windows && o.directWifi.isNotEmpty;
+  final fakeIp = o.fakeIp && o.tun;
+  // The user's own rules come before everything else: what is blocked first, then "through the
+  // VPN" (which wins over "direct" if a domain is in both lists), then "direct".
   final rules = <Map<String, dynamic>>[
     {'action': 'sniff'},
     {'protocol': 'dns', 'action': 'hijack-dns'},
-    if (proxyDomains.isNotEmpty) {'domain_suffix': proxyDomains, 'outbound': 'proxy'},
-    if (proxyIps.isNotEmpty) {'ip_cidr': proxyIps, 'outbound': 'proxy'},
-    if (directDomains.isNotEmpty) {'domain_suffix': directDomains, 'outbound': 'direct'},
-    if (directIps.isNotEmpty) {'ip_cidr': directIps, 'outbound': 'direct'},
+    ...block.rules({'action': 'reject'}),
+    if (wifi) {'wifi_ssid': o.directWifi, 'outbound': 'direct'},
+    ...proxy.rules({'outbound': 'proxy'}),
+    ...direct.rules({'outbound': 'direct'}),
     {'ip_is_private': true, 'outbound': 'direct'},
   ];
   final processRules = windows && o.tun && apps.isNotEmpty;
@@ -257,30 +453,49 @@ String buildSingBoxConfig(
     }
   }
 
+  final dnsRules = <Map<String, dynamic>>[
+    // blocked names fail at once
+    ...block.rules({'action': 'reject'}, domainsOnly: true),
+    if (wifi) {'wifi_ssid': o.directWifi, 'server': 'dns-local'},
+    // names the user sends direct are also looked up locally, not through the VPN
+    ...direct.rules({'server': 'dns-local'}, domainsOnly: true),
+    if (iran) ...[
+      {'domain_suffix': suffixes, 'server': 'dns-local'},
+      if (sets.isNotEmpty) {'rule_set': sets, 'server': 'dns-local'},
+    ],
+    // Fake addresses for everything else (TUN only): the real lookup happens at the server.
+    if (fakeIp) {'query_type': ['A', 'AAAA'], 'server': 'dns-fakeip'},
+  ];
+
   final config = {
     'log': {'level': logLevels.contains(o.logLevel) ? o.logLevel : 'error'},
+    if (o.certStore != 'system') 'certificate': {'store': o.certStore},
+    if (o.ntp)
+      'ntp': {
+        'enabled': true,
+        'server': 'time.cloudflare.com',
+        'server_port': 123,
+        'interval': '30m',
+        'detour': 'direct',
+      },
     'dns': {
       'servers': [
         _dnsServer(o.dnsAddress),
         {'type': 'local', 'tag': 'dns-local'},
+        if (fakeIp)
+          {
+            'type': 'fakeip',
+            'tag': 'dns-fakeip',
+            'inet4_range': '198.18.0.0/15',
+            'inet6_range': 'fc00::/18',
+          },
       ],
-      if (iran || directDomains.isNotEmpty)
-        'rules': [
-          // names the user sends direct are also looked up locally, not through the VPN
-          if (directDomains.isNotEmpty)
-            {'domain_suffix': directDomains, 'server': 'dns-local'},
-          if (iran) ...[
-            {
-              'domain_suffix': suffixes,
-              'server': 'dns-local',
-            },
-            if (sets.isNotEmpty) {'rule_set': sets, 'server': 'dns-local'},
-          ],
-        ],
+      if (dnsRules.isNotEmpty) 'rules': dnsRules,
       'final': 'dns-remote',
     },
     'inbounds': inbounds,
     'outbounds': outbounds,
+    if (endpoints.isNotEmpty) 'endpoints': endpoints,
     'route': {
       'rules': rules,
       if (sets.isNotEmpty && iran)
@@ -297,13 +512,20 @@ String buildSingBoxConfig(
       'auto_detect_interface': true,
       'default_domain_resolver': 'dns-local',
       if (processRules) 'find_process': true,
+      if (!windows && o.networkStrategy != 'default') ...{
+        'default_network_strategy': o.networkStrategy,
+        if (o.networkStrategy == 'fallback') 'default_fallback_delay': '300ms',
+      },
     },
-    if (apiPort != null)
+    if (apiPort != null || fakeIp)
       'experimental': {
-        'clash_api': {
-          'external_controller': '127.0.0.1:$apiPort',
-          if (apiSecret != null) 'secret': apiSecret,
-        },
+        if (apiPort != null)
+          'clash_api': {
+            'external_controller': '127.0.0.1:$apiPort',
+            if (apiSecret != null) 'secret': apiSecret,
+          },
+        // fake addresses must survive a restart of the core
+        if (fakeIp) 'cache_file': {'enabled': true, 'store_fakeip': true},
       },
   };
   return const JsonEncoder.withIndent('  ').convert(config);

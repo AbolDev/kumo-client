@@ -27,7 +27,7 @@ if (-not (Get-Command gomobile -ErrorAction SilentlyContinue)) {
 $ldflags = "-X github.com/sagernet/sing-box/constant.Version=$Version " +
            "-X internal/godebug.defaultGODEBUG=multipathtcp=0 -s -w -buildid= -checklinkname=0"
 # No naive/tailscale/wireguard: they pull extra native deps and we only need proxy protocols.
-$tags = "with_gvisor,with_quic,with_utls,with_clash_api,badlinkname,tfogo_checklinkname0"
+$tags = "with_gvisor,with_quic,with_utls,with_clash_api,with_wireguard,with_dhcp,badlinkname,tfogo_checklinkname0"
 
 Push-Location "$root\third_party\sing-box"
 try {

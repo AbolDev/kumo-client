@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+# Lets the VPN core open the tunnel (TUN) without asking for a password every time.
+if command -v setcap >/dev/null 2>&1; then
+  setcap cap_net_admin,cap_net_bind_service,cap_net_raw+ep /opt/kumo/kumo-core || true
+fi
+exit 0

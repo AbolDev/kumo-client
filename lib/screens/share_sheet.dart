@@ -103,7 +103,7 @@ Future<void> showQrDialog(BuildContext context, String data) {
                     label: Text(t.shareImage),
                     onPressed: () => _shareImage(dialog, data),
                   ),
-                  if (!Platform.isWindows)
+                  if (Platform.isAndroid)
                     OutlinedButton.icon(
                       icon: const Icon(Icons.download),
                       label: Text(t.saveToGallery),

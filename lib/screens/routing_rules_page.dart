@@ -21,13 +21,14 @@ class _RoutingRulesPageState extends State<RoutingRulesPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: Text(tr(context, 'ruleTitle')),
           bottom: TabBar(tabs: [
             Tab(text: tr(context, 'ruleDirect')),
             Tab(text: tr(context, 'ruleProxy')),
+            Tab(text: tr(context, 'ruleBlock')),
           ]),
         ),
         body: ListenableBuilder(
@@ -49,6 +50,11 @@ class _RoutingRulesPageState extends State<RoutingRulesPage> {
                   rules: state.net.proxyRules,
                   onChange: (list) =>
                       state.updateNet((o) => o.proxyRules = list),
+                ),
+                _RuleList(
+                  rules: state.net.blockRules,
+                  onChange: (list) =>
+                      state.updateNet((o) => o.blockRules = list),
                 ),
               ]),
             ),
@@ -119,8 +125,12 @@ class _RuleListState extends State<_RuleList> {
         for (final rule in widget.rules)
           ListTile(
             dense: true,
-            leading: Icon(
-                parseRouteRule(rule)?.ip == true ? Icons.numbers : Icons.language),
+            leading: Icon(switch (parseRouteRule(rule)?.kind) {
+              RuleKind.ip => Icons.numbers,
+              RuleKind.port => Icons.settings_ethernet,
+              RuleKind.keyword || RuleKind.regex => Icons.manage_search,
+              _ => Icons.language,
+            }),
             title: Text(rule, textDirection: TextDirection.ltr),
             trailing: IconButton(
               icon: const Icon(Icons.close),

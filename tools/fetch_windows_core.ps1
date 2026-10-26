@@ -26,6 +26,9 @@ function Get-Zip($url, $name) {
 
 $sb = Get-Zip "https://github.com/SagerNet/sing-box/releases/download/v$SingBox/sing-box-$SingBox-windows-$(if ($Arch -eq 'arm64') { 'arm64' } else { 'amd64' }).zip" "singbox"
 Copy-Item (Get-ChildItem $sb -Recurse -Filter sing-box.exe | Select-Object -First 1).FullName "$out\kumo-core.exe" -Force
+# NaiveProxy servers need Chromium's network stack, which sing-box loads from this library.
+$cronet = Get-ChildItem $sb -Recurse -Filter libcronet.dll | Select-Object -First 1
+if ($cronet) { Copy-Item $cronet.FullName "$out\libcronet.dll" -Force }
 
 $xr = Get-Zip "https://github.com/XTLS/Xray-core/releases/download/$Xray/Xray-windows-$(if ($Arch -eq 'arm64') { 'arm64-v8a' } else { '64' }).zip" "xray"
 Copy-Item "$xr\xray.exe" "$out\kumo-xray.exe" -Force

@@ -12,9 +12,9 @@ English · [فارسی](README.fa.md)
 
 ## What is Kumo?
 
-Kumo is a free VPN app for Android and Windows. It collects public servers for you, checks which ones actually work, and connects you to the fastest one with a single tap. You can also add your own servers or subscriptions if you have them.
+Kumo is a free VPN app for Android, Windows, Linux and macOS. It collects public servers for you, checks which ones actually work, and connects you to the fastest one with a single tap. You can also add your own servers or subscriptions if you have them.
 
-Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-known open-source networking engine, and uses [Xray](https://github.com/XTLS/Xray-core) for XHTTP servers.
+Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-known open-source networking engine, and uses [Xray](https://github.com/XTLS/Xray-core) for what sing-box cannot carry (XHTTP, mKCP, TCP with HTTP headers, VLESS encryption). You can also choose Xray as the default core for the servers both can run.
 
 ## Features
 
@@ -51,7 +51,11 @@ Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-know
 
 **Android extras:** a Quick Settings tile, a home screen widget, and reconnect after the phone restarts.
 
-**Windows extras:** a tray icon (closing the window keeps the VPN running), start with Windows, and a layout made for wide windows.
+**Desktop extras (Windows, Linux, macOS):** a tray icon (closing the window keeps the VPN running), start when you sign in, and a layout made for wide windows.
+
+**Protocols:** VLESS (with Reality, XHTTP and encryption), VMess, Trojan, Shadowsocks (with obfs, v2ray-plugin and ShadowTLS), Hysteria 2 and 1, TUIC, AnyTLS, WireGuard, SOCKS, SSH and NaiveProxy (not on Android), over TCP, WebSocket, gRPC, HTTP Upgrade, HTTP/2, QUIC, mKCP and XHTTP.
+
+**Routing and tuning:** your own rules by domain, keyword, pattern, address or port (direct, through the VPN, or blocked), staying off on trusted Wi-Fi networks (Android), fake IP, DNS over HTTPS, HTTP/3, TLS, QUIC and TCP, TCP Fast Open, MUX protocols, a log level, and your own JSON for sing-box and Xray.
 
 **Everything else:** light and dark themes, an update check against GitHub Releases, and seven languages: English, فارسی, العربية, Русский, Tiếng Việt, 简体中文 and 繁體中文. Kumo follows your device's language, or you can pick one in Settings.
 ## Download
@@ -59,6 +63,8 @@ Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-know
 Get the latest version from the [**Releases**](../../releases) page.
 
 - **Android:** download the `.apk` file and open it. If your phone asks, allow installing apps from this source.
+- **Linux (x64):** download `kumo-linux-x64.deb` (it also lets the VPN core open the tunnel without a password: `sudo apt install ./kumo-linux-x64.deb`) or `kumo-linux-x64.tar.gz` (extract it and run `kumo`). It needs GTK 3, and the tray icon needs AppIndicator (`libayatana-appindicator3-1`).
+- **macOS (Intel and Apple silicon):** download `kumo-macos-universal.zip`, extract it and move `Kumo.app` to Applications. It is not notarized by Apple: open it with a right-click → **Open** the first time, or run `xattr -dr com.apple.quarantine Kumo.app`.
 - **Windows:** download `kumo-windows-x64-setup.exe` and run it. It installs Kumo with an uninstaller. Kumo asks for administrator rights because it starts the VPN core and can change the system proxy. (Windows on ARM runs the x64 build through emulation; a native ARM build is not available yet.) Prefer no installation? Download `kumo-windows-x64-portable.zip`, extract it anywhere and run `kumo.exe`; it keeps its data in a `data` folder next to it. The portable version does not update itself: it opens the release page instead.
 
 ### Installing on Android
@@ -67,6 +73,10 @@ Get the latest version from the [**Releases**](../../releases) page.
 2. Google Play Protect may show **"App scan recommended – Play Protect hasn't seen this app before"**. This happens for every app that is not from Google Play and that Google has not scanned yet. It does not mean Kumo is harmful; the source code is public and the app is built by GitHub Actions.
 3. Tap **Install without scanning** (under *More details* on some phones), or tap **Scan app** to let Google check it and then install.
 4. After the first install, updates are signed with the same key, so they install over the old version without removing it.
+
+### Linux and macOS
+
+On Linux and macOS Kumo starts as a local proxy and sets it as the system proxy (GNOME, KDE and macOS network services). Turning on *Tunnel whole device* asks for your password once per connection (`pkexec` on Linux, the administrator prompt on macOS); the Linux `.deb` package gives the core the network capability instead, so it never asks.
 
 ### Installing on Windows
 
@@ -110,6 +120,7 @@ flutter test
 
 The app runs next to the sing-box and Xray cores, which are not stored in the repository:
 
+- **Linux and macOS:** run `tools/fetch_unix_core.sh linux` (or `macos`) to download them into `linux/core` (`macos/core`), then `flutter build linux --release` (`flutter build macos --release`). The workflow also builds the `.deb` package and signs the macOS app ad hoc.
 - **Windows:** run `tools/fetch_windows_core.ps1` to download them into `windows/core`, then `flutter build windows --release`. `installer/kumo.iss` (Inno Setup) builds the installer.
 - **Android:** `tools/build_libbox.ps1` builds `libbox.aar` from sing-box and `tools/build_xray.ps1` builds the Xray binaries; the committed copies are for arm64 only. The GitHub Actions workflow (`.github/workflows/build.yml`) shows the full multi-CPU build.
 - **Signing (Android):** without a key, release builds are signed with the debug key. To sign with your own key, create `android/key.properties` with `storeFile`, `storePassword`, `keyAlias` and `keyPassword`.

@@ -21,6 +21,7 @@ class MainActivity : FlutterActivity() {
     private companion object {
         const val REQUEST_VPN = 1001
         const val REQUEST_NOTIFICATIONS = 1002
+        const val REQUEST_LOCATION = 1003
     }
 
     private var pendingPrepare: MethodChannel.Result? = null
@@ -100,6 +101,27 @@ class MainActivity : FlutterActivity() {
                         }
                         runOnUiThread { result.success(ms) }
                     }
+                }
+                // The Wi-Fi name needs the location permission: "request" asks for it, and the answer
+                // says whether it is granted now. "name" is the current network, or null.
+                "wifiAccess" -> {
+                    val granted = checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (!granted && call.argument<Boolean>("request") == true) {
+                        requestPermissions(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION), REQUEST_LOCATION)
+                    }
+                    @Suppress("DEPRECATION")
+                    val ssid = if (granted) {
+                        try {
+                            applicationContext.getSystemService(android.net.wifi.WifiManager::class.java)
+                                ?.connectionInfo?.ssid?.trim('"')?.takeIf { it.isNotEmpty() && it != "<unknown ssid>" }
+                        } catch (_: Exception) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                    result.success(mapOf("granted" to granted, "name" to ssid))
                 }
                 // The "not connected" notification: shown (or removed) right away when the switch changes.
                 "idleNotification" -> {
