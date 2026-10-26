@@ -21,7 +21,7 @@ Map<String, dynamic> build(NetOptions o,
 
 void main() {
   test('the device is tunneled by default on Android only', () {
-    expect(NetOptions().tun, !Platform.isWindows);
+    expect(NetOptions().tun, Platform.isAndroid);
     final c = build(NetOptions()..tun = true);
     final types = [for (final i in c['inbounds']) i['type']];
     expect(types, containsAll(['mixed', 'tun']));
