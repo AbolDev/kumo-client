@@ -2,6 +2,13 @@
 // English is the fallback for any key a language lacks.
 
 const extraPrivacyEn = <String, String>{
+  'updNewVersion': 'A new version is ready',
+  'updYouHave': 'You have {v}',
+  'updWhatsNew': 'What\'s new',
+  'updLater': 'Later',
+  'updCancelDownload': 'Cancel download',
+  'updCancelled': 'Download cancelled.',
+  'updEta': '{t} left',
   'delayUrlNote': 'Any reply, whatever its status code, counts as the server answering; only an http or https link is required.',
   'settingsSearch': 'Search settings',
   'settingsNoMatch': 'No setting matches.',
@@ -28,6 +35,13 @@ const extraPrivacyEn = <String, String>{
 };
 
 const extraPrivacyFa = <String, String>{
+  'updNewVersion': 'نسخهٔ جدید آماده است',
+  'updYouHave': 'نسخهٔ شما: {v}',
+  'updWhatsNew': 'تازه‌ها',
+  'updLater': 'بعداً',
+  'updCancelDownload': 'لغو دانلود',
+  'updCancelled': 'دانلود لغو شد.',
+  'updEta': '{t} مانده',
   'delayUrlNote': 'هر پاسخی (با هر کد وضعیت) به‌عنوان پاسخ سرور پذیرفته می‌شود؛ فقط لینک http یا https لازم است.',
   'settingsSearch': 'جست‌وجو در تنظیمات',
   'settingsNoMatch': 'تنظیمی پیدا نشد.',
@@ -54,6 +68,13 @@ const extraPrivacyFa = <String, String>{
 };
 
 const extraPrivacyRu = <String, String>{
+  'updNewVersion': 'Доступна новая версия',
+  'updYouHave': 'У вас {v}',
+  'updWhatsNew': 'Что нового',
+  'updLater': 'Позже',
+  'updCancelDownload': 'Отменить загрузку',
+  'updCancelled': 'Загрузка отменена.',
+  'updEta': 'осталось {t}',
   'delayUrlNote': 'Любой ответ с любым кодом состояния считается ответом сервера; нужна только ссылка http или https.',
   'settingsSearch': 'Поиск по настройкам',
   'settingsNoMatch': 'Ничего не найдено.',
@@ -80,6 +101,13 @@ const extraPrivacyRu = <String, String>{
 };
 
 const extraPrivacyVi = <String, String>{
+  'updNewVersion': 'Đã có phiên bản mới',
+  'updYouHave': 'Bạn đang dùng {v}',
+  'updWhatsNew': 'Có gì mới',
+  'updLater': 'Để sau',
+  'updCancelDownload': 'Hủy tải xuống',
+  'updCancelled': 'Đã hủy tải xuống.',
+  'updEta': 'còn {t}',
   'delayUrlNote': 'Mọi phản hồi, dù mã trạng thái nào, đều được tính là máy chủ đã trả lời; chỉ cần liên kết http hoặc https.',
   'settingsSearch': 'Tìm trong cài đặt',
   'settingsNoMatch': 'Không có cài đặt phù hợp.',
@@ -106,6 +134,13 @@ const extraPrivacyVi = <String, String>{
 };
 
 const extraPrivacyZh = <String, String>{
+  'updNewVersion': '有新版本可用',
+  'updYouHave': '当前版本 {v}',
+  'updWhatsNew': '更新内容',
+  'updLater': '稍后',
+  'updCancelDownload': '取消下载',
+  'updCancelled': '下载已取消。',
+  'updEta': '剩余 {t}',
   'delayUrlNote': '任何响应（无论状态码）都算作服务器已应答；只需填写 http 或 https 链接。',
   'settingsSearch': '搜索设置',
   'settingsNoMatch': '没有匹配的设置。',
@@ -132,6 +167,13 @@ const extraPrivacyZh = <String, String>{
 };
 
 const extraPrivacyAr = <String, String>{
+  'updNewVersion': 'إصدار جديد جاهز',
+  'updYouHave': 'إصدارك {v}',
+  'updWhatsNew': 'الجديد',
+  'updLater': 'لاحقًا',
+  'updCancelDownload': 'إلغاء التنزيل',
+  'updCancelled': 'أُلغي التنزيل.',
+  'updEta': 'متبقي {t}',
   'delayUrlNote': 'أي رد مهما كان رمز حالته يُعدّ استجابة من الخادم؛ المطلوب فقط رابط http أو https.',
   'settingsSearch': 'ابحث في الإعدادات',
   'settingsNoMatch': 'لا توجد إعدادات مطابقة.',

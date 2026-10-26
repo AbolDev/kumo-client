@@ -37,7 +37,7 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
   if (!context.mounted) return;
   if (!silent) ScaffoldMessenger.of(context).hideCurrentSnackBar();
   if (found != null && found.newer) {
-    await _offer(context, found);
+    await _offer(context, found, current);
   } else if (!silent) {
     await showDialog<void>(
       context: context,
@@ -56,35 +56,136 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
   }
 }
 
-Future<void> _offer(BuildContext context, UpdateInfo info) async {
-  final choice = await showDialog<String>(
+/// The release text without the download table and the checksums, in the app's language when
+/// the release has both English and Persian parts (separated by a line of dashes).
+String _notesFor(BuildContext context, String raw) {
+  var text = raw.replaceAll('\r', '');
+  final parts = text.split(RegExp(r'\n-{3,}\n'));
+  if (parts.length > 1) {
+    text = Localizations.localeOf(context).languageCode == 'fa' ? parts.last : parts.first;
+  }
+  final cut = RegExp(r'\n#{1,3} (Downloads|SHA-256|دانلود)').firstMatch(text);
+  if (cut != null) text = text.substring(0, cut.start);
+  final lines = <String>[];
+  for (var line in text.split('\n')) {
+    line = line.trim();
+    if (line.isEmpty || RegExp(r'^#\s').hasMatch(line)) continue; // the release title
+    line = line.replaceFirst(RegExp(r'^##+\s*'), '');
+    line = line.replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m[1]!);
+    line = line.replaceAllMapped(RegExp(r'\*(.+?)\*'), (m) => m[1]!);
+    line = line.replaceAll('`', '');
+    lines.add(line.startsWith('- ') ? '•  ${line.substring(2)}' : line);
+  }
+  return lines.join('\n\n').trim();
+}
+
+Future<void> _offer(BuildContext context, UpdateInfo info, String current) async {
+  final asset = await pickAsset(info);
+  if (!context.mounted) return;
+  final size = asset == null ? null : info.sizes[asset.name];
+  final choice = await showModalBottomSheet<String>(
     context: context,
-    builder: (dialog) => AlertDialog(
-      icon: const Icon(Icons.system_update),
-      title: Text(tr(dialog, 'updateAvailable', {'v': info.version})),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: Text(MaterialLocalizations.of(dialog).closeButtonLabel)),
-        TextButton(
-            onPressed: () => Navigator.pop(dialog, 'page'),
-            child: Text(tr(dialog, 'updateOpen'))),
-        FilledButton(
-            onPressed: () => Navigator.pop(dialog, 'install'),
-            child: Text(tr(dialog, 'updateInstall'))),
-      ],
-    ),
+    isScrollControlled: true,
+    showDragHandle: true,
+    constraints: const BoxConstraints(maxWidth: 560),
+    builder: (sheet) {
+      final scheme = Theme.of(sheet).colorScheme;
+      final notes = _notesFor(sheet, info.notes);
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * 0.85),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                CircleAvatar(
+                  radius: 32,
+                  backgroundColor: scheme.primaryContainer,
+                  child: Icon(Icons.system_update_alt,
+                      size: 32, color: scheme.onPrimaryContainer),
+                ),
+                const SizedBox(height: 16),
+                Text(tr(sheet, 'updNewVersion'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(sheet).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text('v${info.version}',
+                    textAlign: TextAlign.center,
+                    textDirection: TextDirection.ltr,
+                    style: Theme.of(sheet).textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w700, color: scheme.primary)),
+                const SizedBox(height: 8),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  children: [
+                    Chip(
+                      avatar: const Icon(Icons.phone_android, size: 18),
+                      label: Text(tr(sheet, 'updYouHave', {'v': current}),
+                          textDirection: TextDirection.ltr),
+                    ),
+                    if (size != null)
+                      Chip(
+                        avatar: const Icon(Icons.download_outlined, size: 18),
+                        label: Text(_size(size), textDirection: TextDirection.ltr),
+                      ),
+                  ],
+                ),
+                if (notes.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(tr(sheet, 'updWhatsNew'),
+                      style: Theme.of(sheet).textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: SingleChildScrollView(child: Text(notes)),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  autofocus: true,
+                  icon: const Icon(Icons.download),
+                  label: Text(tr(sheet, 'updateInstall')),
+                  onPressed: () => Navigator.pop(sheet, 'install'),
+                ),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(
+                    child: TextButton(
+                        onPressed: () => Navigator.pop(sheet),
+                        child: Text(tr(sheet, 'updLater'))),
+                  ),
+                  Expanded(
+                    child: TextButton(
+                        onPressed: () => Navigator.pop(sheet, 'page'),
+                        child: Text(tr(sheet, 'updateOpen'))),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
   );
   if (choice == 'page') {
     await openLink(info.url);
   } else if (choice == 'install' && context.mounted) {
-    await _install(context, info);
+    await _install(context, info, asset);
   }
 }
 
 /// Downloads the file made for this device and starts its installer.
-Future<void> _install(BuildContext context, UpdateInfo info) async {
-  final asset = await pickAsset(info);
+Future<void> _install(BuildContext context, UpdateInfo info,
+    ({String name, String url})? asset) async {
   // The portable build is not installed by the setup file: the new zip is taken from the page.
   if (asset == null || (Platform.isWindows && DesktopVpn.portable)) {
     await openLink(info.url);
@@ -94,33 +195,65 @@ Future<void> _install(BuildContext context, UpdateInfo info) async {
   if (Platform.isAndroid && !await _allowInstalls(context)) return;
   if (!context.mounted) return;
   final progress = ValueNotifier<_Progress>(const _Progress(0, -1, 0));
+  final cancel = DownloadCancel();
   showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (dialog) => AlertDialog(
-      title: Text(tr(dialog, 'updateDownloading')),
-      content: ValueListenableBuilder<_Progress>(
-        valueListenable: progress,
-        builder: (_, p, __) {
-          final share = p.total > 0 ? p.received / p.total : null;
-          return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(asset.name, textDirection: TextDirection.ltr, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(value: share),
-            const SizedBox(height: 8),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(share == null ? '' : '${(share * 100).round()}%'),
+    builder: (dialog) => PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (_, __) => cancel.cancel(),
+      child: AlertDialog(
+        icon: const Icon(Icons.downloading),
+        title: Text(tr(dialog, 'updateDownloading')),
+        content: ValueListenableBuilder<_Progress>(
+          valueListenable: progress,
+          builder: (_, p, __) {
+            final share = p.total > 0 ? (p.received / p.total).clamp(0.0, 1.0) : null;
+            final left = p.total > 0 && p.speed > 0
+                ? Duration(seconds: ((p.total - p.received) / p.speed).ceil())
+                : null;
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(share == null ? '…' : '${(share * 100).round()}%',
+                  style: Theme.of(dialog)
+                      .textTheme
+                      .displaySmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: LinearProgressIndicator(value: share, minHeight: 10),
+              ),
+              const SizedBox(height: 10),
               Text(
                 p.total > 0
                     ? '${_size(p.received)} / ${_size(p.total)}'
                     : _size(p.received),
                 textDirection: TextDirection.ltr,
               ),
-            ]),
-            const SizedBox(height: 4),
-            Text('${_size(p.speed.round())}/s', textDirection: TextDirection.ltr),
-          ]);
-        },
+              const SizedBox(height: 4),
+              Text(
+                [
+                  if (p.speed > 0) '${_size(p.speed.round())}/s',
+                  if (left != null) tr(dialog, 'updEta', {'t': _duration(left)}),
+                ].join('  ·  '),
+                textDirection: TextDirection.ltr,
+                style: Theme.of(dialog).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 6),
+              Text(asset.name,
+                  textDirection: TextDirection.ltr,
+                  style: Theme.of(dialog).textTheme.bodySmall),
+            ]);
+          },
+        ),
+        actions: [
+          TextButton.icon(
+            autofocus: true,
+            icon: const Icon(Icons.close),
+            label: Text(tr(dialog, 'updCancelDownload')),
+            onPressed: cancel.cancel,
+          ),
+        ],
       ),
     ),
   );
@@ -139,10 +272,14 @@ Future<void> _install(BuildContext context, UpdateInfo info) async {
         lastBytes = got;
       }
       progress.value = _Progress(got, total, speed);
-    });
+    }, cancel: cancel);
   } catch (_) {}
   if (!context.mounted) return;
   Navigator.of(context, rootNavigator: true).pop();
+  if (cancel.cancelled) {
+    toast(context, tr(context, 'updCancelled'));
+    return;
+  }
   if (path == null) {
     toast(context, tr(context, 'updateFailed'));
     return;
@@ -161,6 +298,12 @@ Future<void> _install(BuildContext context, UpdateInfo info) async {
     toast(context, tr(context, 'updateFailed'));
   }
 }
+
+String _duration(Duration d) {
+  if (d.inMinutes >= 1) return '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+  return '${d.inSeconds}s';
+}
+
 /// What the download dialog shows: bytes received, the total (-1 if unknown) and bytes/second.
 class _Progress {
   const _Progress(this.received, this.total, this.speed);

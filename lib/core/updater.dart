@@ -7,7 +7,12 @@ import 'vpn_channel.dart';
 const updateRepo = 'AbolDev/kumo-client';
 
 class UpdateInfo {
-  const UpdateInfo(this.version, this.url, this.newer, this.assets);
+  const UpdateInfo(this.version, this.url, this.newer, this.assets,
+      {this.notes = '', this.sizes = const {}});
+
+  /// The text of the release (Markdown) and the size in bytes of each attached file.
+  final String notes;
+  final Map<String, int> sizes;
 
   /// Latest stable release, without a leading "v".
   final String version;
@@ -78,11 +83,18 @@ Future<UpdateInfo> checkForUpdate(String current) async {
         if (a is Map && a['name'] is String && a['browser_download_url'] is String)
           a['name'] as String: a['browser_download_url'] as String,
     };
+    final sizes = <String, int>{
+      for (final a in (j['assets'] as List? ?? const []))
+        if (a is Map && a['name'] is String && a['size'] is int)
+          a['name'] as String: a['size'] as int,
+    };
     return UpdateInfo(
         tag,
         '${j['html_url'] ?? 'https://github.com/$updateRepo/releases'}',
         isNewer(tag, current),
-        assets);
+        assets,
+        notes: '${j['body'] ?? ''}',
+        sizes: sizes);
   } finally {
     client.close(force: true);
   }
@@ -115,15 +127,31 @@ Future<({String name, String url})?> pickAsset(UpdateInfo info) async {
   return null;
 }
 
+/// Lets the user stop a running download.
+class DownloadCancel {
+  bool cancelled = false;
+  HttpClient? _client;
+
+  void cancel() {
+    cancelled = true;
+    _client?.close(force: true);
+  }
+}
+
 /// Downloads [url] into the app's folder, reporting the bytes received and the total (-1 when
-/// unknown). Returns the path.
-Future<String> downloadUpdate(String url, String name, void Function(int received, int total) progress) async {
+/// unknown). Returns the path. When [cancel] is used the partial file is removed and a
+/// [HttpException] is thrown.
+Future<String> downloadUpdate(String url, String name,
+    void Function(int received, int total) progress,
+    {DownloadCancel? cancel}) async {
   final dir = Directory('${await VpnChannel.dataDir()}${Platform.pathSeparator}updates');
   if (await dir.exists()) await dir.delete(recursive: true);
   await dir.create(recursive: true);
   final file = File('${dir.path}${Platform.pathSeparator}$name');
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
+  cancel?._client = client;
   try {
+    if (cancel?.cancelled ?? false) throw const HttpException('cancelled');
     final req = await client.getUrl(Uri.parse(url));
     req.headers.set('User-Agent', 'Kumo');
     final res = await req.close();
@@ -140,7 +168,13 @@ Future<String> downloadUpdate(String url, String name, void Function(int receive
     } finally {
       await sink.close();
     }
+    if (cancel?.cancelled ?? false) throw const HttpException('cancelled');
     return file.path;
+  } catch (_) {
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    rethrow;
   } finally {
     client.close(force: true);
   }
