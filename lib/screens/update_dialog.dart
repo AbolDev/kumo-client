@@ -33,21 +33,67 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
   // for this check. The check at startup never includes them.
   var tests = false;
   if (!silent) {
-    final answer = await showDialog<bool>(
+    final answer = await showModalBottomSheet<bool>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        icon: const Icon(Icons.science_outlined),
-        title: Text(tr(dialog, 'prereleaseUpdates')),
-        content: Text(tr(dialog, 'prereleaseUpdatesDesc')),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialog, false),
-              child: Text(tr(dialog, 'updNo'))),
-          FilledButton(
-              onPressed: () => Navigator.pop(dialog, true),
-              child: Text(tr(dialog, 'updYes'))),
-        ],
-      ),
+      showDragHandle: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (sheet) {
+        final scheme = Theme.of(sheet).colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: scheme.secondaryContainer,
+                  child: Icon(Icons.science_outlined,
+                      size: 28, color: scheme.onSecondaryContainer),
+                ),
+                const SizedBox(height: 16),
+                Text(tr(sheet, 'prereleaseUpdates'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(sheet).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text(tr(sheet, 'prereleaseUpdatesDesc'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(sheet)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 4),
+                Text(tr(sheet, 'updTestWarn'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(sheet)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 20),
+                FilledButton.icon(
+                  autofocus: true,
+                  icon: const Icon(Icons.verified_outlined),
+                  label: Text(tr(sheet, 'updNo')),
+                  onPressed: () => Navigator.pop(sheet, false),
+                ),
+                const SizedBox(height: 6),
+                Text(tr(sheet, 'updRecommended'),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(sheet)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(color: scheme.primary)),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(sheet, true),
+                  child: Text(tr(sheet, 'updYes')),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
     if (answer == null || !context.mounted) return;
     tests = answer;

@@ -2,6 +2,8 @@
 // English is the fallback for any key a language lacks.
 
 const extraPrivacyEn = <String, String>{
+  'updTestWarn': 'Test versions may have bugs.',
+  'updRecommended': 'Recommended',
   'updYes': 'Yes, include',
   'updNo': 'No, stable only',
   'updWhatsNewSince': 'Changes since {v}',
@@ -38,6 +40,8 @@ const extraPrivacyEn = <String, String>{
 };
 
 const extraPrivacyFa = <String, String>{
+  'updTestWarn': 'نسخه‌های آزمایشی ممکن است ایراد داشته باشند.',
+  'updRecommended': 'پیشنهادی',
   'updYes': 'بله، نشان بده',
   'updNo': 'نه، فقط پایدار',
   'updWhatsNewSince': 'تغییرات از نسخهٔ {v}',
@@ -74,6 +78,8 @@ const extraPrivacyFa = <String, String>{
 };
 
 const extraPrivacyRu = <String, String>{
+  'updTestWarn': 'В тестовых версиях могут быть ошибки.',
+  'updRecommended': 'Рекомендуется',
   'updYes': 'Да, включить',
   'updNo': 'Нет, только стабильные',
   'updWhatsNewSince': 'Изменения с версии {v}',
@@ -110,6 +116,8 @@ const extraPrivacyRu = <String, String>{
 };
 
 const extraPrivacyVi = <String, String>{
+  'updTestWarn': 'Bản thử nghiệm có thể có lỗi.',
+  'updRecommended': 'Khuyên dùng',
   'updYes': 'Có, bao gồm',
   'updNo': 'Không, chỉ bản ổn định',
   'updWhatsNewSince': 'Thay đổi kể từ {v}',
@@ -146,6 +154,8 @@ const extraPrivacyVi = <String, String>{
 };
 
 const extraPrivacyZh = <String, String>{
+  'updTestWarn': '测试版可能存在问题。',
+  'updRecommended': '推荐',
   'updYes': '是，包含',
   'updNo': '否，仅稳定版',
   'updWhatsNewSince': '自 {v} 以来的更改',
@@ -182,6 +192,8 @@ const extraPrivacyZh = <String, String>{
 };
 
 const extraPrivacyAr = <String, String>{
+  'updTestWarn': 'قد تحتوي الإصدارات التجريبية على أخطاء.',
+  'updRecommended': 'موصى به',
   'updYes': 'نعم، ضمّنها',
   'updNo': 'لا، المستقرة فقط',
   'updWhatsNewSince': 'التغييرات منذ {v}',
