@@ -15,9 +15,17 @@ List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
   final links = extractLinks(text);
   if (links.isNotEmpty) return links;
 
-  if (text.startsWith('{') || text.startsWith('[')) {
+  // Decrypted profiles (.bpf, .zsx ...) start with `// name: ...` comment lines before the JSON.
+  final bare = text.startsWith('//')
+      ? text
+          .split('\n')
+          .where((l) => !l.trimLeft().startsWith('//'))
+          .join('\n')
+          .trim()
+      : text;
+  if (bare.startsWith('{') || bare.startsWith('[')) {
     try {
-      final found = _fromJson(jsonDecode(text));
+      final found = _fromJson(jsonDecode(bare));
       if (found.isNotEmpty) return found;
     } catch (_) {
       // not JSON after all

@@ -85,7 +85,9 @@ String decryptNetmod(Uint8List payload, String proto) {
 /// The flag is added to the TLS ones that do not say otherwise.
 String _netmodTrustServer(String proto, String body) {
   final scheme = proto.startsWith('nm-') ? proto.substring(3) : proto;
-  if (scheme != 'trojan' && scheme != 'vless') return body;
+  if (scheme == 'vmess') return _netmodVmess(body);
+  const known = {'trojan', 'vless', 'hysteria2', 'hy2', 'tuic'};
+  if (!known.contains(scheme)) return body;
   final text = body.trim();
   if (text.startsWith('{') || text.startsWith('[')) return body;
   final hash = text.indexOf('#');
@@ -101,6 +103,34 @@ String _netmodTrustServer(String proto, String body) {
   // vless without a security parameter is plain TCP: nothing to verify.
   if (scheme == 'vless' && !lower.contains('security=tls')) return body;
   return '$main${main.contains('?') ? '&' : '?'}allowInsecure=1$tail';
+}
+
+/// A NetMod vmess config: the base64 JSON of a vmess link, or that JSON itself (which was
+/// re-indented over several lines above). TLS ones get the same no-verification flag.
+String _netmodVmess(String body) {
+  var text = body.trim();
+  var prefix = '';
+  if (text.startsWith('vmess://')) {
+    prefix = 'vmess://';
+    text = text.substring(prefix.length).trim();
+  }
+  try {
+    final isJson = text.startsWith('{');
+    final json = jsonDecode(isJson
+        ? text
+        : utf8.decode(base64.decode(base64.normalize(
+            text.replaceAll('-', '+').replaceAll('_', '/'))))) as Map;
+    final map = Map<String, dynamic>.from(json);
+    final secure = '${map['tls']}' == 'tls';
+    final decided = map.containsKey('allowInsecure') ||
+        map.containsKey('insecure') ||
+        map.containsKey('pcs');
+    if (!isJson && (!secure || decided)) return body;
+    if (secure && !decided) map['allowInsecure'] = true;
+    return '$prefix${base64.encode(utf8.encode(jsonEncode(map)))}';
+  } catch (_) {
+    return body;
+  }
 }
 
 // ---------------------------------------------------------------------- Happ

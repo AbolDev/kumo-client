@@ -340,7 +340,10 @@ ProxyConfig? _xhttp(
         if (serverName.isNotEmpty) 'serverName': serverName,
         'fingerprint': fingerprint,
         if (alpn.isNotEmpty) 'alpn': alpn,
-        if (_truthy(q['allowInsecure']) || _truthy(q['insecure']))
+        // a pinned certificate stands in for chain validation (see _tls)
+        if (_truthy(q['allowInsecure']) ||
+            _truthy(q['insecure']) ||
+            (q['pcs'] ?? q['pinSHA256'] ?? '').trim().isNotEmpty)
           'allowInsecure': true,
       };
     } else {
