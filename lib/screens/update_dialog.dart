@@ -286,7 +286,11 @@ Future<void> _install(BuildContext context, UpdateInfo info,
     barrierDismissible: false,
     builder: (dialog) => PopScope(
       canPop: false,
-      onPopInvokedWithResult: (_, __) => cancel.cancel(),
+      // Back cancels. It also fires when the dialog is closed by the code after the download
+      // ends (didPop true), which must not count as a cancel.
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) cancel.cancel();
+      },
       child: AlertDialog(
         icon: const Icon(Icons.downloading),
         title: Text(tr(dialog, 'updateDownloading')),
