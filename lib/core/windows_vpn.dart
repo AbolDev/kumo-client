@@ -35,7 +35,16 @@ class WindowsVpn {
 
   // ------------------------------------------------------------------ files
 
+  /// The portable build has a file named `portable` next to kumo.exe: everything it saves then
+  /// stays in the `data` folder beside it, so the folder can be moved or put on a USB drive.
+  static final bool portable =
+      File('${File(Platform.resolvedExecutable).parent.path}\\portable')
+          .existsSync();
+
   String get dataDir {
+    if (portable) {
+      return '${File(Platform.resolvedExecutable).parent.path}\\data';
+    }
     final base = Platform.environment['APPDATA'] ?? Directory.systemTemp.path;
     return '$base\\Kumo';
   }

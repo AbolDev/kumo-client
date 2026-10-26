@@ -6,6 +6,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/updater.dart';
 import '../core/vpn_channel.dart';
+import '../core/windows_vpn.dart' show WindowsVpn;
 import '../l10n/extra.dart';
 import 'share_sheet.dart';
 
@@ -78,7 +79,8 @@ Future<void> _offer(BuildContext context, UpdateInfo info) async {
 /// Downloads the file made for this device and starts its installer.
 Future<void> _install(BuildContext context, UpdateInfo info) async {
   final asset = await pickAsset(info);
-  if (asset == null) {
+  // The portable build is not installed by the setup file: the new zip is taken from the page.
+  if (asset == null || (Platform.isWindows && WindowsVpn.portable)) {
     await openLink(info.url);
     return;
   }

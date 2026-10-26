@@ -249,6 +249,21 @@ jobs:
           path: dist/kumo-windows-${{ matrix.arch }}-setup.exe
           archive: false
 
+      # The same program as a folder that runs without installing. The `portable` file makes it
+      # keep its data in a `data` folder beside kumo.exe (it is added after the installer is built).
+      - name: Build the portable zip
+        shell: pwsh
+        run: |
+          $src = "build\windows\${{ matrix.arch }}\runner\Release"
+          New-Item -ItemType File -Path "$src\portable" -Force | Out-Null
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Compress-Archive -Path "$src\*" -DestinationPath "dist\kumo-windows-${{ matrix.arch }}-portable.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-windows-${{ matrix.arch }}-portable.zip
+          archive: false
+
   # A pushed version tag becomes a release holding the four APKs and the Windows installers.
   release:
     if: startsWith(github.ref, 'refs/tags/v')

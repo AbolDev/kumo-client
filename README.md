@@ -54,7 +54,7 @@ Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-know
 Get the latest version from the [**Releases**](../../releases) page.
 
 - **Android:** download the `.apk` file and open it. If your phone asks, allow installing apps from this source.
-- **Windows:** download `kumo-windows-x64-setup.exe` and run it. It installs Kumo with an uninstaller. Kumo asks for administrator rights because it starts the VPN core and can change the system proxy. (Windows on ARM runs the x64 build through emulation; a native ARM build is not available yet.)
+- **Windows:** download `kumo-windows-x64-setup.exe` and run it. It installs Kumo with an uninstaller. Kumo asks for administrator rights because it starts the VPN core and can change the system proxy. (Windows on ARM runs the x64 build through emulation; a native ARM build is not available yet.) Prefer no installation? Download `kumo-windows-x64-portable.zip`, extract it anywhere and run `kumo.exe`; it keeps its data in a `data` folder next to it. The portable version does not update itself: it opens the release page instead.
 
 ### Installing on Android
 
