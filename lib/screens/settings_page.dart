@@ -438,9 +438,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   onTap: _checkUpdate,
                 ),
               ),
-              _switch('updatePrerelease', state.updatePrerelease,
-                  tr(context, 'prereleaseUpdates'),
-                  tr(context, 'prereleaseUpdatesDesc')),
               ListTile(
                 leading: const Icon(Icons.code),
                 title: Text(tr(context, 'sourceCode')),

@@ -2,6 +2,9 @@
 // English is the fallback for any key a language lacks.
 
 const extraPrivacyEn = <String, String>{
+  'updYes': 'Yes, include',
+  'updNo': 'No, stable only',
+  'updWhatsNewSince': 'Changes since {v}',
   'updNewVersion': 'A new version is ready',
   'updYouHave': 'You have {v}',
   'updWhatsNew': 'What\'s new',
@@ -35,6 +38,9 @@ const extraPrivacyEn = <String, String>{
 };
 
 const extraPrivacyFa = <String, String>{
+  'updYes': 'بله، نشان بده',
+  'updNo': 'نه، فقط پایدار',
+  'updWhatsNewSince': 'تغییرات از نسخهٔ {v}',
   'updNewVersion': 'نسخهٔ جدید آماده است',
   'updYouHave': 'نسخهٔ شما: {v}',
   'updWhatsNew': 'تازه‌ها',
@@ -68,6 +74,9 @@ const extraPrivacyFa = <String, String>{
 };
 
 const extraPrivacyRu = <String, String>{
+  'updYes': 'Да, включить',
+  'updNo': 'Нет, только стабильные',
+  'updWhatsNewSince': 'Изменения с версии {v}',
   'updNewVersion': 'Доступна новая версия',
   'updYouHave': 'У вас {v}',
   'updWhatsNew': 'Что нового',
@@ -101,6 +110,9 @@ const extraPrivacyRu = <String, String>{
 };
 
 const extraPrivacyVi = <String, String>{
+  'updYes': 'Có, bao gồm',
+  'updNo': 'Không, chỉ bản ổn định',
+  'updWhatsNewSince': 'Thay đổi kể từ {v}',
   'updNewVersion': 'Đã có phiên bản mới',
   'updYouHave': 'Bạn đang dùng {v}',
   'updWhatsNew': 'Có gì mới',
@@ -134,6 +146,9 @@ const extraPrivacyVi = <String, String>{
 };
 
 const extraPrivacyZh = <String, String>{
+  'updYes': '是，包含',
+  'updNo': '否，仅稳定版',
+  'updWhatsNewSince': '自 {v} 以来的更改',
   'updNewVersion': '有新版本可用',
   'updYouHave': '当前版本 {v}',
   'updWhatsNew': '更新内容',
@@ -167,6 +182,9 @@ const extraPrivacyZh = <String, String>{
 };
 
 const extraPrivacyAr = <String, String>{
+  'updYes': 'نعم، ضمّنها',
+  'updNo': 'لا، المستقرة فقط',
+  'updWhatsNewSince': 'التغييرات منذ {v}',
   'updNewVersion': 'إصدار جديد جاهز',
   'updYouHave': 'إصدارك {v}',
   'updWhatsNew': 'الجديد',

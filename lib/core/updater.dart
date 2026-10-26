@@ -8,7 +8,10 @@ const updateRepo = 'AbolDev/kumo-client';
 
 class UpdateInfo {
   const UpdateInfo(this.version, this.url, this.newer, this.assets,
-      {this.notes = '', this.sizes = const {}});
+      {this.notes = '', this.sizes = const {}, this.history = const []});
+
+  /// The notes of every release newer than the installed one, newest first.
+  final List<({String version, String notes})> history;
 
   /// The text of the release (Markdown) and the size in bytes of each attached file.
   final String notes;
@@ -40,7 +43,7 @@ bool isNewer(String a, String b) {
   return false;
 }
 
-/// Whether pre-releases are offered too (Settings → About). Off by default.
+/// Whether test versions are offered too. Only set for a single check the user confirmed.
 bool includePrerelease = false;
 
 /// Asks GitHub for the latest stable release, or the newest release of any kind when
@@ -49,9 +52,7 @@ Future<UpdateInfo> checkForUpdate(String current) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   try {
     final req = await client
-        .getUrl(Uri.parse(includePrerelease
-            ? 'https://api.github.com/repos/$updateRepo/releases?per_page=15'
-            : 'https://api.github.com/repos/$updateRepo/releases/latest'))
+        .getUrl(Uri.parse('https://api.github.com/repos/$updateRepo/releases?per_page=20'))
         .timeout(const Duration(seconds: 12));
     req.headers
       ..set('Accept', 'application/vnd.github+json')
@@ -61,20 +62,27 @@ Future<UpdateInfo> checkForUpdate(String current) async {
     if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
     final decoded = jsonDecode(body);
     Map<String, dynamic>? picked;
+    final published = <Map<String, dynamic>>[];
+    String nameOf(Map<String, dynamic> r) =>
+        '${r['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
     if (decoded is List) {
-      // The release with the highest version among the published ones.
+      // The release with the highest version among the published ones; test versions only
+      // when asked for.
       for (final r in decoded) {
         if (r is! Map<String, dynamic> || r['draft'] == true) continue;
-        final tag = '${r['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
-        final best = picked == null
-            ? null
-            : '${picked['tag_name']}'.replaceFirst(RegExp(r'^[vV]'), '');
-        if (tag.isNotEmpty && (best == null || isNewer(tag, best))) picked = r;
+        if (r['prerelease'] == true && !includePrerelease) continue;
+        final tag = nameOf(r);
+        if (tag.isEmpty) continue;
+        published.add(r);
+        if (picked == null || isNewer(tag, nameOf(picked))) picked = r;
       }
-    } else {
-      picked = decoded as Map<String, dynamic>;
     }
     if (picked == null) throw const FormatException('no release');
+    // Every release between this one and the newest, newest first, to show what was missed.
+    final history = <({String version, String notes})>[
+      for (final r in published)
+        if (isNewer(nameOf(r), current)) (version: nameOf(r), notes: '${r['body'] ?? ''}'),
+    ]..sort((a, b) => isNewer(a.version, b.version) ? -1 : 1);
     final j = picked;
     final tag = '${j['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
     if (tag.isEmpty) throw const FormatException('no version');
@@ -94,7 +102,8 @@ Future<UpdateInfo> checkForUpdate(String current) async {
         isNewer(tag, current),
         assets,
         notes: '${j['body'] ?? ''}',
-        sizes: sizes);
+        sizes: sizes,
+        history: history);
   } finally {
     client.close(force: true);
   }

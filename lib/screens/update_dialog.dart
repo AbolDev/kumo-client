@@ -29,11 +29,36 @@ Future<void> openLink(String url) async {
 Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async {
   final current = (await PackageInfo.fromPlatform()).version;
   if (!context.mounted) return;
-  if (!silent) toast(context, tr(context, 'checkingUpdate'));
+  // A check the user asks for first asks whether test versions count too; the answer is only
+  // for this check. The check at startup never includes them.
+  var tests = false;
+  if (!silent) {
+    final answer = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        icon: const Icon(Icons.science_outlined),
+        title: Text(tr(dialog, 'prereleaseUpdates')),
+        content: Text(tr(dialog, 'prereleaseUpdatesDesc')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: Text(tr(dialog, 'updNo'))),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text(tr(dialog, 'updYes'))),
+        ],
+      ),
+    );
+    if (answer == null || !context.mounted) return;
+    tests = answer;
+    toast(context, tr(context, 'checkingUpdate'));
+  }
   UpdateInfo? found;
+  includePrerelease = tests;
   try {
     found = await checkForUpdate(current);
   } catch (_) {}
+  includePrerelease = false;
   if (!context.mounted) return;
   if (!silent) ScaffoldMessenger.of(context).hideCurrentSnackBar();
   if (found != null && found.newer) {
@@ -90,7 +115,9 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
     constraints: const BoxConstraints(maxWidth: 560),
     builder: (sheet) {
       final scheme = Theme.of(sheet).colorScheme;
-      final notes = _notesFor(sheet, info.notes);
+      // One release: its text. Several skipped ones: a short block per version, newest first.
+      final many = info.history.length > 1;
+      final notes = many ? '' : _notesFor(sheet, info.notes);
       return SafeArea(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * 0.85),
@@ -133,6 +160,38 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                       ),
                   ],
                 ),
+                if (many) ...[
+                  const SizedBox(height: 12),
+                  Text(tr(sheet, 'updWhatsNewSince', {'v': current}),
+                      style: Theme.of(sheet).textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  Flexible(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            for (final (i, r) in info.history.indexed)
+                              ExpansionTile(
+                                initiallyExpanded: i == 0,
+                                shape: const Border(),
+                                collapsedShape: const Border(),
+                                title: Text('v${r.version}',
+                                    textDirection: TextDirection.ltr,
+                                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                                childrenPadding:
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                                expandedAlignment: AlignmentDirectional.centerStart,
+                                children: [Text(_notesFor(sheet, r.notes))],
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 if (notes.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(tr(sheet, 'updWhatsNew'),

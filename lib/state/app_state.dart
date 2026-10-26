@@ -556,7 +556,8 @@ class AppState extends ChangeNotifier {
       autoUpdateSubs = flag('autoUpdateSubs', true);
       updateOnStartup = flag('updateOnStartup', true);
       updatePrerelease = flag('updatePrerelease', false);
-      includePrerelease = updatePrerelease;
+      // Test versions are asked about at each manual check, not kept as a setting.
+      includePrerelease = false;
       allowInsecure = flag('allowInsecure', true);
       autoConnect = flag('autoConnect', false);
       restartOnChange = flag('restartOnChange', true);
