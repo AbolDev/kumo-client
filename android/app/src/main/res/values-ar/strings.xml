@@ -5,4 +5,8 @@
     <string name="notif_disconnect">قطع الاتصال</string>
     <string name="notif_restart">إعادة التشغيل</string>
     <string name="notif_auto">تلقائي (الأسرع)</string>
+    <string name="notif_idle">غير متصل</string>
+    <string name="notif_connect">اتصال</string>
+    <string name="widget_on">متصل</string>
+    <string name="widget_off">اضغط للاتصال</string>
 </resources>

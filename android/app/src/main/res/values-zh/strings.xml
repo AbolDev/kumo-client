@@ -5,4 +5,8 @@
     <string name="notif_disconnect">断开连接</string>
     <string name="notif_restart">重新启动</string>
     <string name="notif_auto">自动（最快）</string>
+    <string name="notif_idle">未连接</string>
+    <string name="notif_connect">连接</string>
+    <string name="widget_on">已连接</string>
+    <string name="widget_off">点按以连接</string>
 </resources>

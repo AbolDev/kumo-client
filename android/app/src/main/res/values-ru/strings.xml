@@ -5,4 +5,8 @@
     <string name="notif_disconnect">Отключить</string>
     <string name="notif_restart">Перезапустить</string>
     <string name="notif_auto">Авто (самый быстрый)</string>
+    <string name="notif_idle">Не подключено</string>
+    <string name="notif_connect">Подключить</string>
+    <string name="widget_on">Подключено</string>
+    <string name="widget_off">Нажмите, чтобы подключить</string>
 </resources>

@@ -70,6 +70,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     companion object {
         const val ACTION_STOP = "app.kumo.vpn.STOP"
         const val ACTION_RESTART = "app.kumo.vpn.RESTART"
+        const val ACTION_CONNECT = "app.kumo.vpn.CONNECT"
         const val EXTRA_CONFIG_PATH = "config_path"
         const val EXTRA_SERVER_NAMES = "server_names"
         const val EXTRA_XRAY_CONFIG_PATH = "xray_config_path"
@@ -128,8 +129,8 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         live = this
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+    override fun onStartCommand(startIntent: Intent?, flags: Int, startId: Int): Int {
+        when (startIntent?.action) {
             ACTION_STOP -> {
                 stopVpn()
                 return START_NOT_STICKY
@@ -139,6 +140,17 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 return START_NOT_STICKY
             }
         }
+        // The Connect button of the "not connected" notification repeats the last connection.
+        val intent = if (startIntent?.action == ACTION_CONNECT) {
+            runCatching { showForeground() }
+            VpnControl.lastStartIntent(this) ?: run {
+                stopForegroundAndSelf()
+                IdleNotification.show(this)
+                return START_NOT_STICKY
+            }
+        } else {
+            startIntent
+        }
         val path = intent?.getStringExtra(EXTRA_CONFIG_PATH)
         // Every startForegroundService() must be answered by startForeground(), even when the
         // request is ignored, or Android kills the app for it.
@@ -146,7 +158,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         if (path == null || VpnBridge.status == VpnBridge.STARTING || VpnBridge.status == VpnBridge.STARTED ||
             VpnBridge.status == VpnBridge.STOPPING
         ) {
-            if (VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.ERROR) stopForegroundAndSelf()
+            if (VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.ERROR) {
+                stopForegroundAndSelf()
+                IdleNotification.show(this)
+            }
             return START_NOT_STICKY
         }
         configPath = path
@@ -198,6 +213,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     private fun showForeground() {
+        IdleNotification.cancel(this)
         val nm = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
@@ -252,6 +268,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
         override fun writeStatus(message: StatusMessage) {
             if (!message.trafficAvailable) return
+            VpnBridge.serverName = currentName ?: getString(R.string.notif_auto)
             VpnBridge.traffic(message.uplink, message.downlink, message.uplinkTotal, message.downlinkTotal)
             if (!showSpeed && !showVolume) return
             val parts = ArrayList<String>()
@@ -335,6 +352,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             teardown()
             VpnBridge.update(VpnBridge.ERROR, e.message ?: e.toString())
             stopForegroundAndSelf()
+            IdleNotification.show(this)
         } finally {
             VpnBridge.openGate()
         }
@@ -362,6 +380,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             // turns "stopped" must find a service that is already going away, not this one.
             stopForegroundAndSelf()
             VpnBridge.update(VpnBridge.STOPPED)
+            IdleNotification.show(this@BoxVpnService)
         }
     }
 
@@ -444,6 +463,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                         } else {
                             VpnBridge.update(VpnBridge.ERROR, "xray stopped unexpectedly")
                             stopForegroundAndSelf()
+                            IdleNotification.show(this@BoxVpnService)
                         }
                     }
                 }

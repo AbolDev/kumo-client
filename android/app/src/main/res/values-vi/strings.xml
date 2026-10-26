@@ -5,4 +5,8 @@
     <string name="notif_disconnect">Ngắt kết nối</string>
     <string name="notif_restart">Khởi động lại</string>
     <string name="notif_auto">Tự động (nhanh nhất)</string>
+    <string name="notif_idle">Chưa kết nối</string>
+    <string name="notif_connect">Kết nối</string>
+    <string name="widget_on">Đã kết nối</string>
+    <string name="widget_off">Chạm để kết nối</string>
 </resources>

@@ -10,8 +10,11 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val settings = VpnControl.readJson(context, "settings.json")
         if (settings?.optBoolean("autoUpdateSubs", true) != false) SubUpdateJob.schedule(context)
-        if (settings?.optBoolean("autoConnect", false) != true) return
+        if (settings?.optBoolean("autoConnect", false) != true) {
+            IdleNotification.show(context)
+            return
+        }
         // Without the system's VPN consent there is nothing the app can do on its own.
-        VpnControl.startLast(context)
+        if (!VpnControl.startLast(context)) IdleNotification.show(context)
     }
 }

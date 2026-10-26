@@ -7,4 +7,22 @@
     <string name="notif_auto">خودکار (سریع‌ترین)</string>
     <string name="widget_on">وصل است</string>
     <string name="widget_off">برای اتصال بزن</string>
+    <string name="notif_idle">متصل نیست</string>
+    <string name="notif_connect">اتصال</string>
+    <string name="widget_connecting">در حال اتصال…</string>
+    <string name="widget_disconnecting">در حال قطع…</string>
+    <string name="widget_name_button">دکمهٔ کومو</string>
+    <string name="widget_name_icon">آیکون کومو</string>
+    <string name="widget_name_stats">ترافیک کومو</string>
+    <string name="widget_cfg_title">ظاهر ویجت</string>
+    <string name="widget_cfg_color">رنگ</string>
+    <string name="widget_cfg_auto">خودکار (بر اساس وضعیت)</string>
+    <string name="widget_cfg_shape">شکل</string>
+    <string name="widget_cfg_opacity">شفافیت</string>
+    <string name="widget_cfg_size">اندازهٔ متن</string>
+    <string name="widget_cfg_content">نمایش</string>
+    <string name="widget_cfg_speed">سرعت</string>
+    <string name="widget_cfg_total">حجم کل</string>
+    <string name="widget_cfg_both">هر دو</string>
+    <string name="widget_cfg_done">تأیید</string>
 </resources>

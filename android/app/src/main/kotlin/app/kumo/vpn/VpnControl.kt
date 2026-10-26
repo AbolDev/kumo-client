@@ -11,9 +11,17 @@ import java.io.File
 object VpnControl {
     /** Repeats the last connection. False when there is nothing to repeat or the system consent is missing. */
     fun startLast(context: Context): Boolean {
-        if (VpnService.prepare(context) != null) return false
+        val start = lastStartIntent(context) ?: return false
+        ContextCompat.startForegroundService(context, start)
+        return true
+    }
+
+    /** The intent that repeats the last connection, or null when there is nothing to repeat or
+     *  the system consent is missing. */
+    fun lastStartIntent(context: Context): Intent? {
+        if (VpnService.prepare(context) != null) return null
         val config = File(context.filesDir, "active_config.json")
-        if (!config.exists()) return false
+        if (!config.exists()) return null
 
         val last = readJson(context, "last_start.json")
         val names = ArrayList<String>()
@@ -31,8 +39,7 @@ object VpnControl {
             start.putExtra(BoxVpnService.EXTRA_XRAY_CONFIG_PATH, xray.path)
                 .putExtra(BoxVpnService.EXTRA_XRAY_PORT, xrayPort)
         }
-        ContextCompat.startForegroundService(context, start)
-        return true
+        return start
     }
 
     fun stop(context: Context) {

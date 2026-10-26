@@ -319,6 +319,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   tr(context, 'notifVolumeDesc')),
               _switch('showName', state.showName, tr(context, 'notifName'),
                   tr(context, 'notifNameDesc')),
+              if (!Platform.isWindows)
+                _switch('idleNotification', state.idleNotification,
+                    tr(context, 'notifIdle'), tr(context, 'notifIdleDesc')),
             ]),
             _section(Icons.monitor_heart_outlined, tr(context, 'liveConnections'), [
               ListTile(

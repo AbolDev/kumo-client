@@ -101,6 +101,15 @@ class MainActivity : FlutterActivity() {
                         runOnUiThread { result.success(ms) }
                     }
                 }
+                // The "not connected" notification: shown (or removed) right away when the switch changes.
+                "idleNotification" -> {
+                    if (call.argument<Boolean>("enabled") == true) {
+                        IdleNotification.show(this, force = true)
+                    } else {
+                        IdleNotification.cancel(this)
+                    }
+                    result.success(null)
+                }
                 "scheduleSubUpdates" -> {
                     if (call.argument<Boolean>("enabled") == true) SubUpdateJob.schedule(this) else SubUpdateJob.cancel(this)
                     result.success(null)

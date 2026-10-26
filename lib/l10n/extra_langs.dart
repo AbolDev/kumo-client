@@ -2,6 +2,8 @@
 /// English and Persian live in extra.dart.
 const extraRu = <String, String>{
   'languageDevice': 'Как на устройстве',
+  'notifIdle': 'Уведомление без подключения',
+  'notifIdleDesc': 'После отключения остаётся уведомление с кнопкой «Подключить».',
   'logLevel': 'Уровень журнала',
   'logLevelDesc': 'Сколько ядро пишет в журнал. Высокие уровни помогают искать проблемы, но расходуют больше заряда. Применяется со следующего подключения.',
   'prereleaseUpdates': 'Предварительные версии',
@@ -115,6 +117,8 @@ const extraRu = <String, String>{
 
 const extraVi = <String, String>{
   'languageDevice': 'Theo thiết bị',
+  'notifIdle': 'Thông báo khi chưa kết nối',
+  'notifIdleDesc': 'Giữ một thông báo có nút Kết nối sau khi bạn ngắt kết nối.',
   'logLevel': 'Mức nhật ký',
   'logLevelDesc': 'Lượng thông tin lõi ghi vào nhật ký. Mức cao giúp tìm lỗi nhưng tốn pin hơn. Áp dụng từ lần kết nối tiếp theo.',
   'prereleaseUpdates': 'Bao gồm bản thử nghiệm',
@@ -228,6 +232,8 @@ const extraVi = <String, String>{
 
 const extraZh = <String, String>{
   'languageDevice': '跟随设备',
+  'notifIdle': '未连接时的通知',
+  'notifIdleDesc': '断开连接后保留一条带“连接”按钮的通知。',
   'logLevel': '日志级别',
   'logLevelDesc': '核心写入日志的详细程度。级别越高越便于排查问题，但更耗电。下次连接时生效。',
   'prereleaseUpdates': '包含预发布版本',
@@ -337,6 +343,8 @@ const extraZh = <String, String>{
 
 const extraAr = <String, String>{
   'languageDevice': 'مثل الجهاز',
+  'notifIdle': 'إشعار عند عدم الاتصال',
+  'notifIdleDesc': 'يُبقي إشعارًا فيه زر «اتصال» بعد قطع الاتصال.',
   'logLevel': 'مستوى السجل',
   'logLevelDesc': 'مقدار ما تكتبه النواة في السجل. المستويات الأعلى تساعد في تتبع المشاكل لكنها تستهلك بطارية أكثر. يُطبَّق من الاتصال التالي.',
   'prereleaseUpdates': 'تضمين الإصدارات التجريبية',

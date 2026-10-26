@@ -64,6 +64,7 @@
 
         <receiver
             android:name=".VpnWidget"
+            android:label="@string/widget_name_button"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -73,6 +74,39 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_info" />
         </receiver>
+
+        <receiver
+            android:name=".VpnWidgetIcon"
+            android:label="@string/widget_name_icon"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_icon" />
+        </receiver>
+
+        <receiver
+            android:name=".VpnWidgetStats"
+            android:label="@string/widget_name_stats"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_stats" />
+        </receiver>
+
+        <activity
+            android:name=".WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".SubUpdateJob"

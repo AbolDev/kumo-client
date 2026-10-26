@@ -7,4 +7,22 @@
     <string name="notif_auto">Automatic (fastest)</string>
     <string name="widget_on">Connected</string>
     <string name="widget_off">Tap to connect</string>
+    <string name="notif_idle">Not connected</string>
+    <string name="notif_connect">Connect</string>
+    <string name="widget_connecting">Connecting…</string>
+    <string name="widget_disconnecting">Disconnecting…</string>
+    <string name="widget_name_button">Kumo button</string>
+    <string name="widget_name_icon">Kumo icon</string>
+    <string name="widget_name_stats">Kumo traffic</string>
+    <string name="widget_cfg_title">Widget style</string>
+    <string name="widget_cfg_color">Color</string>
+    <string name="widget_cfg_auto">Auto (by state)</string>
+    <string name="widget_cfg_shape">Shape</string>
+    <string name="widget_cfg_opacity">Opacity</string>
+    <string name="widget_cfg_size">Text size</string>
+    <string name="widget_cfg_content">Shows</string>
+    <string name="widget_cfg_speed">Speed</string>
+    <string name="widget_cfg_total">Total data</string>
+    <string name="widget_cfg_both">Both</string>
+    <string name="widget_cfg_done">Done</string>
 </resources>

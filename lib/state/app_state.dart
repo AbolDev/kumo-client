@@ -183,6 +183,9 @@ class AppState extends ChangeNotifier {
   bool showVolume = false;
   bool showName = true;
 
+  /// Android: a "not connected" notification with a Connect button stays after a disconnect.
+  bool idleNotification = true;
+
   // Core settings
   String delayUrl = defaultDelayUrl;
 
@@ -310,6 +313,7 @@ class AppState extends ChangeNotifier {
     await _loadUsage();
     await _loadServers();
     delayTestUrl = delayUrl;
+    if (idleNotification) VpnChannel.setIdleNotification(true);
     VpnChannel.scheduleSubUpdates(autoUpdateSubs).catchError((_) {});
     notifyListeners();
     // Nothing is tested on its own: the user pings when they want to.
@@ -354,7 +358,15 @@ class AppState extends ChangeNotifier {
   void _keepSelected() {
     final chosen = selected;
     if (chosen == null || all.contains(chosen)) return;
-    selected = all.where((c) => c.key == chosen.key).firstOrNull;
+    selected = all.where((c) => c.key == chosen.key).firstOrNull ??
+        // A provider that rotated the credentials or path keeps the server's name and address.
+        all
+            .where((c) =>
+                c.protocol == chosen.protocol &&
+                c.host == chosen.host &&
+                c.port == chosen.port &&
+                c.name == chosen.name)
+            .firstOrNull;
   }
 
   /// Puts a downloaded subscription into [g]. Returns how many configs it has.
@@ -447,6 +459,7 @@ class AppState extends ChangeNotifier {
       showSpeed = flag('showSpeed', true);
       showVolume = flag('showVolume', false);
       showName = flag('showName', true);
+      idleNotification = flag('idleNotification', true);
       final url = j['delayUrl'];
       if (url is String && url.startsWith('http') && url != oldDefaultDelayUrl) {
         delayUrl = url;
@@ -477,6 +490,7 @@ class AppState extends ChangeNotifier {
           'showSpeed': showSpeed,
           'showVolume': showVolume,
           'showName': showName,
+          'idleNotification': idleNotification,
           'delayUrl': delayUrl,
           'net': net.toJson(),
         })).catchError((_) {});
@@ -509,6 +523,9 @@ class AppState extends ChangeNotifier {
         showVolume = value;
       case 'showName':
         showName = value;
+      case 'idleNotification':
+        idleNotification = value;
+        VpnChannel.setIdleNotification(value);
       case 'showCollector':
         showCollector = value;
         if (!value) {
@@ -590,7 +607,13 @@ class AppState extends ChangeNotifier {
         if (g.configs.any((c) => c.latencyMs != null)) _sort(g);
       }
       final link = j['selected'] as String?;
-      selected = all.where((c) => c.link == link).firstOrNull;
+      final inGroup = j['selectedGroup'] as String?;
+      // The same link can be in two groups: the one that was picked is the one that comes back.
+      selected = [
+        for (final g in [collector, manual, ...subscriptions])
+          if (g.id == inGroup) ...g.configs,
+      ].where((c) => c.link == link).firstOrNull ??
+          all.where((c) => c.link == link).firstOrNull;
     } catch (_) {
       // missing or corrupt store: start fresh
     }
@@ -705,6 +728,10 @@ class AppState extends ChangeNotifier {
           },
       ],
       'selected': selected?.link,
+      'selectedGroup': [collector, manual, ...subscriptions]
+          .where((g) => g.configs.any((c) => identical(c, selected)))
+          .firstOrNull
+          ?.id,
     });
     VpnChannel.writeFile(_storeFile, data).catchError((_) {});
   }

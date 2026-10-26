@@ -29,7 +29,12 @@ object VpnBridge {
 
     private val main = Handler(Looper.getMainLooper())
 
+    /** The server in use, for the widgets. */
+    @Volatile
+    var serverName: String? = null
+
     fun traffic(up: Long, down: Long, upTotal: Long, downTotal: Long) {
+        WidgetFeed.onTraffic(up, down, upTotal, downTotal)
         if (trafficListener == null) return // the app is in the background
         main.post { trafficListener?.invoke(up, down, upTotal, downTotal) }
     }
@@ -64,10 +69,14 @@ object VpnBridge {
     fun update(newStatus: String, error: String? = null) {
         status = newStatus
         lastError = error
+        if (newStatus == STOPPED || newStatus == ERROR) {
+            WidgetFeed.reset()
+            serverName = null
+        }
         main.post {
             listener?.invoke(newStatus, error)
             observers.forEach { it(newStatus, error) }
-            runCatching { VpnWidget.refresh(App.instance) }
+            runCatching { KumoWidget.refreshAll(App.instance) }
         }
     }
 }

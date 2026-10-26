@@ -106,6 +106,14 @@ class VpnChannel {
   static Future<void> scheduleSubUpdates(bool enabled) async =>
       _win ? null : _control.invokeMethod('scheduleSubUpdates', {'enabled': enabled});
 
+  /// Android: shows or removes the "not connected" notification (it is only shown while the VPN is off).
+  static Future<void> setIdleNotification(bool enabled) async {
+    if (_win) return;
+    try {
+      await _control.invokeMethod('idleNotification', {'enabled': enabled});
+    } catch (_) {}
+  }
+
   /// Whether Android already lets the app run without battery restrictions.
   static Future<bool> batteryUnrestricted() async => _win
       ? true

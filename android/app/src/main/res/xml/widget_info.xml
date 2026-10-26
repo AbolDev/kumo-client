@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:configure="app.kumo.vpn.WidgetConfigActivity"
     android:initialLayout="@layout/widget_vpn"
     android:minWidth="140dp"
     android:minHeight="56dp"
-    android:resizeMode="horizontal"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="40dp"
+    android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
-    android:widgetCategory="home_screen" />
+    android:widgetCategory="home_screen"
+    android:widgetFeatures="reconfigurable" />
