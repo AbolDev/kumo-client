@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'extra_langs.dart';
 import 'extra_more.dart';
+import 'extra_privacy.dart';
 
 /// Texts of the newer features, in every language the app has.
 String tr(BuildContext context, String key, [Map<String, Object>? args]) =>
@@ -16,12 +17,13 @@ String trFor(String lang, String key, [Map<String, Object>? args]) {
 }
 
 const _extra = <String, Map<String, String>>{
-  'ru': {...extraRu, ...extraMoreRu},
-  'vi': {...extraVi, ...extraMoreVi},
-  'zh': {...extraZh, ...extraMoreZh},
-  'ar': {...extraAr, ...extraMoreAr},
+  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu},
+  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi},
+  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh},
+  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr},
   'en': {
     ...extraMoreEn,
+    ...extraPrivacyEn,
     'languageDevice': 'Same as device',
     'notifIdle': 'Notification when not connected',
     'notifIdleDesc': 'Keeps a notification with a Connect button after you disconnect.',
@@ -137,6 +139,7 @@ const _extra = <String, Map<String, String>>{
   },
   'fa': {
     ...extraMoreFa,
+    ...extraPrivacyFa,
     'languageDevice': 'مطابق دستگاه',
     'notifIdle': 'اعلان در حالت قطع',
     'notifIdleDesc': 'بعد از قطع اتصال، یک اعلان با دکمهٔ اتصال باقی می‌ماند.',

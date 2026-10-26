@@ -10,6 +10,7 @@ import 'core/vpn_channel.dart';
 import 'l10n/extra.dart';
 import 'l10n/strings.dart';
 import 'screens/home_page.dart';
+import 'screens/onboarding_page.dart';
 import 'screens/update_dialog.dart';
 import 'widgets/title_bar.dart';
 import 'state/app_state.dart';
@@ -59,7 +60,7 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
       // A newer stable release is offered when the app opens.
       Future<void>.delayed(const Duration(seconds: 3), () {
         final context = _navigator.currentContext;
-        if (context != null && context.mounted) checkAndPrompt(context, silent: true);
+        if (context != null && context.mounted && _state.onboarded) checkAndPrompt(context, silent: true);
       });
       // Connect on startup (the phone does this from its boot receiver).
       if (isDesktop && _state.autoConnect && !_state.connected) {
@@ -158,7 +159,7 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
 
   /// Offers once to lift Android's battery restriction, which can stop the VPN in the background.
   Future<void> _askBatteryOnce() async {
-    if (_state.batteryAsked) return;
+    if (_state.batteryAsked || !_state.onboarded) return;
     final context = _navigator.currentContext;
     if (context == null || !context.mounted) return;
     if (await VpnChannel.batteryUnrestricted()) {
@@ -231,7 +232,11 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
         theme: _theme(Brightness.light),
         darkTheme: _theme(Brightness.dark),
         themeMode: _state.themeMode,
-        home: HomePage(state: _state),
+        home: !_state.settingsLoaded
+            ? const Scaffold()
+            : _state.onboarded
+                ? HomePage(state: _state)
+                : OnboardingPage(state: _state),
       ),
     );
   }

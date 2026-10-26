@@ -44,12 +44,12 @@ Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-know
 
 - **Live speed** and a notification that shows the speed, the transferred data and the server name, each of which you can turn on or off.
 - **Live connections** and **usage statistics** per day and per server.
-- **IP and DNS leak check.**
+- **IP, DNS and WebRTC leak check**, with *Strict DNS* (every lookup stays inside the VPN), *Block WebRTC leaks* and *Block ads and trackers* (a ready-made list, also in local proxy mode).
 - **Service test and connection check** (the ⋮ menu): see whether ChatGPT, Netflix, YouTube, Telegram and others open through the current connection, or run a quick "why can't I connect?" check.
 - **Why it disconnected**, shown on the home screen, and **alerts** when a subscription is nearly out of data or about to expire.
 - **Android widgets** (button, icon-size, and a live speed / data widget that shows the server name when it is big enough), each with its own colour, shape and size. A *not connected* notification with a Connect button stays after a disconnect (can be turned off).
 
-**Android extras:** a Quick Settings tile, a home screen widget, and reconnect after the phone restarts.
+**Android extras:** a first-run guide (VPN permission, language, country), Android TV support with a remote control, a Quick Settings tile, a home screen widget, and reconnect after the phone restarts.
 
 **Desktop extras (Windows, Linux, macOS):** a tray icon (closing the window keeps the VPN running), start when you sign in, and a layout made for wide windows.
 

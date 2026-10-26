@@ -139,6 +139,12 @@ List<Widget> networkSections(
         ),
       flag(tr(context, 'fakeIp'), tr(context, 'fakeIpDesc'), o.fakeIp,
           (v) => o.fakeIp = v),
+      flag(tr(context, 'strictDns'), tr(context, 'strictDnsDesc'), o.strictDns,
+          (v) => o.strictDns = v),
+      flag(tr(context, 'blockStun'), tr(context, 'blockStunDesc'), o.blockStun,
+          (v) => o.blockStun = v),
+      flag(tr(context, 'blockAds'), tr(context, 'blockAdsDesc'), o.blockAds,
+          (v) => o.blockAds = v),
       ListTile(
         leading: const Icon(Icons.travel_explore),
         title: Text(tr(context, 'dnsCheck')),
@@ -616,7 +622,7 @@ Future<void> _leakCheck(BuildContext context, AppState state) async {
               'ip': r.ip,
               'country': r.country,
               'dns': state.net.dnsAddress,
-            })}';
+            })}\n\n${r.webrtc == null ? tr(context, 'webrtcNone') : r.webrtc == r.ip ? tr(context, 'webrtcSame', {'ip': r.webrtc!}) : tr(context, 'webrtcLeak', {'ip': r.webrtc!})}';
   await showDialog<void>(
     context: context,
     builder: (dialog) => AlertDialog(

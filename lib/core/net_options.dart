@@ -141,6 +141,19 @@ class NetOptions {
   /// Look up names with fake addresses (TUN only): the real lookup happens at the server.
   bool fakeIp = false;
 
+  /// Refuse the addresses of advertising and tracking sites (a ready-made list that is
+  /// downloaded). Works with the local proxy too, not only the tunnel.
+  bool blockAds = false;
+
+  /// Keep every name lookup inside the VPN: the server names and the DNS server itself are
+  /// looked up over encrypted DNS instead of the network's own resolver, and DNS over TLS that
+  /// would skip the tunnel's resolver is refused.
+  bool strictDns = false;
+
+  /// Refuse STUN, which browsers use for WebRTC and which can show the address of the network
+  /// instead of the VPN's.
+  bool blockStun = false;
+
   /// Let the core set its own clock from a time server (protocols with time checks need it).
   bool ntp = false;
 
@@ -211,6 +224,9 @@ class NetOptions {
         'connectTimeout': connectTimeout,
         'certStore': certStore,
         'fakeIp': fakeIp,
+        'blockAds': blockAds,
+        'strictDns': strictDns,
+        'blockStun': blockStun,
         'ntp': ntp,
         'networkStrategy': networkStrategy,
         'directWifi': directWifi,
@@ -270,6 +286,9 @@ class NetOptions {
     tcpFastOpen = flag('tcpFastOpen', false);
     tcpMultiPath = flag('tcpMultiPath', false);
     fakeIp = flag('fakeIp', false);
+    blockAds = flag('blockAds', false);
+    strictDns = flag('strictDns', false);
+    blockStun = flag('blockStun', false);
     ntp = flag('ntp', false);
     final timeout = j['connectTimeout'];
     connectTimeout = timeout is int && timeout >= 0 && timeout <= 120 ? timeout : 0;

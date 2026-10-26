@@ -12,6 +12,7 @@ import '../core/net_options.dart';
 import '../core/platform.dart';
 import '../core/proxy_config.dart';
 import '../core/rule_sets.dart';
+import '../core/stun.dart';
 import '../core/singbox_config.dart';
 import '../core/sources.dart';
 import '../core/sub_formats.dart';
@@ -198,6 +199,15 @@ class AppState extends ChangeNotifier {
   bool restartOnChange = true;
   bool confirmDelete = true;
   bool batteryAsked = false;
+
+  /// False until the first-run guide has been finished; people who already had settings skip it.
+  bool onboarded = false;
+
+  /// True once the saved settings have been read (before that the first-run guide must not show).
+  bool settingsLoaded = false;
+
+  /// The country the user lives in, chosen in the first-run guide (two letters, or empty).
+  String homeCountry = '';
 
   /// The public servers group can be hidden; it is on by default.
   bool showCollector = true;
@@ -401,6 +411,8 @@ class AppState extends ChangeNotifier {
     });
 
     await _loadSettings();
+    settingsLoaded = true;
+    notifyListeners();
     await _loadLogs();
     await _loadUsage();
     await _loadServers();
@@ -550,6 +562,8 @@ class AppState extends ChangeNotifier {
       restartOnChange = flag('restartOnChange', true);
       confirmDelete = flag('confirmDelete', true);
       batteryAsked = flag('batteryAsked', false);
+      onboarded = flag('onboarded', true);
+      homeCountry = j['homeCountry'] is String ? j['homeCountry'] as String : '';
       showCollector = flag('showCollector', true);
       final order = j['groupOrder'];
       if (order is List) groupOrder = order.whereType<String>().toList();
@@ -591,6 +605,8 @@ class AppState extends ChangeNotifier {
           'restartOnChange': restartOnChange,
           'confirmDelete': confirmDelete,
           'batteryAsked': batteryAsked,
+          'onboarded': onboarded,
+          'homeCountry': homeCountry,
           'showCollector': showCollector,
           'groupOrder': groupOrder,
           'showSpeed': showSpeed,
@@ -661,13 +677,24 @@ class AppState extends ChangeNotifier {
       {bool reconnect = true}) async {
     change(net);
     _saveSettings();
-    if (net.bypass.isNotEmpty) ensureRuleSets(await VpnChannel.dataDir(), net.bypass).catchError((_) => <String, String>{});
+    if (net.bypass.isNotEmpty || net.blockAds) {
+      ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds)
+          .catchError((_) => <String, String>{});
+    }
     if (reconnect && connected) await _reconnect();
   }
 
   void setDelayUrl(String url) {
     delayUrl = url;
     delayTestUrl = url;
+    _saveSettings();
+  }
+
+  /// Ends the first-run guide, keeping the chosen language (null = follow the device) and country.
+  void finishOnboarding({String? language, String country = ''}) {
+    languageCode = language;
+    homeCountry = country;
+    onboarded = true;
     _saveSettings();
   }
 
@@ -1207,8 +1234,8 @@ class AppState extends ChangeNotifier {
     _preparing = false;
     _xrayPort = null;
     try {
-      final sets = net.bypass.isNotEmpty
-          ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass)
+      final sets = net.bypass.isNotEmpty || net.blockAds
+          ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds)
           : <String, String>{};
       if (cancelled()) return;
       apiPort = await _freePort();
@@ -1331,7 +1358,7 @@ class AppState extends ChangeNotifier {
 
   /// Asks a public service which address and country it sees (through the tunnel or the local
   /// proxy when connected). Returns null when the request fails.
-  Future<({String ip, String country})?> checkLeak() async {
+  Future<({String ip, String country, String? webrtc})?> checkLeak() async {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
     if (connected && !net.tun) {
       client.findProxy = (_) => 'PROXY 127.0.0.1:${net.proxyPort}';
@@ -1346,7 +1373,10 @@ class AppState extends ChangeNotifier {
         for (final l in body.split('\n'))
           if (l.contains('=')) l.split('=').first: l.substring(l.indexOf('=') + 1),
       };
-      return (ip: map['ip'] ?? '?', country: map['loc'] ?? '?');
+      // The address a browser's WebRTC would show: a UDP request does not use the local proxy,
+      // so with the tunnel off it shows the network's own address.
+      final webrtc = await stunAddress();
+      return (ip: map['ip'] ?? '?', country: map['loc'] ?? '?', webrtc: webrtc);
     } catch (_) {
       return null;
     } finally {

@@ -685,10 +685,32 @@ class _PowerButton extends StatefulWidget {
 
 class _PowerButtonState extends State<_PowerButton> {
   bool _down = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final color = widget.color;
+    // A remote control (Android TV) or the keyboard moves focus here and presses with OK / Enter.
+    return Focus(
+      onFocusChange: (v) => setState(() => _focused = v),
+      onKeyEvent: (_, event) {
+        final key = event.logicalKey;
+        if (event is KeyDownEvent &&
+            (key == LogicalKeyboardKey.select ||
+                key == LogicalKeyboardKey.enter ||
+                key == LogicalKeyboardKey.numpadEnter ||
+                key == LogicalKeyboardKey.space ||
+                key == LogicalKeyboardKey.gameButtonA)) {
+          widget.onTap?.call();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: _button(color),
+    );
+  }
+
+  Widget _button(Color color) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _down = true),
       onTapCancel: () => setState(() => _down = false),
@@ -705,7 +727,9 @@ class _PowerButtonState extends State<_PowerButton> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: color.withValues(alpha: widget.on ? 0.22 : 0.12),
-            border: Border.all(color: color, width: 4),
+            border: Border.all(
+                color: _focused ? Theme.of(context).colorScheme.onSurface : color,
+                width: _focused ? 8 : 4),
             boxShadow: [
               BoxShadow(
                 color: color.withValues(alpha: widget.on ? 0.35 : 0.18),

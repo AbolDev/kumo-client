@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'net_options.dart';
 import 'proxy_config.dart';
 import 'routing_rules.dart';
+import 'rule_sets.dart' show adsTag;
 
 /// Merges [extra] (a JSON object the user typed) into [target], map by map; lists and values from
 /// [extra] replace the ones in [target].
@@ -219,14 +220,14 @@ Map<String, dynamic> _tweak(Map<String, dynamic> source, NetOptions o,
 
 /// The DNS server for the chosen address: plain UDP, `tcp://`, `tls://` (DoT), `quic://` (DoQ),
 /// `https://` (DoH) or `h3://` (DoH over HTTP/3). It is always reached through the proxy.
-Map<String, dynamic> _dnsServer(String address) {
+Map<String, dynamic> _dnsServer(String address, {String resolver = 'dns-local'}) {
   final scheme = RegExp(r'^(https|h3|tls|quic|tcp|udp)://').firstMatch(address)?[1];
   if (scheme == null) {
     return {
       'type': 'udp',
       'tag': 'dns-remote',
       'server': address,
-      'domain_resolver': 'dns-local',
+      'domain_resolver': resolver,
       'detour': 'proxy',
     };
   }
@@ -240,7 +241,7 @@ Map<String, dynamic> _dnsServer(String address) {
         uri.path.isNotEmpty &&
         uri.path != '/dns-query')
       'path': uri.path,
-    'domain_resolver': 'dns-local',
+    'domain_resolver': resolver,
     'detour': 'proxy',
   };
 }
@@ -420,7 +421,9 @@ String buildSingBoxConfig(
     });
   }
 
-  final sets = ruleSets.keys.toList();
+  final sets = ruleSets.keys.where((t) => t != adsTag).toList();
+  final adSet = o.blockAds && ruleSets.containsKey(adsTag) ? adsTag : null;
+  final strict = o.strictDns;
   final iran = o.bypass.isNotEmpty;
   final suffixes = [for (final c in o.bypass) '.$c'];
   final block = _RuleFields(o.blockRules);
@@ -434,6 +437,10 @@ String buildSingBoxConfig(
     {'action': 'sniff'},
     {'protocol': 'dns', 'action': 'hijack-dns'},
     ...block.rules({'action': 'reject'}),
+    if (adSet != null) {'rule_set': [adSet], 'action': 'reject'},
+    // WebRTC would show the network's own address; DNS over TLS would skip the resolver above.
+    if (o.blockStun) {'protocol': 'stun', 'action': 'reject'},
+    if (strict) {'port': 853, 'network': 'tcp', 'action': 'reject'},
     if (wifi) {'wifi_ssid': o.directWifi, 'outbound': 'direct'},
     ...proxy.rules({'outbound': 'proxy'}),
     ...direct.rules({'outbound': 'direct'}),
@@ -456,6 +463,7 @@ String buildSingBoxConfig(
   final dnsRules = <Map<String, dynamic>>[
     // blocked names fail at once
     ...block.rules({'action': 'reject'}, domainsOnly: true),
+    if (adSet != null) {'rule_set': [adSet], 'action': 'reject'},
     if (wifi) {'wifi_ssid': o.directWifi, 'server': 'dns-local'},
     // names the user sends direct are also looked up locally, not through the VPN
     ...direct.rules({'server': 'dns-local'}, domainsOnly: true),
@@ -480,8 +488,12 @@ String buildSingBoxConfig(
       },
     'dns': {
       'servers': [
-        _dnsServer(o.dnsAddress),
+        _dnsServer(o.dnsAddress, resolver: strict ? 'dns-boot' : 'dns-local'),
         {'type': 'local', 'tag': 'dns-local'},
+        // Looks up server names over encrypted DNS, straight out, so the network's resolver
+        // never sees them.
+        if (strict)
+          {'type': 'https', 'tag': 'dns-boot', 'server': '1.1.1.1'},
         if (fakeIp)
           {
             'type': 'fakeip',
@@ -498,9 +510,10 @@ String buildSingBoxConfig(
     if (endpoints.isNotEmpty) 'endpoints': endpoints,
     'route': {
       'rules': rules,
-      if (sets.isNotEmpty && iran)
+      if ((sets.isNotEmpty && iran) || adSet != null)
         'rule_set': [
           for (final e in ruleSets.entries)
+            if (e.key == adSet || (iran && e.key != adsTag))
             {
               'type': 'local',
               'tag': e.key,
@@ -510,7 +523,7 @@ String buildSingBoxConfig(
         ],
       'final': processRules && o.appMode == AppMode.only ? 'direct' : 'proxy',
       'auto_detect_interface': true,
-      'default_domain_resolver': 'dns-local',
+      'default_domain_resolver': strict ? 'dns-boot' : 'dns-local',
       if (processRules) 'find_process': true,
       if (!windows && o.networkStrategy != 'default') ...{
         'default_network_strategy': o.networkStrategy,
