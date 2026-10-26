@@ -55,7 +55,7 @@ Kumo is powered by [sing-box](https://github.com/SagerNet/sing-box), a well-know
 
 **Protocols:** VLESS (with Reality, XHTTP and encryption), VMess, Trojan, Shadowsocks (with obfs, v2ray-plugin and ShadowTLS), Hysteria 2 and 1, TUIC, AnyTLS, WireGuard, SOCKS, SSH and NaiveProxy (not on Android), over TCP, WebSocket, gRPC, HTTP Upgrade, HTTP/2, QUIC, mKCP and XHTTP.
 
-**Routing and tuning:** your own rules by domain, keyword, pattern, address or port (direct, through the VPN, or blocked), staying off on trusted Wi-Fi networks (Android), fake IP, DNS over HTTPS, HTTP/3, TLS, QUIC and TCP, TCP Fast Open, MUX protocols, a log level, and your own JSON for sing-box and Xray.
+**Routing and tuning:** your own rules by domain, keyword, pattern, address or port (direct, through the VPN, or blocked), fake IP, DNS over HTTPS, HTTP/3, TLS, QUIC and TCP, TCP Fast Open, MUX protocols, a log level, and your own JSON for sing-box and Xray.
 
 **Everything else:** light and dark themes, an update check against GitHub Releases, and seven languages: English, فارسی, العربية, Русский, Tiếng Việt, 简体中文 and 繁體中文. Kumo follows your device's language, or you can pick one in Settings.
 ## Download

@@ -82,16 +82,6 @@ List<Widget> networkSections(
           MaterialPageRoute<void>(builder: (_) => RoutingRulesPage(state: state)),
         ),
       ),
-      // Android: the connection stays off on Wi-Fi networks the user trusts.
-      if (!win)
-        ListTile(
-          leading: const Icon(Icons.wifi),
-          title: Text(tr(context, 'wifiDirect')),
-          subtitle: Text(o.directWifi.isEmpty
-              ? tr(context, 'wifiDirectDesc')
-              : o.directWifi.join(', ')),
-          onTap: () => _editWifi(context, state),
-        ),
       flag(tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),
           o.killSwitch, (v) => o.killSwitch = v),
       if (!win)
@@ -325,79 +315,6 @@ Future<void> _editTimeout(BuildContext context, AppState state) async {
   controller.dispose();
   if (seconds == null || seconds < 0 || seconds > 120) return;
   await state.updateNet((o) => o.connectTimeout = seconds);
-}
-
-/// Android: the Wi-Fi networks on which the connection stays off.
-Future<void> _editWifi(BuildContext context, AppState state) async {
-  final names = List<String>.of(state.net.directWifi);
-  final input = TextEditingController();
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (dialog) => StatefulBuilder(
-      builder: (dialog, setState) {
-        void add(String name) {
-          final n = name.trim();
-          if (n.isNotEmpty && !names.contains(n)) setState(() => names.add(n));
-          input.clear();
-        }
-
-        return AlertDialog(
-          title: Text(tr(dialog, 'wifiDirect')),
-          content: SizedBox(
-            width: 380,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(tr(dialog, 'wifiNote'), style: Theme.of(dialog).textTheme.bodySmall),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: input,
-                  onSubmitted: add,
-                  decoration: InputDecoration(
-                    labelText: tr(dialog, 'wifiName'),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(icon: const Icon(Icons.add), onPressed: () => add(input.text)),
-                  ),
-                ),
-                TextButton.icon(
-                  icon: const Icon(Icons.wifi_find),
-                  label: Text(tr(dialog, 'wifiAddCurrent')),
-                  onPressed: () async {
-                    final access = await VpnChannel.wifiAccess(request: true);
-                    if (!dialog.mounted) return;
-                    if (access.name != null) {
-                      add(access.name!);
-                    } else {
-                      toast(dialog, tr(dialog, access.granted ? 'wifiNoName' : 'wifiNeedsPermission'));
-                    }
-                  },
-                ),
-                for (final n in names)
-                  ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.wifi),
-                    title: Text(n),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => names.remove(n)),
-                    ),
-                  ),
-              ]),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('✕')),
-            FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('OK')),
-          ],
-        );
-      },
-    ),
-  );
-  input.dispose();
-  if (saved != true) return;
-  // The name of a network can only be read with the location permission.
-  if (names.isNotEmpty) await VpnChannel.wifiAccess(request: true);
-  await state.updateNet((o) => o.directWifi = names);
 }
 
 String _newPassword() {

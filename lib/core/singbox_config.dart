@@ -429,7 +429,8 @@ String buildSingBoxConfig(
   final block = _RuleFields(o.blockRules);
   final proxy = _RuleFields(o.proxyRules);
   final direct = _RuleFields(o.directRules);
-  final wifi = !windows && o.directWifi.isNotEmpty;
+  // (The "stay off on these Wi-Fi networks" rule is gone: reading a network's name needs the
+  // location permission, which the app no longer asks for.)
   final fakeIp = o.fakeIp && o.tun;
   // The user's own rules come before everything else: what is blocked first, then "through the
   // VPN" (which wins over "direct" if a domain is in both lists), then "direct".
@@ -441,7 +442,6 @@ String buildSingBoxConfig(
     // WebRTC would show the network's own address; DNS over TLS would skip the resolver above.
     if (o.blockStun) {'protocol': 'stun', 'action': 'reject'},
     if (strict) {'port': 853, 'network': 'tcp', 'action': 'reject'},
-    if (wifi) {'wifi_ssid': o.directWifi, 'outbound': 'direct'},
     ...proxy.rules({'outbound': 'proxy'}),
     ...direct.rules({'outbound': 'direct'}),
     {'ip_is_private': true, 'outbound': 'direct'},
@@ -464,7 +464,6 @@ String buildSingBoxConfig(
     // blocked names fail at once
     ...block.rules({'action': 'reject'}, domainsOnly: true),
     if (adSet != null) {'rule_set': [adSet], 'action': 'reject'},
-    if (wifi) {'wifi_ssid': o.directWifi, 'server': 'dns-local'},
     // names the user sends direct are also looked up locally, not through the VPN
     ...direct.rules({'server': 'dns-local'}, domainsOnly: true),
     if (iran) ...[

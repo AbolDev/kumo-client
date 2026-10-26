@@ -52,7 +52,7 @@
 
 **پروتکل‌ها:** VLESS (با Reality، XHTTP و رمزنگاری)، VMess، Trojan، Shadowsocks (با obfs، v2ray-plugin و ShadowTLS)، Hysteria 2 و 1، TUIC، AnyTLS، WireGuard، SOCKS، SSH و NaiveProxy (نه در اندروید)، روی TCP، WebSocket، gRPC، HTTP Upgrade، HTTP/2، QUIC، mKCP و XHTTP. اگر sing-box نتواند سروری را اجرا کند (XHTTP، mKCP، TCP با هدر HTTP، رمزنگاری VLESS)، Xray اجرایش می‌کند و برای سرورهایی که هر دو می‌توانند، هستهٔ پیش‌فرض را خودتان انتخاب می‌کنید.
 
-**مسیریابی و تنظیمات:** قوانین شخصی بر اساس دامنه، کلمه، الگو، آدرس یا پورت (مستقیم، از VPN یا مسدود)، خاموش ماندن روی وای‌فای‌های مطمئن (اندروید)، IP جعلی، DNS روی HTTPS و HTTP/3، تنظیمات TLS و QUIC و TCP، TCP Fast Open، پروتکل‌های MUX، سطح لاگ و JSON دلخواه برای sing-box و Xray.
+**مسیریابی و تنظیمات:** قوانین شخصی بر اساس دامنه، کلمه، الگو، آدرس یا پورت (مستقیم، از VPN یا مسدود)، IP جعلی، DNS روی HTTPS و HTTP/3، تنظیمات TLS و QUIC و TCP، TCP Fast Open، پروتکل‌های MUX، سطح لاگ و JSON دلخواه برای sing-box و Xray.
 
 **موارد دیگر:** حالت روشن و تیره، بررسی نسخه‌ی جدید از GitHub Releases، و هفت زبان: فارسی، English، العربية، Русский، Tiếng Việt، 简体中文 و 繁體中文. کومو از زبان دستگاه پیروی می‌کند یا در تنظیمات زبان را انتخاب کنید.
 ## دانلود

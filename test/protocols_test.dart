@@ -187,7 +187,7 @@ void main() {
     expect(rules.where((r) => r['action'] == 'reject').length, 2);
     expect(rules.any((r) => r['domain'] != null && r['outbound'] == 'direct'), true);
     expect(rules.any((r) => r['port_range'] != null), true);
-    expect(rules.any((r) => r['wifi_ssid'] != null), true);
+    expect(rules.any((r) => r['wifi_ssid'] != null), false);
     final dns = cfg['dns'] as Map;
     expect((dns['servers'] as List).first['type'], 'quic');
     expect((dns['servers'] as List).any((s) => s['type'] == 'fakeip'), true);
