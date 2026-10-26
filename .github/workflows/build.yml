@@ -277,6 +277,8 @@ jobs:
           pattern: 'kumo-*'
           path: dist
           merge-multiple: true
+          # The portable zip must stay a zip instead of being unpacked into dist/.
+          skip-decompress: true
 
       - env:
           GH_TOKEN: ${{ github.token }}
