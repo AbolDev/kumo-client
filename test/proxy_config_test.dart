@@ -134,7 +134,7 @@ void main() {
   test('the log level reaches the core configs and is saved with the options', () {
     final servers = parseLinks(['trojan://p@h1.example.com:443#a']);
     expect(
-        (jsonDecode(buildSingBoxConfig(servers))['log'] as Map)['level'], 'error');
+        (jsonDecode(buildSingBoxConfig(servers))['log'] as Map)['level'], 'warn');
     final o = NetOptions()..logLevel = 'debug';
     expect(
         (jsonDecode(buildSingBoxConfig(servers, options: o))['log'] as Map)['level'],

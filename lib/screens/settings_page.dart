@@ -33,25 +33,79 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  late final _url = TextEditingController(text: widget.state.delayUrl);
-  String? _urlError;
   final _refresh = ValueNotifier<int>(0);
 
   AppState get state => widget.state;
 
   @override
   void dispose() {
-    _url.dispose();
     _refresh.dispose();
     super.dispose();
   }
 
-  void _saveUrl(S t) {
-    final v = _url.text.trim();
-    final ok = v.startsWith('http://') || v.startsWith('https://');
-    setState(() => _urlError = ok ? null : t.invalidUrl);
-    _refresh.value++;
-    if (ok) state.setDelayUrl(v);
+  /// Edits the page used by the real delay test. Any answer counts as a reply, so the status
+  /// code does not matter; a link is required.
+  Future<void> _editDelayUrl(S t) async {
+    final controller = TextEditingController(text: state.delayUrl);
+    String? error;
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (dialog) => StatefulBuilder(
+        builder: (context, setLocal) {
+          void submit() {
+            final v = controller.text.trim();
+            final uri = Uri.tryParse(v);
+            final ok = (v.startsWith('http://') || v.startsWith('https://')) &&
+                uri != null &&
+                uri.host.isNotEmpty;
+            if (ok) {
+              Navigator.pop(dialog, v);
+            } else {
+              setLocal(() => error = t.invalidUrl);
+            }
+          }
+
+          return AlertDialog(
+            title: Text(t.delayUrlTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  textDirection: TextDirection.ltr,
+                  keyboardType: TextInputType.url,
+                  onSubmitted: (_) => submit(),
+                  decoration: InputDecoration(
+                      border: const OutlineInputBorder(), errorText: error),
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.restart_alt),
+                    label: Text(t.resetDefault),
+                    onPressed: () => controller.text = defaultDelayUrl,
+                  ),
+                ),
+                Text(tr(context, 'delayUrlNote'),
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialog), child: Text(t.cancel)),
+              FilledButton(onPressed: submit, child: Text(t.save)),
+            ],
+          );
+        },
+      ),
+    );
+    controller.dispose();
+    if (saved != null) {
+      state.setDelayUrl(saved);
+      _refresh.value++;
+    }
   }
 
   Future<String?> _password(String title) async {
@@ -403,28 +457,14 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ]),
             _section(Icons.memory, t.coreSettings, [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextField(
-                  controller: _url,
-                  textDirection: TextDirection.ltr,
-                  keyboardType: TextInputType.url,
-                  onSubmitted: (_) => _saveUrl(t),
-                  onTapOutside: (_) => _saveUrl(t),
-                  decoration: InputDecoration(
-                    labelText: t.delayUrlTitle,
-                    border: const OutlineInputBorder(),
-                    errorText: _urlError,
-                    suffixIcon: IconButton(
-                      tooltip: t.resetDefault,
-                      icon: const Icon(Icons.restart_alt),
-                      onPressed: () {
-                        _url.text = defaultDelayUrl;
-                        _saveUrl(t);
-                      },
-                    ),
-                  ),
-                ),
+              ListTile(
+                leading: const Icon(Icons.speed),
+                title: Text(t.delayUrlTitle),
+                subtitle: Text(state.delayUrl,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textDirection: TextDirection.ltr),
+                onTap: () => _editDelayUrl(t),
               ),
               ListTile(
                 leading: const Icon(Icons.memory),
@@ -528,10 +568,79 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListenableBuilder(
         listenable: state,
         builder: (context, _) => _page([
-          _group([for (final (i, s) in _sections(context).indexed) _tile([i], s)]),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SearchBar(
+              hintText: tr(context, 'settingsSearch'),
+              leading: const Icon(Icons.search),
+              elevation: const WidgetStatePropertyAll(0),
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              trailing: [
+                if (_query.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() => _query = ''),
+                  ),
+              ],
+            ),
+          ),
+          if (_query.isEmpty)
+            _group([for (final (i, s) in _sections(context).indexed) _tile([i], s)])
+          else
+            ..._results(context),
         ]),
       ),
     );
+  }
+
+  String _query = '';
+
+  /// The words a settings row shows (title and description), lower case.
+  String _words(Widget w) {
+    String text(Widget? t) => t is Text ? (t.data ?? '') : '';
+    return switch (w) {
+      SwitchListTile() => '${text(w.title)} ${text(w.subtitle)}',
+      ListTile() => '${text(w.title)} ${text(w.subtitle)}',
+      RadioListTile() => text(w.title),
+      CheckboxListTile() => '${text(w.title)} ${text(w.subtitle)}',
+      _ => '',
+    }
+        .toLowerCase();
+  }
+
+  /// The rows that match the search, each group under the name of its section. A section whose
+  /// own name matches shows all of its rows.
+  List<Widget> _results(BuildContext context) {
+    final out = <Widget>[];
+    void walk(List<_Section> sections) {
+      for (final s in sections) {
+        final all = s.title.toLowerCase().contains(_query);
+        final hits = [
+          for (final c in s.children)
+            if (all || _words(c).contains(_query)) c,
+        ];
+        if (hits.isNotEmpty) {
+          out
+            ..add(Padding(
+              padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+              child: Text(s.title,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.primary)),
+            ))
+            ..add(_group(hits));
+        }
+        walk(s.subs);
+      }
+    }
+
+    walk(_sections(context));
+    if (out.isEmpty) {
+      out.add(Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(child: Text(tr(context, 'settingsNoMatch'))),
+      ));
+    }
+    return out;
   }
 }
 

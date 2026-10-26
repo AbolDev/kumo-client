@@ -91,6 +91,10 @@ const fingerprints = [
 /// How much the core logs, quietest first; the first is the default.
 const logLevels = ['error', 'warn', 'info', 'debug'];
 
+/// Warnings show what goes wrong (a server that refuses, a rule that fails) without the noise
+/// and the extra work of the chattier levels.
+const defaultLogLevel = 'warn';
+
 /// Everything in Settings that changes how traffic is carried.
 class NetOptions {
   NetOptions();
@@ -117,7 +121,7 @@ class NetOptions {
   String fingerprint = '';
 
   /// Log level of the core (sing-box, and Xray when it runs).
-  String logLevel = logLevels.first;
+  String logLevel = defaultLogLevel;
 
   /// The core for a server both can carry: sing-box (default) or Xray. A server only one of
   /// them can carry always uses that one. Xray runs one chosen server at a time; the automatic
@@ -270,7 +274,7 @@ class NetOptions {
     final fp = j['fingerprint'];
     fingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
     final level = j['logLevel'];
-    logLevel = level is String && logLevels.contains(level) ? level : logLevels.first;
+    logLevel = level is String && logLevels.contains(level) ? level : defaultLogLevel;
     List<String> rules(Object? v) =>
         v is List ? v.whereType<String>().map(normalizeRouteRule).whereType<String>().toList() : [];
     directRules = rules(j['directRules']);

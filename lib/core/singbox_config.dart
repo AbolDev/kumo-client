@@ -476,7 +476,7 @@ String buildSingBoxConfig(
   ];
 
   final config = {
-    'log': {'level': logLevels.contains(o.logLevel) ? o.logLevel : 'error'},
+    'log': {'level': logLevels.contains(o.logLevel) ? o.logLevel : defaultLogLevel},
     if (o.certStore != 'system') 'certificate': {'store': o.certStore},
     if (o.ntp)
       'ntp': {

@@ -2,6 +2,9 @@
 // English is the fallback for any key a language lacks.
 
 const extraPrivacyEn = <String, String>{
+  'delayUrlNote': 'Any reply, whatever its status code, counts as the server answering; only an http or https link is required.',
+  'settingsSearch': 'Search settings',
+  'settingsNoMatch': 'No setting matches.',
   'strictDns': 'Strict DNS (no leaks)',
   'strictDnsDesc': 'Every name lookup stays inside the VPN. Server names are looked up over encrypted DNS, and DNS over TLS that would skip the VPN is refused.',
   'blockStun': 'Block WebRTC leaks',
@@ -25,6 +28,9 @@ const extraPrivacyEn = <String, String>{
 };
 
 const extraPrivacyFa = <String, String>{
+  'delayUrlNote': 'هر پاسخی (با هر کد وضعیت) به‌عنوان پاسخ سرور پذیرفته می‌شود؛ فقط لینک http یا https لازم است.',
+  'settingsSearch': 'جست‌وجو در تنظیمات',
+  'settingsNoMatch': 'تنظیمی پیدا نشد.',
   'strictDns': 'DNS سخت‌گیرانه (بدون نشت)',
   'strictDnsDesc': 'همهٔ جست‌وجوی نام‌ها داخل VPN می‌ماند. نام سرورها با DNS رمزنگاری‌شده پیدا می‌شود و DNS روی TLS که از VPN رد می‌شود مسدود است.',
   'blockStun': 'جلوگیری از نشت WebRTC',
@@ -48,6 +54,9 @@ const extraPrivacyFa = <String, String>{
 };
 
 const extraPrivacyRu = <String, String>{
+  'delayUrlNote': 'Любой ответ с любым кодом состояния считается ответом сервера; нужна только ссылка http или https.',
+  'settingsSearch': 'Поиск по настройкам',
+  'settingsNoMatch': 'Ничего не найдено.',
   'strictDns': 'Строгий DNS (без утечек)',
   'strictDnsDesc': 'Все запросы имён остаются внутри VPN. Имена серверов ищутся через зашифрованный DNS, а DNS через TLS в обход VPN блокируется.',
   'blockStun': 'Блокировать утечки WebRTC',
@@ -71,6 +80,9 @@ const extraPrivacyRu = <String, String>{
 };
 
 const extraPrivacyVi = <String, String>{
+  'delayUrlNote': 'Mọi phản hồi, dù mã trạng thái nào, đều được tính là máy chủ đã trả lời; chỉ cần liên kết http hoặc https.',
+  'settingsSearch': 'Tìm trong cài đặt',
+  'settingsNoMatch': 'Không có cài đặt phù hợp.',
   'strictDns': 'DNS nghiêm ngặt (không rò rỉ)',
   'strictDnsDesc': 'Mọi truy vấn tên đều ở trong VPN. Tên máy chủ được tra qua DNS mã hóa, và DNS qua TLS đi vòng khỏi VPN bị chặn.',
   'blockStun': 'Chặn rò rỉ WebRTC',
@@ -94,6 +106,9 @@ const extraPrivacyVi = <String, String>{
 };
 
 const extraPrivacyZh = <String, String>{
+  'delayUrlNote': '任何响应（无论状态码）都算作服务器已应答；只需填写 http 或 https 链接。',
+  'settingsSearch': '搜索设置',
+  'settingsNoMatch': '没有匹配的设置。',
   'strictDns': '严格 DNS（防泄露）',
   'strictDnsDesc': '所有域名解析都留在 VPN 内。服务器域名通过加密 DNS 解析，绕过 VPN 的 DNS over TLS 会被拒绝。',
   'blockStun': '阻止 WebRTC 泄露',
@@ -117,6 +132,9 @@ const extraPrivacyZh = <String, String>{
 };
 
 const extraPrivacyAr = <String, String>{
+  'delayUrlNote': 'أي رد مهما كان رمز حالته يُعدّ استجابة من الخادم؛ المطلوب فقط رابط http أو https.',
+  'settingsSearch': 'ابحث في الإعدادات',
+  'settingsNoMatch': 'لا توجد إعدادات مطابقة.',
   'strictDns': 'DNS صارم (بلا تسريب)',
   'strictDnsDesc': 'تبقى كل عمليات البحث عن الأسماء داخل VPN. تُحلّ أسماء الخوادم عبر DNS مشفّر، ويُرفض DNS عبر TLS الذي يتجاوز VPN.',
   'blockStun': 'منع تسريب WebRTC',
