@@ -264,11 +264,20 @@ jobs:
           path: dist/kumo-windows-${{ matrix.arch }}-portable.zip
           archive: false
 
-  # Linux: a tar.gz of the program folder and a .deb that also lets the core open the tunnel
-  # without a password. Built on Ubuntu 22.04 so it runs on older systems too.
+  # Linux, for x64 and arm64: a .deb (the installer, which also lets the core open the tunnel
+  # without a password) and a portable tar.gz (a `portable` file makes it keep its data in a
+  # folder beside it). Built on Ubuntu 22.04 so it runs on older systems too.
   linux:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -280,6 +289,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.4'
+          architecture: ${{ matrix.arch }}
           cache: true
           pub-cache: true
 
@@ -287,39 +297,46 @@ jobs:
       - run: flutter pub get
 
       # sing-box, Xray and the library NaiveProxy needs, next to the program.
-      - run: bash tools/fetch_unix_core.sh linux
+      - run: bash tools/fetch_unix_core.sh linux ${{ matrix.arch }}
 
       - run: flutter build linux --release --no-pub
 
       - name: Package
         run: |
-          mkdir dist
-          tar -czf dist/kumo-linux-x64.tar.gz -C build/linux/x64/release --transform 's,^bundle,kumo,' bundle
+          arch="${{ matrix.arch }}"
+          deb_arch="amd64"; [ "$arch" = arm64 ] && deb_arch="arm64"
+          bundle="build/linux/$arch/release/bundle"
+          mkdir -p dist stage
+          cp -r "$bundle" stage/kumo
+          : > stage/kumo/portable
+          tar -czf "dist/kumo-linux-$arch-portable.tar.gz" -C stage kumo
           version="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"
-          pkg="deb/kumo_${version}_amd64"
+          pkg="deb/kumo_${version}_${deb_arch}"
           mkdir -p "$pkg/opt/kumo" "$pkg/usr/share/applications" "$pkg/usr/share/pixmaps" "$pkg/DEBIAN"
-          cp -r build/linux/x64/release/bundle/. "$pkg/opt/kumo/"
+          cp -r "$bundle/." "$pkg/opt/kumo/"
           install -m644 packaging/linux/kumo.desktop "$pkg/usr/share/applications/kumo.desktop"
           install -m644 linux/runner/resources/kumo.png "$pkg/usr/share/pixmaps/kumo.png"
-          sed "s/@VERSION@/$version/" packaging/linux/control > "$pkg/DEBIAN/control"
+          sed -e "s/@VERSION@/$version/" -e "s/@ARCH@/$deb_arch/" packaging/linux/control > "$pkg/DEBIAN/control"
           install -m755 packaging/linux/postinst "$pkg/DEBIAN/postinst"
-          dpkg-deb --build --root-owner-group "$pkg" dist/kumo-linux-x64.deb
+          dpkg-deb --build --root-owner-group "$pkg" "dist/kumo-linux-$arch.deb"
 
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/kumo-linux-x64.tar.gz
+          path: dist/kumo-linux-${{ matrix.arch }}.deb
           archive: false
 
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/kumo-linux-x64.deb
+          path: dist/kumo-linux-${{ matrix.arch }}-portable.tar.gz
           archive: false
 
-  # macOS: one universal app (Intel and Apple silicon) in a zip. It is signed ad hoc only, so
+  # macOS: one universal app (Intel and Apple silicon) and a copy for each architecture, each as a
+  # disk image (the installer: drag the app to Applications) and a portable zip (the app with a
+  # `portable` file beside it, so its data stays in a folder next to it). Signed ad hoc only, so
   # macOS asks the user to allow it the first time.
   macos:
     runs-on: macos-14
-    timeout-minutes: 40
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -337,17 +354,57 @@ jobs:
 
       - run: flutter build macos --release --no-pub
 
-      - name: Put the cores in the app and sign it
+      - name: Put the cores in the app, sign it and package it
         run: |
           app="build/macos/Build/Products/Release/Kumo.app"
           cp macos/core/kumo-core macos/core/kumo-xray "$app/Contents/MacOS/"
           codesign --force --deep --sign - "$app"
-          mkdir dist
-          ditto -c -k --sequesterRsrc --keepParent "$app" dist/kumo-macos-universal.zip
+          mkdir -p dist work/universal
+          ditto "$app" work/universal/Kumo.app
+          bash tools/thin_macos_app.sh "$app" work/arm64/Kumo.app arm64
+          bash tools/thin_macos_app.sh "$app" work/x64/Kumo.app x86_64
+          for a in universal arm64 x64; do
+            stage="work/dmg-$a"
+            mkdir -p "$stage"
+            ditto "work/$a/Kumo.app" "$stage/Kumo.app"
+            ln -s /Applications "$stage/Applications"
+            hdiutil create -volname "Kumo" -srcfolder "$stage" -ov -format UDZO "dist/kumo-macos-$a.dmg"
+            portable="work/portable-$a/Kumo-portable"
+            mkdir -p "$portable"
+            ditto "work/$a/Kumo.app" "$portable/Kumo.app"
+            : > "$portable/portable"
+            ditto -c -k --sequesterRsrc --keepParent "$portable" "dist/kumo-macos-$a-portable.zip"
+          done
+          ls -l dist
 
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/kumo-macos-universal.zip
+          path: dist/kumo-macos-universal.dmg
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-macos-universal-portable.zip
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-macos-arm64.dmg
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-macos-arm64-portable.zip
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-macos-x64.dmg
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-macos-x64-portable.zip
           archive: false
 
   # A pushed version tag becomes a release holding the four APKs, the Windows installer and

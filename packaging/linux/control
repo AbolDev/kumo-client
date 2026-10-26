@@ -2,7 +2,7 @@ Package: kumo
 Version: @VERSION@
 Section: net
 Priority: optional
-Architecture: amd64
+Architecture: @ARCH@
 Maintainer: AbolDev <abolfazlbaghery07@gmail.com>
 Depends: libgtk-3-0, libayatana-appindicator3-1 | libappindicator3-1, policykit-1 | pkexec
 Homepage: https://github.com/AbolDev/kumo-client

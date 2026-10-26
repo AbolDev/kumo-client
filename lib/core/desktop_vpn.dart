@@ -48,12 +48,22 @@ class DesktopVpn {
 
   static String get _exeDir => File(Platform.resolvedExecutable).parent.path;
 
+  /// The folder the portable marker sits in: next to the program, or on macOS next to the
+  /// `.app` (the program is Kumo.app/Contents/MacOS/Kumo).
+  static String get _portableRoot {
+    if (!Platform.isMacOS) return _exeDir;
+    return File(Platform.resolvedExecutable).parent.parent.parent.parent.path;
+  }
+
   /// The portable build has a file named `portable` next to the program: everything it saves then
-  /// stays in the `data` folder beside it, so the folder can be moved or put on a USB drive.
-  static final bool portable = File('$_exeDir${_sep}portable').existsSync();
+  /// stays in a data folder beside it, so the folder can be moved or put on a USB drive.
+  static final bool portable = File('$_portableRoot${_sep}portable').existsSync();
 
   String get dataDir {
-    if (portable) return '$_exeDir${_sep}data';
+    if (portable) {
+      // Windows keeps the name it had from the start; the Linux bundle has its own `data` folder.
+      return '$_portableRoot$_sep${Platform.isWindows ? 'data' : 'kumo-data'}';
+    }
     final env = Platform.environment;
     if (Platform.isWindows) {
       return '${env['APPDATA'] ?? Directory.systemTemp.path}\\Kumo';
