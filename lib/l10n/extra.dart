@@ -3,10 +3,13 @@ import 'package:flutter/widgets.dart';
 import 'extra_langs.dart';
 import 'extra_more.dart';
 import 'extra_privacy.dart';
+import 'strings.dart';
 
 /// Texts of the newer features, in every language the app has.
-String tr(BuildContext context, String key, [Map<String, Object>? args]) =>
-    trFor(Localizations.localeOf(context).languageCode, key, args);
+String tr(BuildContext context, String key, [Map<String, Object>? args]) => trFor(
+    S.forcedLanguage?.split('-').first ?? Localizations.localeOf(context).languageCode,
+    key,
+    args);
 
 /// Same for a language code, when there is no context (the tray menu).
 String trFor(String lang, String key, [Map<String, Object>? args]) {

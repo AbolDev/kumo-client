@@ -609,12 +609,33 @@ class _SettingsPageState extends State<SettingsPage> {
   /// own name matches shows all of its rows.
   List<Widget> _results(BuildContext context) {
     final out = <Widget>[];
-    void walk(List<_Section> sections) {
-      for (final s in sections) {
-        final all = s.title.toLowerCase().contains(_query);
+    // The same screen built in every language, so a word typed in any of them finds the row.
+    final others = <List<_Section>>[];
+    try {
+      for (final code in S.languageNames.keys) {
+        S.forcedLanguage = code;
+        others.add(_sections(context));
+      }
+    } finally {
+      S.forcedLanguage = null;
+    }
+    void walk(List<_Section> sections, List<List<_Section>> others) {
+      for (final (i, s) in sections.indexed) {
+        final twins = [
+          for (final o in others)
+            if (i < o.length) o[i],
+        ];
+        final all = [s.title, for (final t in twins) t.title]
+            .any((t) => t.toLowerCase().contains(_query));
         final hits = [
-          for (final c in s.children)
-            if (all || _words(c).contains(_query)) c,
+          for (final (j, c) in s.children.indexed)
+            if (all ||
+                [
+                  _words(c),
+                  for (final t in twins)
+                    if (j < t.children.length) _words(t.children[j]),
+                ].any((w) => w.contains(_query)))
+              c,
         ];
         if (hits.isNotEmpty) {
           out
@@ -626,11 +647,11 @@ class _SettingsPageState extends State<SettingsPage> {
             ))
             ..add(_group(hits));
         }
-        walk(s.subs);
+        walk(s.subs, [for (final t in twins) t.subs]);
       }
     }
 
-    walk(_sections(context));
+    walk(_sections(context), others);
     if (out.isEmpty) {
       out.add(Padding(
         padding: const EdgeInsets.all(24),

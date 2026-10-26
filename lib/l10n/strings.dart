@@ -9,7 +9,24 @@ import 'lang_zh_hant.dart';
 /// UI strings in English, Chinese (simplified and traditional), Vietnamese, Russian, Persian
 /// and Arabic. The language follows the phone's, English when it is none of those (see [SDelegate]).
 abstract class S {
-  static S of(BuildContext context) => Localizations.of<S>(context, S)!;
+  static S of(BuildContext context) =>
+      forcedLanguage != null ? forCode(forcedLanguage!) : Localizations.of<S>(context, S)!;
+
+  /// While set, every text is looked up in this language (stored code, see [languageNames])
+  /// whatever the context says. Used to build the Settings screen in each language for the
+  /// search; always put back to null.
+  static String? forcedLanguage;
+
+  /// The texts of a stored language code.
+  static S forCode(String code) => switch (code) {
+        'fa' => const SFa(),
+        'zh' => const SZhHans(),
+        'zh-TW' => const SZhHant(),
+        'vi' => const SVi(),
+        'ru' => const SRu(),
+        'ar' => const SAr(),
+        _ => const SEn(),
+      };
 
   static const delegate = SDelegate();
   static final traditionalChinese =
