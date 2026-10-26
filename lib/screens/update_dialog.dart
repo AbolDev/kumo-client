@@ -183,7 +183,7 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                                     style: const TextStyle(fontWeight: FontWeight.w600)),
                                 childrenPadding:
                                     const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                                expandedAlignment: AlignmentDirectional.centerStart,
+                                expandedCrossAxisAlignment: CrossAxisAlignment.start,
                                 children: [Text(_notesFor(sheet, r.notes))],
                               ),
                           ],
