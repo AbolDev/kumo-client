@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'net_options.dart';
 import 'proxy_config.dart';
+import 'routing_rules.dart';
 
 /// Builds the Xray configuration for one XHTTP server: a local SOCKS inbound on
 /// 127.0.0.1:[port] that forwards everything to the server.
@@ -190,6 +191,19 @@ String buildSingBoxConfig(
       'listen_port': o.proxyPort,
     },
   ];
+  // A second proxy for other devices on the network. It always needs the user name and password,
+  // and the local one above stays open for this device (the Windows system proxy has no login).
+  if (o.shareLan && o.lanPassword.isNotEmpty && o.lanPort != o.proxyPort) {
+    inbounds.add({
+      'type': 'mixed',
+      'tag': 'lan-in',
+      'listen': '0.0.0.0',
+      'listen_port': o.lanPort,
+      'users': [
+        {'username': o.lanUser, 'password': o.lanPassword},
+      ],
+    });
+  }
   final apps = o.apps;
   if (o.tun) {
     inbounds.add({
@@ -210,9 +224,23 @@ String buildSingBoxConfig(
   final sets = ruleSets.keys.toList();
   final iran = o.bypass.isNotEmpty;
   final suffixes = [for (final c in o.bypass) '.$c'];
+  // The user's own rules come before everything else; "through the VPN" wins over "direct" if a
+  // domain is in both lists.
+  List<String> ofKind(List<String> list, {required bool ip}) => [
+        for (final r in list)
+          if (parseRouteRule(r) case final rule? when rule.ip == ip) rule.value,
+      ];
+  final directDomains = ofKind(o.directRules, ip: false);
+  final directIps = ofKind(o.directRules, ip: true);
+  final proxyDomains = ofKind(o.proxyRules, ip: false);
+  final proxyIps = ofKind(o.proxyRules, ip: true);
   final rules = <Map<String, dynamic>>[
     {'action': 'sniff'},
     {'protocol': 'dns', 'action': 'hijack-dns'},
+    if (proxyDomains.isNotEmpty) {'domain_suffix': proxyDomains, 'outbound': 'proxy'},
+    if (proxyIps.isNotEmpty) {'ip_cidr': proxyIps, 'outbound': 'proxy'},
+    if (directDomains.isNotEmpty) {'domain_suffix': directDomains, 'outbound': 'direct'},
+    if (directIps.isNotEmpty) {'ip_cidr': directIps, 'outbound': 'direct'},
     {'ip_is_private': true, 'outbound': 'direct'},
   ];
   final processRules = windows && o.tun && apps.isNotEmpty;
@@ -236,13 +264,18 @@ String buildSingBoxConfig(
         _dnsServer(o.dnsAddress),
         {'type': 'local', 'tag': 'dns-local'},
       ],
-      if (iran)
+      if (iran || directDomains.isNotEmpty)
         'rules': [
-          {
-            'domain_suffix': suffixes,
-            'server': 'dns-local',
-          },
-          if (sets.isNotEmpty) {'rule_set': sets, 'server': 'dns-local'},
+          // names the user sends direct are also looked up locally, not through the VPN
+          if (directDomains.isNotEmpty)
+            {'domain_suffix': directDomains, 'server': 'dns-local'},
+          if (iran) ...[
+            {
+              'domain_suffix': suffixes,
+              'server': 'dns-local',
+            },
+            if (sets.isNotEmpty) {'rule_set': sets, 'server': 'dns-local'},
+          ],
         ],
       'final': 'dns-remote',
     },

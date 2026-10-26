@@ -124,6 +124,9 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     private var killSwitch = false
     private var blockFd: ParcelFileDescriptor? = null
 
+    // Why the next stop happens, when it was not the user's own doing.
+    @Volatile private var stopReason: String? = null
+
     override fun onCreate() {
         super.onCreate()
         live = this
@@ -379,7 +382,9 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             // The service is released first: a new connection requested the moment the status
             // turns "stopped" must find a service that is already going away, not this one.
             stopForegroundAndSelf()
-            VpnBridge.update(VpnBridge.STOPPED)
+            // "revoked" tells the app that another VPN app or the system ended the connection.
+            VpnBridge.update(VpnBridge.STOPPED, stopReason)
+            stopReason = null
             IdleNotification.show(this@BoxVpnService)
         }
     }
@@ -528,6 +533,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     override fun onRevoke() {
+        stopReason = "revoked"
         stopVpn()
     }
 

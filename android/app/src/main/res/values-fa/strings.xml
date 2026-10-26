@@ -7,6 +7,12 @@
     <string name="notif_auto">خودکار (سریع‌ترین)</string>
     <string name="widget_on">وصل است</string>
     <string name="widget_off">برای اتصال بزن</string>
+    <string name="alert_channel">هشدارهای اشتراک</string>
+    <string name="alert_data_low">%1$s: فقط %2$s حجم باقی مانده.</string>
+    <string name="alert_data_out">%1$s: حجم تمام شده است.</string>
+    <string name="alert_exp_soon">%1$s: %2$d روز دیگر منقضی می‌شود.</string>
+    <string name="alert_exp_today">%1$s: امروز منقضی می‌شود.</string>
+    <string name="alert_expired">%1$s: منقضی شده است.</string>
     <string name="notif_idle">متصل نیست</string>
     <string name="notif_connect">اتصال</string>
     <string name="widget_connecting">در حال اتصال…</string>

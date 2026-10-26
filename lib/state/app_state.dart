@@ -15,7 +15,9 @@ import '../core/singbox_config.dart';
 import '../core/sources.dart';
 import '../core/sub_formats.dart';
 import '../core/updater.dart' show includePrerelease;
+import '../core/usage_alert.dart';
 import '../core/vpn_channel.dart';
+import '../l10n/extra.dart' show trFor;
 import '../l10n/strings.dart';
 
 /// How many configs of the downloaded public list are kept.
@@ -126,6 +128,32 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Why the connection last ended (a text key of the extra strings and its arguments), shown on
+  /// the home screen while disconnected.
+  ({String key, Map<String, Object> args})? lastDisconnect;
+
+  /// Set when this app asked for the stop, so a stop that was not asked for can be told apart.
+  var _expectStop = false;
+  ({String key, Map<String, Object> args})? _forcedReason;
+
+  void _noteDisconnect(VpnState s) {
+    final forced = _forcedReason;
+    _forcedReason = null;
+    if (forced != null) {
+      lastDisconnect = forced;
+    } else if (s.status == VpnStatus.error) {
+      lastDisconnect = (key: 'reasonError', args: {'e': s.error ?? ''});
+    } else if (_expectStop) {
+      lastDisconnect = (key: 'reasonYou', args: const <String, Object>{});
+    } else if (s.error == 'revoked') {
+      lastDisconnect = (key: 'reasonRevoked', args: const <String, Object>{});
+    } else {
+      lastDisconnect = (key: 'reasonOutside', args: const <String, Object>{});
+    }
+    _expectStop = false;
+    log('Disconnect reason: ${trFor('en', lastDisconnect!.key, lastDisconnect!.args)}');
+  }
+
   /// Delay through the live tunnel, measured after connecting (null = not measured yet).
   int? liveDelay;
   int? _xrayPort;
@@ -185,6 +213,61 @@ class AppState extends ChangeNotifier {
 
   /// Android: a "not connected" notification with a Connect button stays after a disconnect.
   bool idleNotification = true;
+
+  /// Warn when a subscription is nearly out of data or about to expire (a notification on
+  /// Android, a banner on Windows).
+  bool usageAlerts = true;
+
+  /// Windows: what was already warned about, per subscription (see usage_alert.dart).
+  final _alertSeen = <String, String>{};
+
+  /// Windows: the warning shown at the top of the home screen until it is dismissed.
+  String? alertText;
+
+  void dismissAlert() {
+    alertText = null;
+    notifyListeners();
+  }
+
+  /// Warns about [g] if its data or time is running out and the user was not told yet.
+  void checkUsage(ServerGroup g) {
+    final info = g.info;
+    if (!usageAlerts || info == null) return;
+    if (!Platform.isWindows) {
+      VpnChannel.checkUsage(g.id, g.name, info.used, info.total, info.expire);
+      return;
+    }
+    final now = usageLevels(info);
+    final seen = _alertSeen[g.id] ?? '00';
+    _alertSeen[g.id] = now.code;
+    final lang = languageCode ?? WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+    String? text;
+    if (now.data > int.parse(seen[0])) {
+      text = now.data == 2
+          ? trFor(lang, 'alertDataOut', {'name': g.name})
+          : trFor(lang, 'alertDataLow', {
+              'name': g.name,
+              'left': _formatBytes((info.total - info.used).clamp(0, 1 << 62).toInt()),
+            });
+    } else if (now.expiry > int.parse(seen[1])) {
+      text = switch (now.expiry) {
+        3 => trFor(lang, 'alertExpired', {'name': g.name}),
+        2 => trFor(lang, 'alertExpToday', {'name': g.name}),
+        _ => trFor(lang, 'alertExpSoon', {'name': g.name, 'days': daysLeft(info)}),
+      };
+    }
+    if (seen != now.code) _saveSettings();
+    if (text != null) {
+      alertText = text;
+      log('Alert: $text');
+    }
+  }
+
+  static String _formatBytes(int b) {
+    if (b >= 1 << 30) return '${(b / (1 << 30)).toStringAsFixed(2)} GB';
+    if (b >= 1 << 20) return '${(b / (1 << 20)).toStringAsFixed(1)} MB';
+    return '${b ~/ 1024} KB';
+  }
 
   // Core settings
   String delayUrl = defaultDelayUrl;
@@ -270,7 +353,15 @@ class AppState extends ChangeNotifier {
     _listenTraffic();
     _sub = VpnChannel.states.listen((s) {
       final changed = s.status != vpn.status;
+      final before = vpn.status;
       vpn = s;
+      if (changed &&
+          (s.status == VpnStatus.stopped || s.status == VpnStatus.error) &&
+          (before == VpnStatus.started ||
+              before == VpnStatus.starting ||
+              before == VpnStatus.stopping)) {
+        _noteDisconnect(s);
+      }
       _preparing = false;
       if (s.status != VpnStatus.started) {
         traffic.value = Traffic.zero;
@@ -318,6 +409,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     // Nothing is tested on its own: the user pings when they want to.
     await _applyCachedSubscriptions();
+    for (final g in subscriptions) {
+      checkUsage(g);
+    }
     if (showCollector && collector.configs.isEmpty) await refreshCollector();
     if (updateOnStartup) await _updateSubscriptionsOnStartup();
   }
@@ -380,6 +474,7 @@ class AppState extends ChangeNotifier {
       g.autoName = true;
     }
     g.info = fetched.info;
+    checkUsage(g);
     final links = await extractSubscriptionLinksInBackground(fetched.body);
     final parsed = await parseLinksInBackground(links, shuffle: false);
     if (parsed.isEmpty) return 0;
@@ -422,6 +517,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _reconnect() async {
+    _expectStop = true;
     await VpnChannel.stop();
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     while (vpn.status != VpnStatus.stopped &&
@@ -460,6 +556,15 @@ class AppState extends ChangeNotifier {
       showVolume = flag('showVolume', false);
       showName = flag('showName', true);
       idleNotification = flag('idleNotification', true);
+      usageAlerts = flag('usageAlerts', true);
+      final seen = j['alertSeen'];
+      if (seen is Map) {
+        for (final e in seen.entries) {
+          if (e.value is String && (e.value as String).length == 2) {
+            _alertSeen['${e.key}'] = e.value as String;
+          }
+        }
+      }
       final url = j['delayUrl'];
       if (url is String && url.startsWith('http') && url != oldDefaultDelayUrl) {
         delayUrl = url;
@@ -491,6 +596,8 @@ class AppState extends ChangeNotifier {
           'showVolume': showVolume,
           'showName': showName,
           'idleNotification': idleNotification,
+          'usageAlerts': usageAlerts,
+          'alertSeen': _alertSeen,
           'delayUrl': delayUrl,
           'net': net.toJson(),
         })).catchError((_) {});
@@ -526,6 +633,8 @@ class AppState extends ChangeNotifier {
       case 'idleNotification':
         idleNotification = value;
         VpnChannel.setIdleNotification(value);
+      case 'usageAlerts':
+        usageAlerts = value;
       case 'showCollector':
         showCollector = value;
         if (!value) {
@@ -1056,6 +1165,7 @@ class AppState extends ChangeNotifier {
         return;
       }
       _show(VpnStatus.stopping);
+      _expectStop = true;
       await VpnChannel.stop();
       return;
     }
@@ -1196,6 +1306,7 @@ class AppState extends ChangeNotifier {
     if (next == null) return;
     _failingOver = true;
     log('Server ${current.name} stopped answering, switching to ${next.name}');
+    _forcedReason = (key: 'reasonServer', args: {'name': current.name});
     _save();
     notifyListeners();
     try {

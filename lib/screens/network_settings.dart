@@ -1,6 +1,8 @@
-import 'dart:io' show Platform;
+import 'dart:io' show InternetAddressType, NetworkInterface, Platform;
+import 'dart:math' show Random;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../core/net_options.dart';
 import '../core/proxy_config.dart';
@@ -8,6 +10,7 @@ import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
 import 'app_routing_page.dart';
+import 'routing_rules_page.dart';
 import 'share_sheet.dart';
 
 typedef SectionBuilder = Widget Function(
@@ -65,6 +68,18 @@ List<Widget> networkSections(
             : o.bypass.map((c) => bypassCountries[c] ?? c.toUpperCase()).join(', ')),
         onTap: () => _pickCountries(context, state),
       ),
+      ListTile(
+        leading: const Icon(Icons.alt_route),
+        title: Text(tr(context, 'ruleTitle')),
+        subtitle: Text(tr(context, 'ruleDesc')),
+        trailing: o.directRules.length + o.proxyRules.length == 0
+            ? null
+            : Text('${o.directRules.length + o.proxyRules.length}'),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(builder: (_) => RoutingRulesPage(state: state)),
+        ),
+      ),
       flag(tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),
           o.killSwitch, (v) => o.killSwitch = v),
       if (!win)
@@ -75,6 +90,18 @@ List<Widget> networkSections(
         ),
       flag(tr(context, 'failover'), tr(context, 'failoverDesc'), o.failover,
           (v) => o.failover = v),
+      SwitchListTile(
+        value: o.shareLan,
+        onChanged: (v) => state.updateNet((o) {
+          o.shareLan = v;
+          if (v && o.lanPassword.isEmpty) o.lanPassword = _newPassword();
+          if (v && o.lanPort == o.proxyPort) o.lanPort = o.proxyPort + 1;
+        }),
+        secondary: const Icon(Icons.wifi_tethering),
+        title: Text(tr(context, 'lanShare')),
+        subtitle: Text(tr(context, 'lanShareDesc')),
+      ),
+      if (o.shareLan) ..._lanTiles(context, state),
     ]),
     section(Icons.dns, tr(context, 'dns'), [
       RadioGroupLike(
@@ -146,6 +173,129 @@ List<Widget> networkSections(
       ),
     ]),
   ];
+}
+
+String _newPassword() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  final r = Random.secure();
+  return List.generate(12, (_) => chars[r.nextInt(chars.length)]).join();
+}
+
+Future<void> _copy(BuildContext context, String text) async {
+  await Clipboard.setData(ClipboardData(text: text));
+  if (context.mounted) toast(context, tr(context, 'lanCopied'));
+}
+
+/// The details another device needs to use the shared connection.
+List<Widget> _lanTiles(BuildContext context, AppState state) {
+  final o = state.net;
+  return [
+    Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Text(tr(context, 'lanNote'), style: Theme.of(context).textTheme.bodySmall),
+    ),
+    _LanAddress(port: o.lanPort),
+    ListTile(
+      leading: const Icon(Icons.numbers),
+      title: Text(tr(context, 'lanPort')),
+      trailing: Text('${o.lanPort}'),
+      onTap: () => _editLanPort(context, state),
+    ),
+    ListTile(
+      leading: const Icon(Icons.person_outline),
+      title: Text(tr(context, 'lanUser')),
+      subtitle: Text(o.lanUser, textDirection: TextDirection.ltr),
+      onTap: () => _copy(context, o.lanUser),
+    ),
+    ListTile(
+      leading: const Icon(Icons.key),
+      title: Text(tr(context, 'lanPassword')),
+      subtitle: Text(o.lanPassword, textDirection: TextDirection.ltr),
+      onTap: () => _copy(context, o.lanPassword),
+      trailing: IconButton(
+        tooltip: tr(context, 'lanNewPassword'),
+        icon: const Icon(Icons.refresh),
+        onPressed: () => state.updateNet((o) => o.lanPassword = _newPassword()),
+      ),
+    ),
+  ];
+}
+
+Future<void> _editLanPort(BuildContext context, AppState state) async {
+  final controller = TextEditingController(text: '${state.net.lanPort}');
+  final port = await showDialog<int>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: Text(tr(dialog, 'lanPort')),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(border: OutlineInputBorder()),
+        onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v)),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
+        FilledButton(
+            onPressed: () => Navigator.pop(dialog, int.tryParse(controller.text)),
+            child: const Text('OK')),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (port == null) return;
+  if (port < 1024 || port > 65535 || port == state.net.proxyPort) {
+    if (context.mounted) toast(context, tr(context, 'lanPortInvalid'));
+    return;
+  }
+  await state.updateNet((o) => o.lanPort = port);
+}
+
+/// The address of this device on the local network, with the port: tap to copy.
+class _LanAddress extends StatelessWidget {
+  const _LanAddress({required this.port});
+
+  final int port;
+
+  static Future<List<String>> _addresses() async {
+    try {
+      final list = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      return [
+        for (final i in list)
+          for (final a in i.addresses)
+            // not loopback, not link-local, not this app's own tunnel
+            if (!a.isLoopback &&
+                !a.address.startsWith('169.254.') &&
+                !a.address.startsWith('172.19.0.'))
+              a.address,
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<String>>(
+      future: _addresses(),
+      builder: (context, snap) {
+        final list = snap.data ?? const <String>[];
+        return ListTile(
+          leading: const Icon(Icons.lan_outlined),
+          title: Text(tr(context, 'lanAddress')),
+          subtitle: Text(
+            snap.connectionState != ConnectionState.done
+                ? '…'
+                : (list.isEmpty
+                    ? tr(context, 'lanNoNetwork')
+                    : list.map((a) => '$a:$port').join('\n')),
+            textDirection: TextDirection.ltr,
+          ),
+          onTap: list.isEmpty ? null : () => _copy(context, '${list.first}:$port'),
+        );
+      },
+    );
+  }
 }
 
 /// A column of radio buttons built from a value -> label map.

@@ -7,6 +7,12 @@
     <string name="notif_auto">Automatic (fastest)</string>
     <string name="widget_on">Connected</string>
     <string name="widget_off">Tap to connect</string>
+    <string name="alert_channel">Subscription alerts</string>
+    <string name="alert_data_low">%1$s: only %2$s of data left.</string>
+    <string name="alert_data_out">%1$s: the data is used up.</string>
+    <string name="alert_exp_soon">%1$s: expires in %2$d days.</string>
+    <string name="alert_exp_today">%1$s: expires today.</string>
+    <string name="alert_expired">%1$s: has expired.</string>
     <string name="notif_idle">Not connected</string>
     <string name="notif_connect">Connect</string>
     <string name="widget_connecting">Connecting…</string>

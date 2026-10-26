@@ -1,5 +1,7 @@
 import 'dart:io' show Platform;
 
+import 'routing_rules.dart';
+
 /// How apps are routed: everything, only the chosen apps, or everything except them.
 enum AppMode { all, only, except }
 
@@ -100,6 +102,18 @@ class NetOptions {
   /// Log level of the core (sing-box, and Xray when it runs).
   String logLevel = logLevels.first;
 
+  /// Domains and addresses the user sends straight out, or always through the VPN, whatever the
+  /// country and app settings say (stored as `example.com` or `10.0.0.0/8`).
+  List<String> directRules = [];
+  List<String> proxyRules = [];
+
+  /// Share the connection with other devices on the same network: a second proxy that listens on
+  /// all addresses, always with a user name and password.
+  bool shareLan = false;
+  int lanPort = 2081;
+  String lanUser = 'kumo';
+  String lanPassword = '';
+
   /// Block the internet when the connection drops instead of leaking the real address.
   bool killSwitch = false;
 
@@ -133,6 +147,12 @@ class NetOptions {
         'mtu': mtu,
         'fingerprint': fingerprint,
         'logLevel': logLevel,
+        'directRules': directRules,
+        'proxyRules': proxyRules,
+        'shareLan': shareLan,
+        'lanPort': lanPort,
+        'lanUser': lanUser,
+        'lanPassword': lanPassword,
         'killSwitch': killSwitch,
         'failover': failover,
         'chain': chain,
@@ -165,6 +185,17 @@ class NetOptions {
     fingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
     final level = j['logLevel'];
     logLevel = level is String && logLevels.contains(level) ? level : logLevels.first;
+    List<String> rules(Object? v) =>
+        v is List ? v.whereType<String>().map(normalizeRouteRule).whereType<String>().toList() : [];
+    directRules = rules(j['directRules']);
+    proxyRules = rules(j['proxyRules']);
+    shareLan = flag('shareLan', false);
+    final lp = j['lanPort'];
+    if (lp is int && lp > 1023 && lp < 65536) lanPort = lp;
+    lanUser = j['lanUser'] is String && (j['lanUser'] as String).isNotEmpty
+        ? j['lanUser'] as String
+        : 'kumo';
+    lanPassword = j['lanPassword'] is String ? j['lanPassword'] as String : '';
     killSwitch = flag('killSwitch', false);
     failover = flag('failover', true);
     chain = j['chain'] is String ? j['chain'] as String : '';

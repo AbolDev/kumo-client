@@ -24,6 +24,8 @@ import 'edit_config_page.dart';
 import 'scan_page.dart';
 import 'settings_page.dart';
 import 'region_picker.dart';
+import 'service_test_page.dart';
+import 'troubleshoot_page.dart';
 import 'share_sheet.dart';
 
 String _bytes(int b) {
@@ -90,6 +92,28 @@ class HomePage extends StatelessWidget {
                     child: _MenuRow(Icons.screenshot_monitor, tr(context, 'importQrScreen')),
                   ),
                 ],
+              ],
+            ),
+            PopupMenuButton<VoidCallback>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (action) => action(),
+              itemBuilder: (menu) => [
+                PopupMenuItem(
+                  value: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                        builder: (_) => ServiceTestPage(state: state)),
+                  ),
+                  child: _MenuRow(Icons.public, tr(context, 'menuServices')),
+                ),
+                PopupMenuItem(
+                  value: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                        builder: (_) => TroubleshootPage(state: state)),
+                  ),
+                  child: _MenuRow(Icons.help_outline, tr(context, 'menuTroubleshoot')),
+                ),
               ],
             ),
             IconButton(
@@ -506,6 +530,39 @@ class _ConnectCard extends StatelessWidget {
                     .titleLarge
                     ?.copyWith(color: color, fontWeight: FontWeight.w600)),
           ),
+          // Windows: a warning about a subscription that is running out (the phone uses a
+          // notification instead).
+          if (state.alertText != null)
+            Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              color: scheme.tertiaryContainer,
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.warning_amber),
+                title: Text(state.alertText!),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: state.dismissAlert,
+                ),
+              ),
+            ),
+          // Why the last connection ended, until a new one is made.
+          if (state.lastDisconnect != null &&
+              (status == VpnStatus.stopped || status == VpnStatus.error))
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '${tr(context, 'reasonLabel')}: '
+                '${tr(context, state.lastDisconnect!.key, state.lastDisconnect!.args)}',
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: shown == null ? null : () => state.locate(shown),

@@ -106,6 +106,21 @@ class VpnChannel {
   static Future<void> scheduleSubUpdates(bool enabled) async =>
       _win ? null : _control.invokeMethod('scheduleSubUpdates', {'enabled': enabled});
 
+  /// Android: lets the phone warn about a subscription that is nearly out of data or time.
+  static Future<void> checkUsage(
+      String id, String name, int used, int total, int expire) async {
+    if (_win) return;
+    try {
+      await _control.invokeMethod('usageCheck', {
+        'id': id,
+        'name': name,
+        'used': used,
+        'total': total,
+        'expire': expire,
+      });
+    } catch (_) {}
+  }
+
   /// Android: shows or removes the "not connected" notification (it is only shown while the VPN is off).
   static Future<void> setIdleNotification(bool enabled) async {
     if (_win) return;

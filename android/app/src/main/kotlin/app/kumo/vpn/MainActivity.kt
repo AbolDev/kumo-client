@@ -110,6 +110,20 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                // Warns about a subscription that is nearly out of data or time (once per level).
+                "usageCheck" -> {
+                    Thread {
+                        UsageAlerts.check(
+                            this,
+                            call.argument<String>("id") ?: "",
+                            call.argument<String>("name") ?: "Subscription",
+                            (call.argument<Number>("used") ?: 0).toLong(),
+                            (call.argument<Number>("total") ?: 0).toLong(),
+                            (call.argument<Number>("expire") ?: 0).toLong(),
+                        )
+                    }.start()
+                    result.success(null)
+                }
                 "scheduleSubUpdates" -> {
                     if (call.argument<Boolean>("enabled") == true) SubUpdateJob.schedule(this) else SubUpdateJob.cancel(this)
                     result.success(null)

@@ -6,6 +6,7 @@ import android.app.job.JobScheduler
 import android.app.job.JobService
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -79,7 +80,22 @@ class SubUpdateJob : JobService() {
             val id = sub.optString("id")
             if (url.isBlank() || id.isBlank()) continue
             try {
-                File(dir, "$id.json").writeText(download(url, insecure).toString())
+                val answer = download(url, insecure)
+                File(dir, "$id.json").writeText(answer.toString())
+                // The numbers the provider reported: warn if the data or the time is running out.
+                val values = HashMap<String, Long>()
+                answer.optString("userinfo").split(';').forEach {
+                    val kv = it.split('=')
+                    if (kv.size == 2) kv[1].trim().toDoubleOrNull()?.let { n -> values[kv[0].trim().lowercase()] = n.toLong() }
+                }
+                if (values.isNotEmpty()) {
+                    UsageAlerts.check(
+                        this, id, sub.optString("name").ifBlank { Uri.parse(url).host ?: "Subscription" },
+                        (values["upload"] ?: 0L) + (values["download"] ?: 0L),
+                        values["total"] ?: 0L,
+                        values["expire"] ?: 0L,
+                    )
+                }
             } catch (_: Exception) {
                 // try again at the next run
             }
