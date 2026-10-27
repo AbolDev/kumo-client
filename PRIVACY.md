@@ -11,7 +11,7 @@ Kumo talks to other servers only for the features below. Each one is started by 
 | Checking for updates (on start and from *Settings → About*) | `api.github.com`, `github.com` | A request for the project's releases. The download of an update is a normal file download from GitHub. |
 | Loading the free public server list (the *Public servers* group; it can be hidden in Settings) | `cdn.jsdelivr.net` and mirrors, `raw.githubusercontent.com` | A request for a public text file. |
 | Downloading routing data when you pick *Direct countries* or turn on *Block ads and trackers* | `cdn.jsdelivr.net`, `raw.githubusercontent.com` | A request for public rule files. |
-| Opening *What is my IP* or the *DNS leak test* (only when you do) | pi.ipify.org, ipwho.is, ash.ws | Your address and the names looked up for the test. |
+| Opening *What is my IP* or the *DNS leak test* (only when you do) | `api.ipify.org`, `ipwho.is`, `bash.ws` | Your address and the names looked up for the test. |
 | Updating a subscription you added | The address you entered | A normal request for that address. |
 | Testing a server's real delay | `cp.cloudflare.com` (the address can be changed in Settings) | A small request sent through the server being tested. |
 | *IP and DNS leak check* (only when you tap it) | `www.cloudflare.com` | A request for `/cdn-cgi/trace`. |
