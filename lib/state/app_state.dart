@@ -1415,9 +1415,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Whether the public servers are being tested (stopping that asks what to do with the rest).
-  bool get collectorTesting => tests[collector.id]?.running ?? false;
-
   /// Forgets all ping results.
   void clearTestResults() {
     for (final c in all) {

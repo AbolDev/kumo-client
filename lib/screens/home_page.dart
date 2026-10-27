@@ -142,7 +142,7 @@ class HomePage extends StatelessWidget {
                 if (state.anyTesting)
                   PopupMenuItem(
                     value: () async {
-                      final remove = state.collectorTesting ? await _askUntested(context) : false;
+                      final remove = await _askUntested(context);
                       if (remove != null) state.cancelAllPings(removeUntested: remove);
                     },
                     child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest')),
@@ -1267,7 +1267,7 @@ Future<bool?> _askRemoveDead(BuildContext context) {
   );
 }
 
-/// Asks what to do with the public servers that were not tested yet when the test is stopped:
+/// Asks what to do with the servers that were not tested yet when the test is stopped:
 /// keep them (the default) or delete them. Null = the user changed their mind.
 Future<bool?> _askUntested(BuildContext context) {
   var remove = false;
@@ -1327,13 +1327,9 @@ class _GroupHeader extends StatelessWidget {
       case _GroupAction.tcping:
         state.ping(group, real: false);
       case _GroupAction.cancelTest:
-        if (group.kind == GroupKind.collector) {
-          _askUntested(context).then((remove) {
-            if (remove != null) state.cancelPing(group, removeUntested: remove);
-          });
-        } else {
-          state.cancelPing(group);
-        }
+        _askUntested(context).then((remove) {
+          if (remove != null) state.cancelPing(group, removeUntested: remove);
+        });
       case _GroupAction.realDelay:
         _askRemoveDead(context).then((remove) {
           if (remove != null) state.ping(group, real: true, removeDead: remove);
