@@ -1352,6 +1352,36 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// The local proxy port that tools must use to go through the VPN: set while connected
+  /// without the tunnel, null otherwise (the tunnel already carries everything).
+  int? get localProxyPort => connected && !net.tun ? net.proxyPort : null;
+
+  /// Tests every server of every list, one list after the other.
+  Future<void> pingAll({required bool real}) async {
+    if (real && !_real) return;
+    for (final g in List.of(groups)) {
+      if (g.configs.isEmpty) continue;
+      await ping(g, real: real);
+    }
+  }
+
+  /// Forgets all ping results.
+  void clearTestResults() {
+    for (final c in all) {
+      c.latencyMs = null;
+    }
+    tests.clear();
+    _save();
+    notifyListeners();
+  }
+
+  /// Downloads every subscription again.
+  Future<void> updateAllSubscriptions() async {
+    for (final g in List.of(subscriptions)) {
+      await refreshSubscription(g);
+    }
+  }
+
   /// Applies changed network options to a running connection.
   Future<void> reconnectIfConnected() async {
     if (connected) await _reconnect();

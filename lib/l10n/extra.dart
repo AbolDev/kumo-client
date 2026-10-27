@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'extra_langs.dart';
 import 'extra_more.dart';
 import 'extra_privacy.dart';
+import 'extra_tools.dart';
 import 'strings.dart';
 
 /// Texts of the newer features, in every language the app has.
@@ -20,13 +21,14 @@ String trFor(String lang, String key, [Map<String, Object>? args]) {
 }
 
 const _extra = <String, Map<String, String>>{
-  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu},
-  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi},
-  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh},
-  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr},
+  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu},
+  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi},
+  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh},
+  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr},
   'en': {
     ...extraMoreEn,
     ...extraPrivacyEn,
+    ...extraToolsEn,
     'languageDevice': 'Same as device',
     'notifIdle': 'Notification when not connected',
     'notifIdleDesc': 'Keeps a notification with a Connect button after you disconnect.',
@@ -143,6 +145,7 @@ const _extra = <String, Map<String, String>>{
   'fa': {
     ...extraMoreFa,
     ...extraPrivacyFa,
+    ...extraToolsFa,
     'languageDevice': 'مطابق دستگاه',
     'notifIdle': 'اعلان در حالت قطع',
     'notifIdleDesc': 'بعد از قطع اتصال، یک اعلان با دکمهٔ اتصال باقی می‌ماند.',

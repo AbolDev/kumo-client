@@ -26,6 +26,8 @@ import 'scan_page.dart';
 import 'settings_page.dart';
 import 'region_picker.dart';
 import 'service_test_page.dart';
+import 'my_ip_page.dart';
+import 'dns_leak_page.dart';
 import 'troubleshoot_page.dart';
 import 'share_sheet.dart';
 
@@ -102,6 +104,20 @@ class HomePage extends StatelessWidget {
                 PopupMenuItem(
                   value: () => Navigator.push(
                     context,
+                    MaterialPageRoute<void>(builder: (_) => MyIpPage(state: state)),
+                  ),
+                  child: _MenuRow(Icons.my_location, tr(context, 'menuMyIp')),
+                ),
+                PopupMenuItem(
+                  value: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(builder: (_) => DnsLeakPage(state: state)),
+                  ),
+                  child: _MenuRow(Icons.dns_outlined, tr(context, 'menuDnsLeak')),
+                ),
+                PopupMenuItem(
+                  value: () => Navigator.push(
+                    context,
                     MaterialPageRoute<void>(
                         builder: (_) => ServiceTestPage(state: state)),
                   ),
@@ -114,6 +130,30 @@ class HomePage extends StatelessWidget {
                         builder: (_) => TroubleshootPage(state: state)),
                   ),
                   child: _MenuRow(Icons.help_outline, tr(context, 'menuTroubleshoot')),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  enabled: state.connected,
+                  value: state.reconnectIfConnected,
+                  child: _MenuRow(Icons.restart_alt, tr(context, 'menuRestart')),
+                ),
+                PopupMenuItem(
+                  value: () => state.pingAll(real: false),
+                  child: _MenuRow(Icons.network_check, tr(context, 'menuTcpingAll')),
+                ),
+                PopupMenuItem(
+                  enabled: state.canTestReal,
+                  value: () => state.pingAll(real: true),
+                  child: _MenuRow(Icons.speed, tr(context, 'menuRealDelayAll')),
+                ),
+                PopupMenuItem(
+                  value: state.clearTestResults,
+                  child: _MenuRow(Icons.cleaning_services_outlined, tr(context, 'menuClearResults')),
+                ),
+                PopupMenuItem(
+                  enabled: state.subscriptions.isNotEmpty,
+                  value: state.updateAllSubscriptions,
+                  child: _MenuRow(Icons.sync, tr(context, 'menuUpdateSubs')),
                 ),
               ],
             ),
@@ -545,23 +585,6 @@ class _ConnectCard extends StatelessWidget {
                   icon: const Icon(Icons.close),
                   onPressed: state.dismissAlert,
                 ),
-              ),
-            ),
-          // Why the last connection ended, until a new one is made.
-          if (state.lastDisconnect != null &&
-              (status == VpnStatus.stopped || status == VpnStatus.error))
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                '${tr(context, 'reasonLabel')}: '
-                '${tr(context, state.lastDisconnect!.key, state.lastDisconnect!.args)}',
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ),
           const SizedBox(height: 8),
