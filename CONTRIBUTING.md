@@ -32,5 +32,5 @@ Write short, clear commit messages in English that say what changed and why.
 
 ## License
 
-By contributing you agree that your work is released under the GPL-3.0-or-later license of the
+By contributing you agree that your work is released under the GPL-3.0-only license of the
 project.

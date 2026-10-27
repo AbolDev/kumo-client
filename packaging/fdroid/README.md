@@ -11,8 +11,7 @@ recipe has to run there: run `fdroid build app.kumo.vpn` (fdroidserver, Debian) 
 let the merge request's CI do it. The steps copy `.github/workflows/build.yml` (libbox with gomobile,
 Xray with the NDK, then `flutter build apk`). Things to decide before sending the merge request:
 
-1. **License text.** The repository says `GPL-3.0-only` here and in the packages, but the macOS and
-   Windows resource files say `GPL-3.0-or-later`. Pick one and make them match.
+1. **License.** `GPL-3.0-only` everywhere (the macOS and Windows resource files and CONTRIBUTING.md follow it).
 2. **`assets/npvs/*.bin` and `crypt5-keys.json`.** Binary data files; the reviewers will ask where they
    come from and under what license.
 3. **Committed binaries.** `android/app/libs/libbox.aar` and `jniLibs/arm64-v8a/libxray.so` are in the
