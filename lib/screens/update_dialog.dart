@@ -71,36 +71,39 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
                         .bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant)),
                 const SizedBox(height: 20),
-                // "Recommended" sits inside the button it is about, so it cannot be read as
-                // belonging to the other one.
-                FilledButton(
-                  autofocus: true,
-                  onPressed: () => Navigator.pop(sheet, false),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.verified_outlined, size: 20),
-                      const SizedBox(width: 8),
-                      Flexible(
-                          child: Text(tr(sheet, 'updNo'),
-                              maxLines: 1, overflow: TextOverflow.ellipsis)),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: scheme.onPrimary.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(10),
+                // "Recommended" is a tag on the top edge of the button it is about, so it cannot
+                // be read as belonging to the other one.
+                const SizedBox(height: 8),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    FilledButton.icon(
+                      autofocus: true,
+                      icon: const Icon(Icons.verified_outlined),
+                      label: Text(tr(sheet, 'updNo')),
+                      onPressed: () => Navigator.pop(sheet, false),
+                    ),
+                    PositionedDirectional(
+                      top: -11,
+                      end: 18,
+                      child: IgnorePointer(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: scheme.tertiaryContainer,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: scheme.surface, width: 2),
+                          ),
+                          child: Text(tr(sheet, 'updRecommended'),
+                              style: Theme.of(sheet).textTheme.labelSmall?.copyWith(
+                                  color: scheme.onTertiaryContainer,
+                                  fontWeight: FontWeight.w700)),
                         ),
-                        child: Text(tr(sheet, 'updRecommended'),
-                            style: Theme.of(sheet)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(color: scheme.onPrimary)),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 OutlinedButton(
                   onPressed: () => Navigator.pop(sheet, true),
                   child: Text(tr(sheet, 'updYes')),
