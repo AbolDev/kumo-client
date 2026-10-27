@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math' show Random, cos, pi, sin;
+import 'dart:ui' show ImageFilter;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -595,14 +596,30 @@ class _ConnectCard extends StatelessWidget {
               on: status == VpnStatus.started,
               onTap: status == VpnStatus.stopping ? null : state.toggle),
           SizedBox(height: isDesktop ? 10 : 22),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: Text(label,
-                key: ValueKey(label),
-                style: Theme.of(context)
-                    .textTheme
-                    .titleLarge
-                    ?.copyWith(color: color, fontWeight: FontWeight.w600)),
+          // The status sits on a frosted-glass pill: what is behind it (the rings) is blurred.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: color.withValues(alpha: 0.10),
+                  border: Border.all(color: color.withValues(alpha: 0.28)),
+                ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  child: Text(label,
+                      key: ValueKey(label),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(color: color, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ),
           ),
           // Windows: a warning about a subscription that is running out (the phone uses a
           // notification instead).
