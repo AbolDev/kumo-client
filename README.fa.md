@@ -1,8 +1,6 @@
-<div align="center" dir="rtl">
+<div align="center">
 
-# Kumo (کومو)
-
-**یک برنامهٔ ساده و رایگان VPN که سرور سالم پیدا می‌کند و به سریع‌ترین آن وصل می‌شود.**
+<img src="docs/images/banner.png" alt="Kumo: a free, simple VPN for Android, Windows, Linux and macOS" width="100%">
 
 [English](README.md) · فارسی
 
@@ -21,7 +19,7 @@
 <div align="center">
 
 <table>
-  <tr><th>Ø³ÛŒØ³ØªÙ…</th><th>Ø¯Ø§Ù†Ù„ÙˆØ¯</th></tr>
+  <tr><th>سیستم</th><th>دانلود</th></tr>
   <tr><td>Android</td><td>
       <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-universal.apk"><img src="https://img.shields.io/badge/APK-Universal-2e7d32?style=flat&logo=android&logoColor=white&labelColor=555555" alt="APK Universal"></a><br>
       <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-arm64-v8a.apk"><img src="https://img.shields.io/badge/APK-ARM64%20(most%20phones)-388e3c?style=flat&logo=android&logoColor=white&labelColor=555555" alt="APK ARM64 (most phones)"></a><br>

@@ -63,3 +63,7 @@ key.properties
 
 # Local scratch files
 configs*.txt
+
+# raw screenshots used to make docs/images (they show parts of real server names)
+docs/screenshots/*
+!docs/screenshots/README.md

@@ -1,0 +1,1 @@
+﻿Raw screenshots for docs/src/showcase.html (phone-connected.png, desktop-connected.png). They are not committed: they show parts of real server names. Run docs/src/render.ps1 to make docs/images/banner.png and devices.png.

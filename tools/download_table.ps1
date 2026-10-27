@@ -43,8 +43,8 @@ $linux = @(
   (Badge 'Portable' 'ARM64' 'fb8c00' 'linux' 'kumo-linux-arm64-portable.tar.gz')
 ) -join "<br>`n      "
 
-$system = if ($Lang -eq 'fa') { 'سیستم' } else { 'System' }
-$download = if ($Lang -eq 'fa') { 'دانلود' } else { 'Download' }
+$system = if ($Lang -eq 'fa') { [regex]::Unescape('\u0633\u06cc\u0633\u062a\u0645') } else { 'System' }
+$download = if ($Lang -eq 'fa') { [regex]::Unescape('\u062f\u0627\u0646\u0644\u0648\u062f') } else { 'Download' }
 
 @"
 <table>

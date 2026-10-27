@@ -1,8 +1,6 @@
 <div align="center">
 
-# Kumo
-
-**A free, simple VPN app that finds working servers and connects to the fastest one.**
+<img src="docs/images/banner.png" alt="Kumo: a free, simple VPN for Android, Windows, Linux and macOS" width="100%">
 
 English · [فارسی](README.fa.md)
 
