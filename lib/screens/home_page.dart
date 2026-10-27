@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
-import 'dart:math' show Random, cos, pi, pow, sin;
+import 'dart:math' show Random, cos, pi, sin;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
@@ -577,7 +577,7 @@ class _ConnectCard extends StatelessWidget {
       ),
       child: Padding(
       padding: EdgeInsets.fromLTRB(16,
-          isDesktop ? 24 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
+          isDesktop ? 84 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
       child: Column(
         children: [
           _PowerButton(
@@ -898,7 +898,7 @@ class _RingsPainter extends CustomPainter {
   final bool on;
   final ValueListenable<double> _time;
 
-  static const _rings = 9;
+  static const _rings = 6;
   static const _waves = 4; // wobbles with 2, 3, 4 and 5 bumps around the circle
 
   // Random, but the same every time: where each wave starts and how slowly it drifts.
@@ -910,7 +910,7 @@ class _RingsPainter extends CustomPainter {
   }
 
   static final _phase = _table(11, 0, 2 * pi);
-  static final _speed = _table(23, -0.18, 0.18); // radians per second, both directions
+  static final _speed = _table(23, -0.55, 0.55); // radians per second, both directions
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -924,7 +924,7 @@ class _RingsPainter extends CustomPainter {
       180,
       Paint()
         ..shader = RadialGradient(colors: [
-          color.withValues(alpha: 0.11 * k),
+          color.withValues(alpha: 0.09 * k),
           color.withValues(alpha: 0),
         ]).createShader(Rect.fromCircle(center: c, radius: 180)),
     );
@@ -932,10 +932,11 @@ class _RingsPainter extends CustomPainter {
     final line = Paint()..style = PaintingStyle.stroke;
     for (var i = 0; i < _rings; i++) {
       final f = i / (_rings - 1); // 0 = the line next to the button, 1 = the outermost
-      final base = 76.0 + 12.5 * i;
+      final base = 74.0 + 11.0 * i;
       // the further out, the more it wobbles; the wobble itself swells and eases slowly
-      final wobble = (0.012 + 0.095 * pow(f, 1.6)) * (0.8 + 0.2 * sin(t * 0.21 + i * 2.1));
-      final breath = 1 + 0.010 * sin(t * 0.37 + i * 1.3);
+      // how far the line strays from a circle, in pixels: a little for the first, more further out
+      final stray = (1.5 + 2.4 * i) * (0.75 + 0.25 * sin(t * 0.45 + i * 2.1));
+      final breath = 1 + 0.014 * sin(t * 0.8 + i * 1.3);
       final path = Path();
       const steps = 96;
       for (var s = 0; s <= steps; s++) {
@@ -944,15 +945,15 @@ class _RingsPainter extends CustomPainter {
         for (var j = 0; j < _waves; j++) {
           n += sin((j + 2) * a + _phase[i][j] + _speed[i][j] * t) / (j + 1.5);
         }
-        final r = base * breath * (1 + wobble * n);
+        final r = base * breath + stray * n;
         final x = c.dx + r * cos(a);
         final y = c.dy + r * sin(a);
         s == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
       }
       path.close();
       line
-        ..strokeWidth = i == 0 ? 1.6 : 1.0
-        ..color = color.withValues(alpha: (i == 0 ? 0.55 : 0.42 * (1 - 0.85 * f) + 0.05) * k);
+        ..strokeWidth = i == 0 ? 1.5 : 0.9
+        ..color = color.withValues(alpha: (i == 0 ? 0.44 : 0.34 * (1 - 0.8 * f) + 0.05) * k);
       canvas.drawPath(path, line);
     }
   }

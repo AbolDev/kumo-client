@@ -35,12 +35,15 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
   if (!silent) {
     final answer = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
       showDragHandle: true,
       constraints: const BoxConstraints(maxWidth: 560),
       builder: (sheet) {
         final scheme = Theme.of(sheet).colorScheme;
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -91,6 +94,7 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
                 ),
               ],
             ),
+          ),
           ),
         );
       },
