@@ -923,6 +923,10 @@ class AppState extends ChangeNotifier {
     final key = 'ping-${g.id}';
     final gen = _begin(key);
     final list = List.of(g.configs);
+    // The old pings of this list go as the test starts, so the numbers on screen are all new.
+    for (final c in list) {
+      c.latencyMs = null;
+    }
     final done = <ProxyConfig>{};
     _pingRuns[g.id] = (list: list, done: done);
     final test = tests[g.id] = GroupTest(list.length);
