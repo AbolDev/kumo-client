@@ -139,6 +139,11 @@ class HomePage extends StatelessWidget {
                   value: state.reconnectIfConnected,
                   child: _MenuRow(Icons.restart_alt, tr(context, 'menuRestart')),
                 ),
+                if (state.testing)
+                  PopupMenuItem(
+                    value: state.cancelAllPings,
+                    child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest')),
+                  ),
                 PopupMenuItem(
                   value: () => state.pingAll(real: false),
                   child: _MenuRow(Icons.network_check, tr(context, 'menuTcpingAll')),
@@ -1259,7 +1264,7 @@ Future<bool?> _askRemoveDead(BuildContext context) {
   );
 }
 
-enum _GroupAction { tcping, realDelay, refresh, cancelRefresh, edit, share, delete }
+enum _GroupAction { tcping, realDelay, cancelTest, refresh, cancelRefresh, edit, share, delete }
 
 /// The title row of a dropdown: the collector, a subscription, or configs added by hand.
 class _GroupHeader extends StatelessWidget {
@@ -1290,6 +1295,8 @@ class _GroupHeader extends StatelessWidget {
     switch (action) {
       case _GroupAction.tcping:
         state.ping(group, real: false);
+      case _GroupAction.cancelTest:
+        state.cancelPing(group);
       case _GroupAction.realDelay:
         _askRemoveDead(context).then((remove) {
           if (remove != null) state.ping(group, real: true, removeDead: remove);
@@ -1375,6 +1382,10 @@ class _GroupHeader extends StatelessWidget {
             icon: const Icon(Icons.more_vert),
             onSelected: (a) => _onAction(context, a),
             itemBuilder: (menu) => [
+              if (state.tests[group.id]?.running ?? false)
+                PopupMenuItem(
+                    value: _GroupAction.cancelTest,
+                    child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest'))),
               PopupMenuItem(
                   value: _GroupAction.tcping,
                   child: _MenuRow(Icons.network_check, t.tcping)),

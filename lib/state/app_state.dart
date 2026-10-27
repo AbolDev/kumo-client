@@ -1371,9 +1371,31 @@ class AppState extends ChangeNotifier {
   /// Tests every server of every list, one list after the other.
   Future<void> pingAll({required bool real}) async {
     if (real && !_real) return;
+    _pingAllStopped = false;
     for (final g in List.of(groups)) {
+      if (_pingAllStopped) break;
       if (g.configs.isEmpty) continue;
       await ping(g, real: real);
+    }
+  }
+
+  bool _pingAllStopped = false;
+
+  /// Whether any list is being tested now.
+  bool get testing => tests.values.any((t) => t.running);
+
+  /// Stops the test of one list; the results so far stay.
+  void cancelPing(ServerGroup g) {
+    _begin('ping-${g.id}');
+    tests[g.id]?.running = false;
+    notifyListeners();
+  }
+
+  /// Stops every test that is running, and the ones of a test-all that have not started.
+  void cancelAllPings() {
+    _pingAllStopped = true;
+    for (final g in groups) {
+      if (tests[g.id]?.running ?? false) cancelPing(g);
     }
   }
 
