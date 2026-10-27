@@ -295,6 +295,22 @@ jobs:
           Write-Host "installer exit code $($p.ExitCode)"
           if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw 'Visual Studio build tools failed to install' }
 
+      # Flutter 3.27 picks the newest Visual Studio it finds (2026) and then asks CMake for a
+      # generator that does not exist ("Visual Studio 16 2019"), so 2026 is hidden from vswhere by
+      # renaming its instance record; 2022, just installed, is then the one it uses.
+      - name: Hide Visual Studio 2026
+        shell: pwsh
+        run: |
+          $root = "$env:ProgramData\Microsoft\VisualStudio\Packages\_Instances"
+          foreach ($dir in Get-ChildItem $root -Directory -ErrorAction SilentlyContinue) {
+            $state = Join-Path $dir.FullName 'state.json'
+            if ((Test-Path $state) -and ((Get-Content $state -Raw) -match 'Microsoft Visual Studio\\\\18\\\\')) {
+              Write-Host "hiding $($dir.Name)"
+              Rename-Item $dir.FullName "$($dir.Name).hidden"
+            }
+          }
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -products * -format text -property displayName,installationVersion
+
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
       - run: flutter doctor -v
