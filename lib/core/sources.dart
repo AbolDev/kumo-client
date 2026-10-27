@@ -147,11 +147,18 @@ Future<Fetched> fetchSubscription(String url,
     bool allowInsecure = false}) async {
   Fetched? first;
   Object? error;
+  // Without a name from the provider's headers, the information page may have one.
+  Future<Fetched> named(Fetched f) async {
+    if (f.title != null) return f;
+    final title = await _fetchPageTitle(url, allowInsecure);
+    return title == null ? f : Fetched(f.body, title, f.info);
+  }
+
   for (final agent in _clients) {
     try {
       final f = await _fetchOnce(url, agent, timeout, allowInsecure);
       first ??= f;
-      if (extractSubscriptionLinks(f.body).isNotEmpty) return f;
+      if (extractSubscriptionLinks(f.body).isNotEmpty) return named(f);
     } catch (e) {
       error ??= e;
       if (first == null && agent == _clients.first && e is TimeoutException) {
@@ -159,8 +166,56 @@ Future<Fetched> fetchSubscription(String url,
       }
     }
   }
-  if (first != null) return first;
+  if (first != null) return named(first);
   throw error ?? HttpException('No answer', uri: Uri.parse(url));
+}
+
+/// The name of the subscription's owner from the information page that 3x-ui panels show to a
+/// browser: the subscription title when set, else the user name(s) (the client's email field).
+/// Null when the page is not one of those.
+String? pageSubscriptionTitle(String html) {
+  final m = RegExp(r'__SUB_PAGE_DATA__\s*=\s*(\{.*?\})\s*;?\s*</script>', dotAll: true)
+      .firstMatch(html);
+  if (m == null) return null;
+  try {
+    final j = jsonDecode(m.group(1)!);
+    if (j is! Map) return null;
+    final title = '${j['subTitle'] ?? ''}'.trim();
+    if (title.isNotEmpty) return title;
+    final names = <String>[];
+    final emails = j['emails'];
+    if (emails is List) {
+      for (final e in emails) {
+        final n = '$e'.trim();
+        if (n.isNotEmpty && !names.contains(n)) names.add(n);
+      }
+    }
+    return names.isEmpty ? null : names.join(', ');
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Asks the subscription address the way a browser does, to read [pageSubscriptionTitle].
+Future<String?> _fetchPageTitle(String url, bool allowInsecure) async {
+  final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+  if (allowInsecure) client.badCertificateCallback = (_, __, ___) => true;
+  try {
+    final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 8));
+    req.headers
+      ..set(HttpHeaders.userAgentHeader, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120 Safari/537.36')
+      ..set(HttpHeaders.acceptHeader, 'text/html,application/xhtml+xml');
+    final res = await req.close().timeout(const Duration(seconds: 8));
+    if (res.statusCode != 200) return null;
+    final type = res.headers.contentType?.mimeType ?? '';
+    if (type != 'text/html') return null;
+    final html = await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 10));
+    return pageSubscriptionTitle(html);
+  } catch (_) {
+    return null;
+  } finally {
+    client.close(force: true);
+  }
 }
 
 Future<Fetched> _fetchOnce(
