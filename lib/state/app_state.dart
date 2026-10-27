@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
 import '../core/latency_tester.dart';
+import '../core/collector_sources.dart';
 import '../core/desktop_vpn.dart';
 import '../core/net_options.dart';
 import '../core/platform.dart';
@@ -1173,7 +1174,7 @@ class AppState extends ChangeNotifier {
     await _job((t) => t.fetchingList, () async {
       try {
         final result = await Future.any(<Future<FetchResult?>>[
-          fetchFromSources(),
+          fetchCollectorLists(),
           cancel.future.then((_) => null),
         ]);
         if (result == null || _stale(key, gen)) return;
