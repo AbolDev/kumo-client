@@ -776,7 +776,7 @@ class AppState extends ChangeNotifier {
     change(net);
     _saveSettings();
     if (net.bypass.isNotEmpty || net.blockAds) {
-      ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds)
+      ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds, adsLevel: net.adsLevel)
           .catchError((_) => <String, String>{});
     }
     if (reconnect && connected) await _reconnect();
@@ -1371,7 +1371,7 @@ class AppState extends ChangeNotifier {
       final tags = routing?.ruleSetTags ?? const <String>[];
       final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
-              ads: net.blockAds, tags: tags, wait: false)
+              ads: net.blockAds, adsLevel: net.adsLevel, tags: tags, wait: false)
           : <String, String>{};
       final viaXray = chosen.length == 1 &&
           chosen.first.canXray &&
@@ -1471,7 +1471,7 @@ class AppState extends ChangeNotifier {
       final tags = routing?.ruleSetTags ?? const <String>[];
       final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
-              ads: net.blockAds, tags: tags)
+              ads: net.blockAds, adsLevel: net.adsLevel, tags: tags)
           : <String, String>{};
       if (cancelled()) return;
       apiPort = await _freePort();

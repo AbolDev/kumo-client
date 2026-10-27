@@ -149,7 +149,19 @@ List<Widget> networkSections(
           (v) => o.blockStun = v),
       flag(tr(context, 'blockAds'), tr(context, 'blockAdsDesc'), o.blockAds,
           (v) => o.blockAds = v),
-      ListTile(
+      if (o.blockAds)
+        ListTile(
+          leading: const Icon(Icons.shield_moon_outlined),
+          title: Text(tr(context, 'adsLevel')),
+          subtitle: Text(tr(context, o.adsLevel == 'strong' ? 'adsStrong' : 'adsStandard')),
+          onTap: () async {
+            final v = await pickOption<String>(context, tr(context, 'adsLevel'), o.adsLevel, {
+              'standard': tr(context, 'adsStandard'),
+              'strong': tr(context, 'adsStrong'),
+            });
+            if (v != null) await state.updateNet((o) => o.adsLevel = v);
+          },
+        ),      ListTile(
         leading: const Icon(Icons.travel_explore),
         title: Text(tr(context, 'dnsCheck')),
         onTap: () => _leakCheck(context, state),

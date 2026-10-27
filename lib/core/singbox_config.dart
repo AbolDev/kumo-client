@@ -4,7 +4,7 @@ import 'net_options.dart';
 import 'proxy_config.dart';
 import 'routing_rules.dart';
 import 'provider_routing.dart';
-import 'rule_sets.dart' show adsTag;
+import 'ad_lists.dart';
 
 /// Merges [extra] (a JSON object the user typed) into [target], map by map; lists and values from
 /// [extra] replace the ones in [target].
@@ -439,8 +439,15 @@ String buildSingBoxConfig(
   final sets = ruleSets.keys.where(countryTags.contains).toList();
   // What the subscription's provider asks for (only when the user left those rules on).
   final provider = routing == null ? null : providerRules(routing, ruleSets.keys.toSet());
-  final adSet = o.blockAds && ruleSets.containsKey(adsTag) ? adsTag : null;
-  final strict = o.strictDns;
+  // The ad lists that were downloaded, and what is blocked even without them.
+  final adSets = o.blockAds
+      ? [
+          for (final k in ruleSets.keys)
+            if (k.startsWith(adTagPrefix)) k,
+        ]
+      : <String>[];
+  final adsStrong = o.blockAds && o.adsLevel == 'strong';
+  final builtIn = o.blockAds ? builtInAdDomains : const <String>[];  final strict = o.strictDns;
   final iran = o.bypass.isNotEmpty;
   final suffixes = [for (final c in o.bypass) '.$c'];
   final block = _RuleFields(o.blockRules);
@@ -455,7 +462,14 @@ String buildSingBoxConfig(
     {'action': 'sniff'},
     {'protocol': 'dns', 'action': 'hijack-dns'},
     ...block.rules({'action': 'reject'}),
-    if (adSet != null) {'rule_set': [adSet], 'action': 'reject'},
+    // Ads and trackers: the built-in names first (they need no download), then the lists.
+    if (builtIn.isNotEmpty) ...[
+      {'domain_suffix': builtIn, 'action': 'reject'},
+      {'domain_keyword': adKeywords, 'action': 'reject'},
+    ],
+    if (adSets.isNotEmpty) {'rule_set': adSets, 'action': 'reject'},
+    // Public encrypted-DNS servers: an app that uses one hides the ad names it asks for.
+    if (adsStrong) {'domain_suffix': encryptedDnsDomains, 'action': 'reject'},
     // WebRTC would show the network's own address; DNS over TLS would skip the resolver above.
     if (o.blockStun) {'protocol': 'stun', 'action': 'reject'},
     if (strict) {'port': 853, 'network': 'tcp', 'action': 'reject'},
@@ -481,7 +495,12 @@ String buildSingBoxConfig(
   final dnsRules = <Map<String, dynamic>>[
     // blocked names fail at once
     ...block.rules({'action': 'reject'}, domainsOnly: true),
-    if (adSet != null) {'rule_set': [adSet], 'action': 'reject'},
+    // The name of an ad server does not exist: the app gives up at once instead of trying again.
+    if (builtIn.isNotEmpty) ...[
+      {'domain_suffix': builtIn, 'action': 'predefined', 'rcode': 'NXDOMAIN'},
+      {'domain_keyword': adKeywords, 'action': 'predefined', 'rcode': 'NXDOMAIN'},
+    ],
+    if (adSets.isNotEmpty) {'rule_set': adSets, 'action': 'predefined', 'rcode': 'NXDOMAIN'},
     // names the user sends direct are also looked up locally, not through the VPN
     ...direct.rules({'server': 'dns-local'}, domainsOnly: true),
     if (provider != null) ...provider.dns,
@@ -528,14 +547,15 @@ String buildSingBoxConfig(
     if (endpoints.isNotEmpty) 'endpoints': endpoints,
     'route': {
       'rules': rules,
-      if ((sets.isNotEmpty && iran) || adSet != null || (provider?.tags.isNotEmpty ?? false))
+      if ((sets.isNotEmpty && iran) || adSets.isNotEmpty || (provider?.tags.isNotEmpty ?? false))
         'rule_set': [
           for (final e in ruleSets.entries)
-            if (e.key == adSet || (iran && sets.contains(e.key)) || (provider?.tags.contains(e.key) ?? false))
+            if (adSets.contains(e.key) || (iran && sets.contains(e.key)) || (provider?.tags.contains(e.key) ?? false))
             {
               'type': 'local',
               'tag': e.key,
-              'format': 'binary',
+              // the big domain lists are kept as sing-box source files, the others as binary ones
+              'format': e.value.endsWith('.json') ? 'source' : 'binary',
               'path': e.value,
             },
         ],

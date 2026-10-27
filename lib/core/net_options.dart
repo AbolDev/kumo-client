@@ -1,5 +1,7 @@
 import 'dart:io' show Platform;
 
+import 'ad_lists.dart';
+
 import 'routing_rules.dart';
 
 /// How apps are routed: everything, only the chosen apps, or everything except them.
@@ -149,6 +151,9 @@ class NetOptions {
   /// downloaded). Works with the local proxy too, not only the tunnel.
   bool blockAds = false;
 
+  /// How much "Block ads and trackers" blocks: 'standard' or 'strong' (see ad_lists.dart).
+  String adsLevel = defaultAdLevel;
+
   /// Keep every name lookup inside the VPN: the server names and the DNS server itself are
   /// looked up over encrypted DNS instead of the network's own resolver, and DNS over TLS that
   /// would skip the tunnel's resolver is refused.
@@ -237,6 +242,7 @@ class NetOptions {
         'certStore': certStore,
         'fakeIp': fakeIp,
         'blockAds': blockAds,
+        'adsLevel': adsLevel,
         'strictDns': strictDns,
         'blockStun': blockStun,
         'ntp': ntp,
@@ -302,6 +308,7 @@ class NetOptions {
     tcpMultiPath = flag('tcpMultiPath', false);
     fakeIp = flag('fakeIp', false);
     blockAds = flag('blockAds', false);
+    adsLevel = adLevels.contains(j['adsLevel']) ? j['adsLevel'] as String : defaultAdLevel;
     strictDns = flag('strictDns', false);
     blockStun = flag('blockStun', false);
     ntp = flag('ntp', false);

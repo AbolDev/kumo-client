@@ -2,6 +2,10 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'adsStandard': 'Standard: ads and trackers',
+  'adsLevel': 'Blocking strength',
+  'adsLevelDesc': 'Strong uses a bigger list (about 200 thousand names). Turn it down to Standard if a site or app stops working.',
+  'adsStrong': 'Strong: also telemetry, big companies\' ad servers and public encrypted-DNS servers',
   'proxyLoginOff': 'No login',
   'proxyPass': 'Password',
   'proxyLoginDesc': 'A user name and password for the local proxy. Leave both empty for no login. It is used when the proxy runs without the system proxy (with the tunnel, or kept running alone).',
@@ -86,6 +90,10 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'adsStandard': 'معمولی: تبلیغات و ردیاب‌ها',
+  'adsLevel': 'قدرت مسدودسازی',
+  'adsLevelDesc': '«قوی» از فهرست بزرگ‌تری (حدود ۲۰۰ هزار نام) استفاده می‌کند. اگر سایت یا برنامه‌ای کار نکرد، آن را روی «معمولی» بگذارید.',
+  'adsStrong': 'قوی: به‌علاوهٔ تله‌متری، سرورهای تبلیغاتی شرکت‌های بزرگ و سرورهای DNS رمزگذاری‌شدهٔ عمومی',
   'proxyLoginOff': 'بدون ورود',
   'proxyPass': 'رمز عبور',
   'proxyLoginDesc': 'نام کاربری و رمز عبور برای پروکسی محلی. برای بدون ورود، هر دو را خالی بگذارید. وقتی پروکسی بدون پروکسی سیستم کار می‌کند (با تانل، یا به‌تنهایی روشن‌مانده) اعمال می‌شود.',
@@ -170,6 +178,10 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'adsStandard': 'Обычная: реклама и трекеры',
+  'adsLevel': 'Сила блокировки',
+  'adsLevelDesc': '«Сильная» использует больший список (около 200 тысяч имён). Если сайт или приложение перестало работать, переключите на «Обычную».',
+  'adsStrong': 'Сильная: ещё телеметрия, рекламные серверы крупных компаний и публичные серверы зашифрованного DNS',
   'proxyLoginOff': 'Без логина',
   'proxyPass': 'Пароль',
   'proxyLoginDesc': 'Имя пользователя и пароль для локального прокси. Оставьте оба поля пустыми, чтобы не было входа. Действует, когда прокси работает без системного прокси (с туннелем или отдельно).',
@@ -254,6 +266,10 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'adsStandard': 'Tiêu chuẩn: quảng cáo và trình theo dõi',
+  'adsLevel': 'Mức độ chặn',
+  'adsLevelDesc': 'Mức Mạnh dùng danh sách lớn hơn (khoảng 200 nghìn tên). Nếu trang web hoặc ứng dụng ngừng hoạt động, hãy chuyển về Tiêu chuẩn.',
+  'adsStrong': 'Mạnh: thêm đo lường, máy chủ quảng cáo của các công ty lớn và máy chủ DNS mã hóa công cộng',
   'proxyLoginOff': 'Không đăng nhập',
   'proxyPass': 'Mật khẩu',
   'proxyLoginDesc': 'Tên người dùng và mật khẩu cho proxy cục bộ. Để trống cả hai nếu không cần đăng nhập. Áp dụng khi proxy chạy mà không đặt làm proxy hệ thống (cùng đường hầm, hoặc chạy riêng).',
@@ -338,6 +354,10 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'adsStandard': '标准：广告和跟踪器',
+  'adsLevel': '拦截强度',
+  'adsLevelDesc': '“强”使用更大的列表（约 20 万个名称）。如果某个网站或应用无法使用，请调回“标准”。',
+  'adsStrong': '强：另含遥测、大公司的广告服务器和公共加密 DNS 服务器',
   'proxyLoginOff': '无需登录',
   'proxyPass': '密码',
   'proxyLoginDesc': '本地代理的用户名和密码。两项都留空则无需登录。在代理不作为系统代理运行时生效（配合隧道，或单独保持运行）。',
@@ -422,6 +442,10 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'adsStandard': 'عادي: الإعلانات والمتتبعات',
+  'adsLevel': 'قوة الحظر',
+  'adsLevelDesc': 'الوضع القوي يستخدم قائمة أكبر (نحو 200 ألف اسم). إن توقف موقع أو تطبيق عن العمل فارجع إلى العادي.',
+  'adsStrong': 'قوي: يشمل القياس عن بُعد وخوادم إعلانات الشركات الكبرى وخوادم DNS المشفّرة العامة',
   'proxyLoginOff': 'بدون تسجيل دخول',
   'proxyPass': 'كلمة المرور',
   'proxyLoginDesc': 'اسم مستخدم وكلمة مرور للوكيل المحلي. اترك الحقلين فارغين لعدم وجود تسجيل دخول. يُطبَّق عندما يعمل الوكيل دون أن يكون وكيل النظام (مع النفق، أو يعمل وحده).',

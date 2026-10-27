@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/ad_lists.dart';
 import 'package:kumo/core/net_options.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/rule_sets.dart';
@@ -32,19 +33,46 @@ void main() {
     expect(back.blockAds && back.strictDns && back.blockStun, isTrue);
   });
 
-  test('ad blocking adds a reject rule and the rule-set when the list exists', () {
+  test('ad blocking rejects the built-in names even with no list, and the lists when they exist', () {
     final o = NetOptions()..blockAds = true;
-    final c = build(o, sets: {adsTag: '/tmp/ads.srs'});
+    const tag = 'ads-hagezi-pro';
+    final c = build(o, sets: {tag: '/tmp/ads.json', 'ads-category-ads-all': '/tmp/a.srs'});
     final route = c['route'] as Map<String, dynamic>;
-    expect((route['rule_set'] as List).single['tag'], adsTag);
-    expect(
-        (route['rules'] as List).any((r) => r['action'] == 'reject' && (r['rule_set'] as List?)?.first == adsTag),
-        isTrue);
-    // no list downloaded: nothing refers to it
+    final defs = (route['rule_set'] as List).cast<Map>();
+    expect(defs.firstWhere((d) => d['tag'] == tag)['format'], 'source');
+    expect(defs.firstWhere((d) => d['tag'] == 'ads-category-ads-all')['format'], 'binary');
+    final rules = (route['rules'] as List).cast<Map>();
+    expect(rules.any((r) => r['action'] == 'reject' && (r['rule_set'] as List?)?.contains(tag) == true), isTrue);
+    final dns = ((c['dns'] as Map)['rules'] as List).cast<Map>();
+    expect(dns.any((r) => r['action'] == 'predefined' && r['rcode'] == 'NXDOMAIN'), isTrue);
+    // no list downloaded: the built-in names are still refused, and nothing refers to a missing list
     final none = build(o);
     expect((none['route'] as Map).containsKey('rule_set'), isFalse);
+    final builtIn = ((none['route'] as Map)['rules'] as List)
+        .cast<Map>()
+        .firstWhere((r) => r['action'] == 'reject' && r['domain_suffix'] != null);
+    expect(builtIn['domain_suffix'], contains('doubleclick.net'));
+    // off: none of it
+    final off = build(NetOptions());
+    expect((off['route']['rules'] as List).any((r) => r['domain_suffix'] != null && r['action'] == 'reject'), isFalse);
   });
 
+  test('the strong level also refuses public encrypted-DNS servers, the standard one does not', () {
+    bool refuses(NetOptions o) => (build(o)['route']['rules'] as List)
+        .any((r) => r['action'] == 'reject' && (r['domain_suffix'] as List?)?.contains('dns.google') == true);
+    expect(refuses(NetOptions()..blockAds = true..adsLevel = 'strong'), isTrue);
+    expect(refuses(NetOptions()..blockAds = true..adsLevel = 'standard'), isFalse);
+  });
+
+  test('a list of domains becomes a rule-set, and a cut-off one is refused', () {
+    final text = ['# a list', for (var i = 0; i < 1200; i++) '*.ads$i.example.com', 'bad entry', ''].join('\n');
+    final json = jsonDecode(domainListToRuleSet(text)!) as Map;
+    final suffixes = ((json['rules'] as List).single['domain_suffix'] as List);
+    expect(json['version'], 3);
+    expect(suffixes.length, 1200);
+    expect(suffixes.first, 'ads0.example.com');
+    expect(domainListToRuleSet('a.com\nb.com'), isNull);
+  });
   test('strict DNS resolves names over encrypted DNS and refuses DNS over TLS', () {
     final c = build(NetOptions()..strictDns = true..blockStun = true);
     final servers = (c['dns'] as Map)['servers'] as List;
