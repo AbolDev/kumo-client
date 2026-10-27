@@ -2,14 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/collector_sources.dart';
 
 void main() {
-  test('two lists are put together without a link twice, the first one first', () {
+  test('lists are put together without a link twice, the first one first', () {
     expect(mergeLinks(['a', 'b'], ['b', 'c']), ['a', 'b', 'c']);
     expect(mergeLinks([], ['x']), ['x']);
     expect(mergeLinks(['x'], []), ['x']);
   });
 
-  test('the second list has mirrors of its own file', () {
-    expect(kExtraSources.length, greaterThan(1));
-    expect(kExtraSources.every((u) => u.endsWith('V2RAY_RAW.txt')), isTrue);
+  test('each extra list has mirrors of its own file', () {
+    expect(kExtraLists.length, 2);
+    for (final list in kExtraLists) {
+      expect(list.length, greaterThan(1));
+      expect(list.map((u) => u.split('/').last).toSet().length, 1);
+    }
+    expect(kRoosterSources.last, endsWith('roosterkid/openproxylist/refs/heads/main/V2RAY_RAW.txt'));
+    expect(kShatakSources.last, endsWith('ShatakVPN/ConfigForge-V2Ray/refs/heads/main/configs/all.txt'));
   });
 }
