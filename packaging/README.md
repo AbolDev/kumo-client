@@ -19,5 +19,5 @@ Nothing here is published until the steps below are done. Each store has its own
 | **AUR** | `aur/kumo-bin/` | Make an AUR account with an SSH key, then push `PKGBUILD`, `kumo.install` and `.SRCINFO` to `ssh://aur@aur.archlinux.org/kumo-bin.git`. |
 | **Flathub** | `flatpak/` | Pull request to `flathub/flathub` (branch `new-pr`) with these three files. Untested draft: the tray icon library and the review may ask for changes. The tunnel cannot be opened inside the sandbox. |
 | **Snap** | `snap/snapcraft.yaml` | Register the name `kumo` on the Snap Store, build with `snapcraft`, then `snapcraft upload`. Untested draft. Strict confinement cannot open the tunnel. |
-| **IzzyOnDroid** | `izzyondroid/REQUEST.md`, `../fastlane/` | Post the request text. The app's description and screenshots come from `fastlane/metadata/android`. |
+| **IzzyOnDroid** | `../fastlane/` | Read their inclusion policy (izzyondroid.org/docs/general/AppInclusionPolicy), then file an issue at codeberg.org/IzzyOnDroid/repodata. The app's description and screenshots come from `fastlane/metadata/android`. |
 | **F-Droid** | not prepared | Its builders must compile everything from source (sing-box libbox with gomobile, Xray, Flutter). That is a larger task; IzzyOnDroid comes first. |
