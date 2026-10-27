@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'proxy_config.dart';
+import 'singbox_config.dart' show buildXrayConfig;
 import 'vpn_channel.dart';
 
 /// Page fetched through the proxy to measure the real delay. Plain HTTP on purpose: HTTPS adds a
@@ -109,10 +110,18 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) async {
 }
 
 /// Real delay: time to fetch a page through the server (handshake included), -1 on failure.
-/// XHTTP servers need Xray, which only runs with the VPN, so they keep the TCP time.
+/// Servers only Xray can carry (XHTTP ...) are measured with a throw-away Xray the same way; if
+/// that cannot run, they keep the TCP time.
 Future<int> realDelay(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 8)}) async {
-  if (!c.canSingBox) return tcpLatency(c);
+  if (!c.canSingBox) {
+    if (c.canXray) {
+      final ms = await VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
+          timeoutMs: timeout.inMilliseconds);
+      if (ms >= 0) return ms;
+    }
+    return tcpLatency(c);
+  }
   final ms = await VpnChannel.delay(_delayConfig(await _resolvedLayers(c)), delayTestUrl,
       timeoutMs: timeout.inMilliseconds);
   return ms == -2 ? tcpLatency(c) : ms;

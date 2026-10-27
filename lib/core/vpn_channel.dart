@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import 'desktop_vpn.dart';
+import 'xray_delay.dart';
 import 'platform.dart';
 
 enum VpnStatus { stopped, starting, started, stopping, error }
@@ -97,6 +98,25 @@ class VpnChannel {
           : (await _control.invokeMethod<int>(
           'delay', {'config': configJson, 'url': url, 'timeout': timeoutMs})) ??
       -1;
+
+  /// Real delay of a server only Xray can carry, -1 on failure (see [runXrayDelay]).
+  static Future<int> xrayDelay(String Function(int port) config, String url,
+      {int timeoutMs = 8000}) async {
+    final dir = await dataDir();
+    if (_win) {
+      return runXrayDelay(
+          exe: DesktopVpn.instance.xrayExecutable,
+          dataDir: dir,
+          config: config,
+          url: url,
+          timeoutMs: timeoutMs,
+          spawn: DesktopVpn.instance.spawnQuiet);
+    }
+    final exe = await _control.invokeMethod<String>('xrayPath');
+    if (exe == null) return -1;
+    return runXrayDelay(
+        exe: exe, dataDir: dir, config: config, url: url, timeoutMs: timeoutMs, resolveNames: true);
+  }
 
   static Future<void> stop() =>
       _win ? DesktopVpn.instance.stop() : _control.invokeMethod('stop');

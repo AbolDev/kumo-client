@@ -459,6 +459,15 @@ wait "\$P" 2>/dev/null
 
   // ------------------------------------------------------------------ real delay
 
+  /// The Xray program next to the app.
+  String get xrayExecutable => _exePath('kumo-xray');
+
+  Future<Process> spawnQuiet(String exe, List<String> args) async {
+    final p = await Process.start(exe, args, workingDirectory: dataDir);
+    if (Platform.isWindows) WinJob.add(p.pid);
+    return p;
+  }
+
   /// The real delay of the single outbound `proxy` of [configJson] to [url] in ms, -1 on failure:
   /// a throw-away core with a SOCKS inbound, and two requests over one connection through it (see
   /// [socksWarmDelay]).

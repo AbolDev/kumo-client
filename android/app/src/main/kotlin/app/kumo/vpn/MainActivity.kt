@@ -102,6 +102,8 @@ class MainActivity : FlutterActivity() {
                         runOnUiThread { result.success(ms) }
                     }
                 }
+                // Where the Xray program is (it is shipped as libxray.so in the native library directory).
+                "xrayPath" -> result.success(java.io.File(applicationInfo.nativeLibraryDir, "libxray.so").path)
                 // The Wi-Fi name needs the location permission: "request" asks for it, and the answer
                 // says whether it is granted now. "name" is the current network, or null.
                 "wifiAccess" -> {
