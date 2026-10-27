@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/build_flavor.dart';
 import 'core/platform.dart';
 import 'core/vpn_channel.dart';
 import 'l10n/extra.dart';
@@ -57,11 +58,13 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
     super.initState();
     _state.init().then((_) {
       _askBatteryOnce();
-      // A newer stable release is offered when the app opens.
-      Future<void>.delayed(const Duration(seconds: 3), () {
-        final context = _navigator.currentContext;
-        if (context != null && context.mounted && _state.onboarded) checkAndPrompt(context, silent: true);
-      });
+      // A newer stable release is offered when the app opens (not in the F-Droid build).
+      if (!fdroidBuild) {
+        Future<void>.delayed(const Duration(seconds: 3), () {
+          final context = _navigator.currentContext;
+          if (context != null && context.mounted && _state.onboarded) checkAndPrompt(context, silent: true);
+        });
+      }
       // Connect on startup (the phone does this from its boot receiver).
       if (isDesktop && _state.autoConnect && !_state.connected) {
         _state.toggle();

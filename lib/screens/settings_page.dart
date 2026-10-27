@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../core/build_flavor.dart';
 import '../core/backup.dart';
 import '../core/win_autostart.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -451,10 +452,11 @@ class _SettingsPageState extends State<SettingsPage> {
               FutureBuilder<PackageInfo>(
                 future: PackageInfo.fromPlatform(),
                 builder: (context, snap) => ListTile(
-                  leading: const Icon(Icons.system_update),
-                  title: Text(tr(context, 'checkUpdate')),
+                  leading: Icon(fdroidBuild ? Icons.info_outline : Icons.system_update),
+                  title: Text(fdroidBuild ? 'Kumo' : tr(context, 'checkUpdate')),
                   subtitle: Text(tr(context, 'currentVersion', {'v': snap.data?.version ?? ''})),
-                  onTap: _checkUpdate,
+                  // The F-Droid build only shows its version: the store updates it.
+                  onTap: fdroidBuild ? null : _checkUpdate,
                 ),
               ),
               ListTile(

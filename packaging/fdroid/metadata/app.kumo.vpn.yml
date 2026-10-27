@@ -1,0 +1,62 @@
+Categories:
+  - Connectivity
+  - Internet
+License: GPL-3.0-only
+AuthorName: AbolDev
+WebSite: https://github.com/AbolDev/kumo-client
+SourceCode: https://github.com/AbolDev/kumo-client
+IssueTracker: https://github.com/AbolDev/kumo-client/issues
+Changelog: https://github.com/AbolDev/kumo-client/releases
+
+AutoName: Kumo
+
+RepoType: git
+Repo: https://github.com/AbolDev/kumo-client.git
+
+# UNTESTED DRAFT. The build steps follow what .github/workflows/build.yml does for the APK (libbox from
+# sing-box, Xray for XHTTP, then flutter build). They need to be run through `fdroid build` and fixed.
+Builds:
+  - versionName: 1.7.0
+    versionCode: 25
+    commit: v1.7.0
+    timeout: 14400
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@3.27.4
+      - go@go1.27.3
+      - sing-box@v1.13.21
+      - xray-core@v26.10.21
+    rm:
+      # binaries that were committed for convenience: they are built from source below
+      - android/app/libs/libbox.aar
+      - android/app/src/main/jniLibs
+    sudo:
+      - apt-get update
+      - apt-get install -y golang-go gcc make
+    prebuild:
+      # the self-updater has no place in this build
+      - sed -i '/REQUEST_INSTALL_PACKAGES/d' android/app/src/main/AndroidManifest.xml
+      - export GOROOT_BOOTSTRAP=/usr/lib/go
+      - (cd $$go$$/src && ./make.bash)
+      - export PATH=$$go$$/bin:$PATH
+      - export ANDROID_NDK_HOME=$$NDK$$
+      - export PATH="$(go env GOPATH)/bin:$PATH"
+      # libbox.aar (sing-box for Android), with the delay-test patch of this project
+      - cp tools/libbox_patch/*.go $$sing-box$$/experimental/libbox/
+      - go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
+      - go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+      - cd $$sing-box$$ && gomobile bind -v -o libbox.aar -target android/arm64,android/arm,android/amd64 -androidapi 23 -javapkg=io.nekohasekai -libname=box -trimpath -buildvcs=false -ldflags "-X github.com/sagernet/sing-box/constant.Version=1.13.21 -X internal/godebug.defaultGODEBUG=multipathtcp=0 -s -w -buildid= -checklinkname=0" -tags "with_gvisor,with_quic,with_utls,with_clash_api,with_wireguard,with_dhcp,badlinkname,tfogo_checklinkname0" ./experimental/libbox
+      - mkdir -p android/app/libs && cp $$sing-box$$/libbox.aar android/app/libs/libbox.aar
+      # Xray, one executable per CPU, named libxray.so so that Android lets the app run it
+      - export BIN=$$NDK$$/toolchains/llvm/prebuilt/linux-x86_64/bin
+      - export GOOS=android CGO_ENABLED=1
+      - mkdir -p android/app/src/main/jniLibs/arm64-v8a android/app/src/main/jniLibs/armeabi-v7a android/app/src/main/jniLibs/x86_64
+      - cd $$xray-core$$ && GOARCH=arm64 CC=$BIN/aarch64-linux-android23-clang go build -o $PWD/../../../android/app/src/main/jniLibs/arm64-v8a/libxray.so -trimpath -buildvcs=false -ldflags "-s -w -buildid= -checklinkname=0 -X github.com/xtls/xray-core/core.build=kumo" ./main
+    build:
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter build apk --release --dart-define=FDROID=true
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 1.7.0
+CurrentVersionCode: 25
