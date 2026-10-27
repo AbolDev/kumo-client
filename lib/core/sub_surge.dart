@@ -56,7 +56,7 @@ import 'dart:convert';
       .firstMatch(rest);
   if (embedded != null) {
     var url = embedded[1]!;
-    if (url.toLowerCase().startsWith('http%3a')) {
+    if (RegExp(r'^https?%3a', caseSensitive: false).hasMatch(url)) {
       try {
         url = Uri.decodeComponent(url);
       } catch (_) {}
