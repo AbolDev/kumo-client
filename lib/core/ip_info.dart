@@ -107,11 +107,29 @@ Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
   final id = (await _get(Uri.parse('https://bash.ws/id'), proxyPort)).trim();
   if (id.isEmpty || id.length > 64) throw const FormatException('bad id');
   final random = Random();
+  // With the local proxy (VPN without the tunnel) the names are given to the proxy, which looks
+  // them up through the VPN: that is the lookup an app using the connection causes. With the
+  // tunnel, or with no VPN, the device's own resolver is asked, as an app would.
+  Future<void> lookup(String name) async {
+    if (proxyPort == null) {
+      try {
+        await InternetAddress.lookup(name).timeout(const Duration(seconds: 6));
+      } catch (_) {}
+      return;
+    }
+    final client = _client(proxyPort);
+    try {
+      final req = await client.getUrl(Uri.parse('http://$name/')).timeout(const Duration(seconds: 6));
+      await (await req.close().timeout(const Duration(seconds: 6))).drain<void>();
+    } catch (_) {
+      // only the lookup matters, not the answer
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   await Future.wait([
-    for (var i = 1; i <= 10; i++)
-      InternetAddress.lookup('${i + random.nextInt(1000) * 10}.$id.bash.ws')
-          .timeout(const Duration(seconds: 6))
-          .then<void>((_) {}, onError: (_) {}),
+    for (var i = 1; i <= 10; i++) lookup('${i + random.nextInt(1000) * 10}.$id.bash.ws'),
   ]);
   await Future<void>.delayed(const Duration(seconds: 1));
   final body = await _get(Uri.parse('https://bash.ws/dnsleak/test/$id?json'), proxyPort);
