@@ -1,0 +1,65 @@
+name: F-Droid recipe test
+
+# Runs what the F-Droid recipe (packaging/fdroid/metadata/app.kumo.vpn.yml) does, on a normal runner:
+# the metadata check of fdroidserver, then the same steps the recipe has, from the sources of sing-box,
+# Xray and Go, to a Flutter APK built with the F-Droid flag. It does not run F-Droid's own build server.
+on:
+  workflow_dispatch:
+
+jobs:
+  recipe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check the metadata with fdroidserver
+        run: |
+          pip install fdroidserver
+          mkdir -p fd/metadata fd/srclibs
+          cp packaging/fdroid/metadata/*.yml fd/metadata/
+          cp packaging/fdroid/srclibs/*.yml fd/srclibs/
+          cd fd
+          touch config.yml
+          fdroid lint app.kumo.vpn || true
+          fdroid rewritemeta app.kumo.vpn
+          git diff --no-index --stat ../packaging/fdroid/metadata/app.kumo.vpn.yml metadata/app.kumo.vpn.yml || true
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+
+      - name: Fetch the sources the recipe names
+        run: |
+          set -euo pipefail
+          mkdir -p ../srclibs
+          git clone --depth 1 --branch go1.27.3 https://github.com/golang/go.git ../srclibs/go
+          git clone --depth 1 --branch v1.13.21 https://github.com/SagerNet/sing-box.git ../srclibs/sing-box
+          git clone --depth 1 --branch v26.10.21 https://github.com/XTLS/Xray-core.git ../srclibs/xray-core
+
+      - name: Recipe - rm and prebuild
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          export GOROOT_BOOTSTRAP="$(go env GOROOT)"
+          rm -rf android/app/libs/libbox.aar android/app/src/main/jniLibs
+          sed -i '/REQUEST_INSTALL_PACKAGES/d' android/app/src/main/AndroidManifest.xml
+          bash tools/fdroid_build.sh ../srclibs/go ../srclibs/sing-box ../srclibs/xray-core "$ANDROID_NDK_HOME"
+
+      - name: Recipe - build
+        run: |
+          flutter config --no-analytics
+          flutter build apk --release --dart-define=FDROID=true
+
+      - name: What the APK holds
+        run: |
+          ls -l build/app/outputs/flutter-apk/
+          unzip -l build/app/outputs/flutter-apk/app-release.apk | grep -E 'libxray|libbox|\.so$' | head -30
+          unzip -p build/app/outputs/flutter-apk/app-release.apk AndroidManifest.xml | strings | grep -c REQUEST_INSTALL_PACKAGES || true
