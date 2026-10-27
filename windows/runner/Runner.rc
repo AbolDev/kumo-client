@@ -93,7 +93,7 @@ BEGIN
             VALUE "FileDescription", "kumo" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "kumo" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 Kumo contributors. GPL-3.0-or-later." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Kumo contributors. GPL-3.0-only." "\0"
             VALUE "OriginalFilename", "kumo.exe" "\0"
             VALUE "ProductName", "kumo" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"

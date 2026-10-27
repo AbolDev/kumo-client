@@ -11,4 +11,4 @@ PRODUCT_NAME = Kumo
 PRODUCT_BUNDLE_IDENTIFIER = app.kumo.vpn
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 AbolDev. GPL-3.0-or-later.
+PRODUCT_COPYRIGHT = Copyright © 2026 AbolDev. GPL-3.0-only.
