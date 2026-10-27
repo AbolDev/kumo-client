@@ -16,6 +16,7 @@ import '../core/stun.dart';
 import '../core/singbox_config.dart';
 import '../core/sources.dart';
 import '../core/sub_formats.dart';
+import '../core/sub_surge.dart' show subscriptionDeepLink;
 import '../core/updater.dart' show includePrerelease;
 import '../core/usage_alert.dart';
 import '../core/vpn_channel.dart';
@@ -477,14 +478,13 @@ class AppState extends ChangeNotifier {
   }
 
   /// Puts a downloaded subscription into [g]. Returns how many configs it has.
-  Future<int> _applyFetched(ServerGroup g, Fetched fetched, int time) async {
+  Future<int> _applyFetched(ServerGroup g, Fetched fetched, int time,
+      {bool naming = false}) async {
+    // The provider's name is only taken when the subscription is added; later updates never
+    // rename it.
     final title = fetched.title;
-    if (title != null &&
-        (g.autoName ||
-            g.name.isEmpty ||
-            g.name == Uri.tryParse(g.url ?? '')?.host)) {
+    if (naming && title != null && g.name == Uri.tryParse(g.url ?? '')?.host) {
       g.name = title;
-      g.autoName = true;
     }
     g.info = fetched.info;
     checkUsage(g);
@@ -1039,7 +1039,7 @@ class AppState extends ChangeNotifier {
   }
   // ---------------------------------------------------------------- subscriptions
 
-  Future<void> refreshSubscription(ServerGroup g) async {
+  Future<void> refreshSubscription(ServerGroup g, {bool naming = false}) async {
     if (g.url == null) return;
     final key = 'sub-${g.id}';
     final gen = _begin(key);
@@ -1049,12 +1049,12 @@ class AppState extends ChangeNotifier {
     await _job((t) => t.fetchingList, () async {
       try {
         final fetched = await Future.any(<Future<Fetched?>>[
-          fetchSubscription(g.url!, allowInsecure: allowInsecure),
+          fetchSubscription(g.url!, allowInsecure: allowInsecure, lookupName: naming),
           cancel.future.then((_) => null),
         ]);
         if (fetched == null || _stale(key, gen)) return;
         final n = await _applyFetched(
-            g, fetched, DateTime.now().millisecondsSinceEpoch);
+            g, fetched, DateTime.now().millisecondsSinceEpoch, naming: naming);
         message =
             n == 0 ? (t) => t.noValidConfig : (t) => t.subscriptionUpdated(n);
       } catch (e) {
@@ -1124,8 +1124,12 @@ class AppState extends ChangeNotifier {
   /// Returns a subscription that was just added and whose provider gave it no name,
   /// so the screen can ask the user for one.
   Future<ServerGroup?> importText(String text) async {
-    final input = text.trim();
+    var input = text.trim();
     if (input.isEmpty) return null;
+    // Links other clients hand out (clash://install-config?url=..., hiddify://import/..., sub://...)
+    // hold the real address and sometimes a name.
+    final deep = subscriptionDeepLink(input.split(RegExp(r'\s')).first);
+    if (deep != null) input = deep.url;
     final first = input.split(RegExp(r'\s')).first;
     if (first.startsWith('http://') || first.startsWith('https://')) {
       var g = subscriptions.where((s) => s.url == first).firstOrNull;
@@ -1133,13 +1137,14 @@ class AppState extends ChangeNotifier {
       if (g == null) {
         g = ServerGroup('sub-${DateTime.now().microsecondsSinceEpoch}',
             GroupKind.subscription,
-            name: Uri.tryParse(first)?.host ?? first, url: first)
-          ..autoName = true;
+            name: deep?.name ?? Uri.tryParse(first)?.host ?? first, url: first)
+          ..autoName = false;
         subscriptions.add(g);
       }
-      await refreshSubscription(g);
-      final nameless = g.name == Uri.tryParse(first)?.host;
-      return isNew && nameless && g.configs.isNotEmpty ? g : null;
+      await refreshSubscription(g, naming: isNew);
+      // A new subscription always goes to the screen, which asks for its name (the name the
+      // provider or the link gave is filled in; empty when there was none).
+      return isNew && g.configs.isNotEmpty ? g : null;
     }
     await _job((t) => t.adding, () async {
       try {

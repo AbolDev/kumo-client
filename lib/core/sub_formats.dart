@@ -5,10 +5,11 @@ import 'package:yaml/yaml.dart';
 
 import 'config_decryptor.dart' show xrayJsonToLinks;
 import 'proxy_config.dart' show extractLinks, wireguardConfToLinks;
+import 'sub_surge.dart';
 
 /// Turns the body of a subscription, in whichever format the provider serves it, into
 /// share links: a plain or base64 list of links, a Clash / Mihomo YAML, a sing-box or
-/// Xray / V2Ray JSON, or a SIP008 Shadowsocks list.
+/// Xray / V2Ray JSON, a SIP008 Shadowsocks list, or a Surge / Loon / Stash profile.
 List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
   final text = body.trim();
   if (text.isEmpty) return const [];
@@ -17,6 +18,11 @@ List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
   // The text of a WireGuard configuration file.
   final wireguard = wireguardConfToLinks(text);
   if (wireguard.isNotEmpty) return wireguard;
+  // The `name = type, host, port, ...` lines of Surge, Loon and Stash profiles.
+  if (text.contains('=') && !text.startsWith('{') && !text.startsWith('[{')) {
+    final surge = surgeLinks(text);
+    if (surge.isNotEmpty) return surge;
+  }
 
   // Decrypted profiles (.bpf, .zsx ...) start with `// name: ...` comment lines before the JSON.
   final bare = text.startsWith('//')

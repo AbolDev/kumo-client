@@ -144,12 +144,14 @@ const _clients = ['Mozilla/5.0', 'v2rayN/7.0', 'clash.meta', 'sing-box'];
 
 Future<Fetched> fetchSubscription(String url,
     {Duration timeout = const Duration(seconds: 15),
-    bool allowInsecure = false}) async {
+    bool allowInsecure = false,
+    bool lookupName = false}) async {
   Fetched? first;
   Object? error;
-  // Without a name from the provider's headers, the information page may have one.
+  // Without a name from the provider's headers, the information page may have one. This is
+  // only asked when a subscription is added.
   Future<Fetched> named(Fetched f) async {
-    if (f.title != null) return f;
+    if (f.title != null || !lookupName) return f;
     final title = await _fetchPageTitle(url, allowInsecure);
     return title == null ? f : Fetched(f.body, title, f.info);
   }
@@ -159,6 +161,8 @@ Future<Fetched> fetchSubscription(String url,
       final f = await _fetchOnce(url, agent, timeout, allowInsecure);
       first ??= f;
       if (extractSubscriptionLinks(f.body).isNotEmpty) return named(f);
+      final merged = await _followUrlList(f, timeout, allowInsecure);
+      if (merged != null) return named(merged);
     } catch (e) {
       error ??= e;
       if (first == null && agent == _clients.first && e is TimeoutException) {
@@ -168,6 +172,27 @@ Future<Fetched> fetchSubscription(String url,
   }
   if (first != null) return named(first);
   throw error ?? HttpException('No answer', uri: Uri.parse(url));
+}
+
+/// Some providers answer with a list of other subscription addresses, one per line. They are
+/// downloaded (up to ten) and their bodies joined. Null when [f] is not such a list or nothing
+/// came back.
+Future<Fetched?> _followUrlList(Fetched f, Duration timeout, bool allowInsecure) async {
+  final lines = f.body
+      .split(RegExp(r'[\r\n]+'))
+      .map((l) => l.trim())
+      .where((l) => l.isNotEmpty && !l.startsWith('#'))
+      .toList();
+  if (lines.isEmpty || lines.length > 10) return null;
+  if (!lines.every((l) => l.startsWith('http://') || l.startsWith('https://'))) return null;
+  final bodies = <String>[];
+  for (final url in lines) {
+    try {
+      final part = await _fetchOnce(url, _clients.first, timeout, allowInsecure);
+      if (extractSubscriptionLinks(part.body).isNotEmpty) bodies.add(part.body);
+    } catch (_) {}
+  }
+  return bodies.isEmpty ? null : Fetched(bodies.join('\n'), f.title, f.info);
 }
 
 /// The name of the subscription's owner from the information page that 3x-ui panels show to a

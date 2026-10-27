@@ -258,7 +258,11 @@ class HomePage extends StatelessWidget {
   Future<void> _import(BuildContext context, String text) async {
     final group = await state.importText(text);
     if (group == null || !context.mounted) return;
-    final controller = TextEditingController();
+    // The name the provider or the link gave is filled in; with none, the field is empty (the
+    // address is not shown as a hint).
+    final found = group.name == Uri.tryParse(group.url ?? '')?.host ? '' : group.name;
+    final controller = TextEditingController(text: found)
+      ..selection = TextSelection(baseOffset: 0, extentOffset: found.length);
     final name = await showDialog<String>(
       context: context,
       builder: (dialog) {
@@ -271,7 +275,6 @@ class HomePage extends StatelessWidget {
             onSubmitted: (v) => Navigator.pop(dialog, v),
             decoration: InputDecoration(
                 labelText: t.subscriptionName,
-                hintText: group.name,
                 border: const OutlineInputBorder()),
           ),
           actions: [
