@@ -177,6 +177,27 @@ ProxyConfig? parseLink(String link) {
 
 // ---------------------------------------------------------------- helpers
 
+/// Uri.parse that also copes with a user name or password written without escaping (a "#", an
+/// "@", "<" ...), as some subscriptions have it: when the plain parse fails, everything before the
+/// last "@" of the authority is escaped and the link is read again.
+Uri _parseUri(String link) {
+  try {
+    return Uri.parse(link);
+  } on FormatException {
+    final scheme = link.indexOf('://');
+    if (scheme < 0) rethrow;
+    final start = scheme + 3;
+    final q = link.indexOf('?', start);
+    final end = q < 0 ? link.length : q;
+    final at = link.lastIndexOf('@', end - 1);
+    if (at < start) rethrow;
+    final info = link
+        .substring(start, at)
+        .replaceAllMapped(RegExp(r'''[#@<>\[\]\s"^`{}|\\']'''),
+            (m) => '%${m[0]!.codeUnitAt(0).toRadixString(16).toUpperCase().padLeft(2, '0')}');
+    return Uri.parse('${link.substring(0, start)}$info${link.substring(at)}');
+  }
+}
 List<int> _b64(String s) {
   var t = s.trim().replaceAll('-', '+').replaceAll('_', '/');
   t = t.padRight(t.length + (4 - t.length % 4) % 4, '=');
@@ -435,7 +456,7 @@ String _xrayNoteFor(String type, String? headerType, {String? encryption}) {
 // ---------------------------------------------------------------- protocols
 
 ProxyConfig? _vless(String link) {
-  final u = Uri.parse(link);
+  final u = _parseUri(link);
   final q = u.queryParameters;
   final id = _decode(u.userInfo);
   final type = (q['type'] ?? 'tcp').toLowerCase();
@@ -505,14 +526,21 @@ ProxyConfig? _vless(String link) {
 }
 
 ProxyConfig? _vmess(String link) {
-  final j = jsonDecode(_b64s(link.substring('vmess://'.length)).trim())
+  // Some exporters add "#name" after the base64 text: it is not part of it.
+  final rest = link.substring('vmess://'.length);
+  final hash = rest.indexOf('#');
+  final j = jsonDecode(_b64s(hash < 0 ? rest : rest.substring(0, hash)).trim())
       as Map<String, dynamic>;
+  var fragment = hash < 0 ? '' : rest.substring(hash + 1);
+  try {
+    fragment = Uri.decodeComponent(fragment);
+  } catch (_) {}
   final host = '${j['add'] ?? ''}';
   final port = int.tryParse('${j['port']}') ?? 0;
   final type = '${j['net'] ?? 'tcp'}'.toLowerCase();
   final tlsOn = '${j['tls'] ?? ''}' == 'tls';
   final ps = '${j['ps'] ?? ''}'.trim();
-  final name = ps.isEmpty ? 'vmess $host:$port' : ps;
+  final name = ps.isNotEmpty ? ps : (fragment.trim().isNotEmpty ? fragment.trim() : 'vmess $host:$port');
   final scy = ('${j['scy'] ?? ''}').isEmpty ? 'auto' : '${j['scy']}';
 
   // The same fields as the query of a vless link, for the Xray side.
@@ -586,7 +614,7 @@ ProxyConfig? _vmess(String link) {
 }
 
 ProxyConfig? _trojan(String link) {
-  final u = Uri.parse(link);
+  final u = _parseUri(link);
   final q = u.queryParameters;
   final type = (q['type'] ?? 'tcp').toLowerCase();
   final security = q['security'] ?? 'tls';
@@ -743,7 +771,7 @@ ProxyConfig? _hysteria2(String link) {
     hops = hop.group(2)!.split(',');
     text = text.replaceFirst(hop.group(0)!, hop.group(1)!);
   }
-  final u = Uri.parse(text);
+  final u = _parseUri(text);
   final q = u.queryParameters;
   if ((q['mport'] ?? '').isNotEmpty) hops = q['mport']!.split(',');
   final password = _decode(u.userInfo);
@@ -778,7 +806,7 @@ ProxyConfig? _hysteria2(String link) {
 }
 
 ProxyConfig? _tuic(String link) {
-  final u = Uri.parse(link);
+  final u = _parseUri(link);
   final q = u.queryParameters;
   final parts = u.userInfo.split(':');
   if (parts.length < 2) return null;
