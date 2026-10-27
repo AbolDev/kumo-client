@@ -12,8 +12,6 @@ Kumo is a free VPN app for Android, Windows, Linux and macOS. It collects public
 
 ## Download
 
-<div align="center">
-
 <table>
   <tr><th>System</th><th>Download</th></tr>
   <tr><td>Android</td><td>
@@ -47,8 +45,6 @@ Kumo is a free VPN app for Android, Windows, Linux and macOS. It collects public
       <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-arm64-portable.tar.gz"><img src="https://img.shields.io/badge/Portable-ARM64-fba85a?style=flat&logo=linux&logoColor=white&labelColor=555555" alt="Portable ARM64"></a>
   </td></tr>
 </table>
-
-</div>
 
 Not sure which Android file? Use **ARM64**, or **Universal** which works everywhere. Portable packages keep their data next to them.
 

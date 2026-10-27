@@ -16,7 +16,7 @@
 
 </div>
 
-<div align="center">
+<div dir="rtl">
 
 <table>
   <tr><th>سیستم</th><th>دانلود</th></tr>
