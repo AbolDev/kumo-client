@@ -37,10 +37,14 @@ $macos = @(
   (Badge 'Portable' 'Intel' '8a8a8a' 'apple' 'kumo-macos-x64-portable.zip')
 ) -join "<br>`n      "
 $linux = @(
-  (Badge 'DEB' 'amd64' 'e65100' 'linux' 'kumo-linux-x64.deb'),
-  (Badge 'DEB' 'ARM64' 'ef6c00' 'linux' 'kumo-linux-arm64.deb'),
+  (Badge 'AppImage' 'amd64' 'e65100' 'linux' 'kumo-linux-x64.AppImage'),
+  (Badge 'DEB' 'amd64' 'ea5a00' 'linux' 'kumo-linux-x64.deb'),
+  (Badge 'RPM' 'amd64' 'ef6c00' 'linux' 'kumo-linux-x64.rpm'),
   (Badge 'Portable' 'amd64' 'f57c00' 'linux' 'kumo-linux-x64-portable.tar.gz'),
-  (Badge 'Portable' 'ARM64' 'fb8c00' 'linux' 'kumo-linux-arm64-portable.tar.gz')
+  (Badge 'AppImage' 'ARM64' 'f68a1f' 'linux' 'kumo-linux-arm64.AppImage'),
+  (Badge 'DEB' 'ARM64' 'f89a3a' 'linux' 'kumo-linux-arm64.deb'),
+  (Badge 'RPM' 'ARM64' 'fa9f48' 'linux' 'kumo-linux-arm64.rpm'),
+  (Badge 'Portable' 'ARM64' 'fba85a' 'linux' 'kumo-linux-arm64-portable.tar.gz')
 ) -join "<br>`n      "
 
 $system = if ($Lang -eq 'fa') { [regex]::Unescape('\u0633\u06cc\u0633\u062a\u0645') } else { 'System' }

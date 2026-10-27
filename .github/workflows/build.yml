@@ -205,9 +205,8 @@ jobs:
         with:
           path: dist/kumo-android-${{ matrix.name }}.apk
           archive: false
-  # Flutter builds Windows for the CPU of the machine running it and has no x86 target, so only the
-  # x64 installer is made. (An ARM64 one needs an ARM64 runner; the matrix is ready for it, see
-  # tools/fetch_windows_core.ps1 -Arch and installer/kumo.iss /DArch.)
+  # Flutter builds Windows for the CPU of the machine running it and has no x86 target, so this
+  # makes the x64 installer; the ARM64 one is built by the windows-arm64 job below.
   windows:
     # Visual Studio 2022 is the newest version these Flutter releases know.
     runs-on: windows-2022
@@ -264,9 +263,85 @@ jobs:
           path: dist/kumo-windows-${{ matrix.arch }}-portable.zip
           archive: false
 
-  # Linux, for x64 and arm64: a .deb (the installer, which also lets the core open the tunnel
-  # without a password) and a portable tar.gz (a `portable` file makes it keep its data in a
-  # folder beside it). Built on Ubuntu 22.04 so it runs on older systems too.
+  # Windows on ARM. Flutter builds Windows for the machine it runs on, so this needs an ARM64 runner.
+  # It is a separate job and is not required by the release: if it fails, the other files are still
+  # released. The program is checked to really be an ARM64 one before it is packaged.
+  windows-arm64:
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Flutter from source
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch 3.27.4 https://github.com/flutter/flutter.git "$env:USERPROFILE\flutter"
+          "$env:USERPROFILE\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "$env:USERPROFILE\flutter\bin\flutter.bat" --version
+
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+
+      - run: ./tools/fetch_windows_core.ps1 -Arch arm64
+
+      - name: Build
+        shell: pwsh
+        run: |
+          flutter build windows --release --no-pub --target-platform windows-arm64
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host 'The target flag was refused; building for this machine'
+            flutter build windows --release --no-pub
+            if ($LASTEXITCODE -ne 0) { throw 'flutter build failed' }
+          }
+          Get-ChildItem build\windows -Directory | Select-Object Name
+
+      # Finds the program folder and refuses to go on unless kumo.exe is an ARM64 binary.
+      - name: Check the build is ARM64
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem build\windows -Recurse -Filter kumo.exe | Select-Object -First 1
+          if (-not $exe) { throw 'kumo.exe not found' }
+          $bytes = [IO.File]::ReadAllBytes($exe.FullName)
+          $pe = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $pe + 4)
+          Write-Host ("{0} machine type 0x{1:X}" -f $exe.FullName, $machine)
+          if ($machine -ne 0xAA64) { throw 'kumo.exe is not an ARM64 program' }
+          $release = $exe.Directory.FullName
+          $want = Join-Path (Get-Location) 'build\windows\arm64\runner\Release'
+          if ($release -ne $want) {
+            New-Item -ItemType Directory -Force (Split-Path $want) | Out-Null
+            Copy-Item $release $want -Recurse -Force
+          }
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          $version = ((Get-Content pubspec.yaml | Select-String '^version:').Line -split '[: +]+')[1]
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=arm64" installer\kumo.iss
+          if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-windows-arm64-setup.exe
+          archive: false
+
+      - name: Build the portable zip
+        shell: pwsh
+        run: |
+          $src = "build\windows\arm64\runner\Release"
+          New-Item -ItemType File -Path "$src\portable" -Force | Out-Null
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Compress-Archive -Path "$src\*" -DestinationPath "dist\kumo-windows-arm64-portable.zip"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-windows-arm64-portable.zip
+          archive: false
+
+  # Linux, for x64 and arm64: a .deb and an .rpm (the installers, which also let the core open the
+  # tunnel without a password), an AppImage, and a portable tar.gz (a `portable` file makes it keep
+  # its data in a folder beside it). Built on Ubuntu 22.04 so it runs on older systems too.
   linux:
     strategy:
       fail-fast: false
@@ -328,9 +403,54 @@ jobs:
           install -m755 packaging/linux/postinst "$pkg/DEBIAN/postinst"
           dpkg-deb --build --root-owner-group "$pkg" "dist/kumo-linux-$arch.deb"
 
+      # An .rpm for Fedora, openSUSE and the like, made from the same program folder.
+      - name: Package (rpm)
+        run: |
+          arch="${{ matrix.arch }}"
+          rpm_arch="x86_64"; [ "$arch" = arm64 ] && rpm_arch="aarch64"
+          bundle="build/linux/$arch/release/bundle"
+          version="$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')"
+          sudo apt-get install -y rpm
+          mkdir -p rpmsrc rpmtop
+          cp -r "$bundle" rpmsrc/bundle
+          cp packaging/linux/kumo.desktop rpmsrc/kumo.desktop
+          cp linux/runner/resources/kumo.png rpmsrc/kumo.png
+          sed -e "s/@VERSION@/$version/" -e "s/@RPMARCH@/$rpm_arch/" packaging/linux/kumo.spec > rpmsrc/kumo.spec
+          rpmbuild -bb --target "$rpm_arch" \
+            --define "_topdir $PWD/rpmtop" --define "_sourcedir $PWD/rpmsrc" \
+            --define "_binary_payload w9.gzdio" rpmsrc/kumo.spec
+          cp rpmtop/RPMS/"$rpm_arch"/kumo-*.rpm "dist/kumo-linux-$arch.rpm"
+
+      # An AppImage: one file that runs on most distributions (it needs GTK 3 on the system).
+      - name: Package (AppImage)
+        run: |
+          arch="${{ matrix.arch }}"
+          tool_arch="x86_64"; [ "$arch" = arm64 ] && tool_arch="aarch64"
+          bundle="build/linux/$arch/release/bundle"
+          mkdir -p AppDir
+          cp -r "$bundle" AppDir/kumo
+          install -m755 packaging/linux/AppRun AppDir/AppRun
+          install -m644 packaging/linux/kumo-appimage.desktop AppDir/kumo.desktop
+          install -m644 linux/runner/resources/kumo.png AppDir/kumo.png
+          cp linux/runner/resources/kumo.png AppDir/.DirIcon
+          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$tool_arch.AppImage"
+          chmod +x appimagetool
+          ARCH="$tool_arch" ./appimagetool --appimage-extract-and-run --no-appstream AppDir "dist/kumo-linux-$arch.AppImage"
+          ls -l dist
+
       - uses: actions/upload-artifact@v7
         with:
           path: dist/kumo-linux-${{ matrix.arch }}.deb
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-linux-${{ matrix.arch }}.rpm
+          archive: false
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/kumo-linux-${{ matrix.arch }}.AppImage
           archive: false
 
       - uses: actions/upload-artifact@v7
@@ -434,13 +554,13 @@ jobs:
   # A pushed version tag becomes a release holding the four APKs, the Windows installer and
   # portable zip, and the Linux and macOS packages.
   release:
-    # The Linux and macOS packages are added when they were built; if one of those jobs fails the
-    # Android and Windows files are still released.
+    # The Linux, macOS and Windows ARM64 packages are added when they were built; if one of those
+    # jobs fails the Android and Windows x64 files are still released.
     if: >-
       startsWith(github.ref, 'refs/tags/v') && !cancelled() &&
       needs.apk.result == 'success' && needs.windows.result == 'success' &&
       needs.test.result == 'success'
-    needs: [apk, windows, linux, macos, test]
+    needs: [apk, windows, windows-arm64, linux, macos, test]
     runs-on: ubuntu-latest
     permissions:
       contents: write

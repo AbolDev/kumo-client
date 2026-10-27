@@ -1,0 +1,4 @@
+#!/bin/sh
+# Starts Kumo from inside the AppImage.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/kumo/kumo" "$@"

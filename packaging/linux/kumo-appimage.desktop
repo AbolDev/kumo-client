@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Kumo
+Comment=Free VPN client powered by sing-box and Xray
+Exec=kumo
+Icon=kumo
+Terminal=false
+Categories=Network;
