@@ -42,13 +42,17 @@ class WinProxy implements SystemProxy {
     } catch (_) {}
   }
 
+  int? _port;
+
   /// Points the system proxy at 127.0.0.1:[port].
   @override
   Future<void> enable(int port) async {
+    _port = port;
     try {
       if (!await _backup.exists()) {
         await _backup.parent.create(recursive: true);
         await _backup.writeAsString(jsonEncode({
+          'ours': port,
           'enable': await _query('ProxyEnable'),
           'server': await _query('ProxyServer'),
           'override': await _query('ProxyOverride'),
@@ -65,23 +69,51 @@ class WinProxy implements SystemProxy {
     } catch (_) {}
   }
 
-  /// Puts back what was there before (also used at startup after a crash).
+  /// Switches the proxy off when it still points at [port] (checked, and tried again). A proxy of
+  /// another program is left alone.
+  Future<void> _clearOurs(int port) async {
+    bool ours(String? server) =>
+        server != null && (server.contains('127.0.0.1:$port') || server.contains('localhost:$port'));
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (!ours(await _query('ProxyServer'))) return;
+      await _set('ProxyEnable', 'REG_DWORD', '0');
+      await _set('ProxyServer', 'REG_SZ', null);
+      _notify();
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+  }
+
+  /// Puts back what was there before (also used at startup after a crash), then makes sure the proxy
+  /// of this app is gone.
   @override
-  Future<void> restore() async {
+  Future<void> restore({int? port}) async {
+    int? ours = port ?? _port;
     try {
-      if (!await _backup.exists()) return;
+      if (!await _backup.exists()) {
+        if (ours != null) await _clearOurs(ours);
+        return;
+      }
       final j = jsonDecode(await _backup.readAsString()) as Map<String, dynamic>;
+      ours ??= (j['ours'] as num?)?.toInt();
       final enable = j['enable'] as String?;
-      // Three independent registry writes, each a separate process: run them side by side.
+      var server = j['server'] as String?;
+      var on = enable == null ? 0 : (int.tryParse(enable.replaceFirst('0x', ''), radix: 16) ?? 0);
+      // A backup that itself holds this app's proxy (an earlier crash left it set) means "off".
+      if (ours != null && server != null && (server.contains('127.0.0.1:$ours') || server.contains('localhost:$ours'))) {
+        on = 0;
+        server = null;
+      }
+      // Independent registry writes, each a separate process: run them side by side.
       await Future.wait([
-        _set('ProxyEnable', 'REG_DWORD',
-            enable == null ? '0' : '${int.tryParse(enable.replaceFirst('0x', ''), radix: 16) ?? 0}'),
-        _set('ProxyServer', 'REG_SZ', j['server'] as String?),
+        _set('ProxyEnable', 'REG_DWORD', '$on'),
+        _set('ProxyServer', 'REG_SZ', server),
         _set('ProxyOverride', 'REG_SZ', j['override'] as String?),
         if (j['auto'] is String) _set('AutoConfigURL', 'REG_SZ', j['auto'] as String),
       ]);
+      if (ours != null) await _clearOurs(ours);
       await _backup.delete();
       _notify();
     } catch (_) {}
+    _port = null;
   }
 }

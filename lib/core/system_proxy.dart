@@ -8,7 +8,10 @@ import 'win_proxy.dart';
 /// is also used at startup, after a crash).
 abstract class SystemProxy {
   Future<void> enable(int port);
-  Future<void> restore();
+  /// Puts the previous setting back and then makes sure nothing is left that points at this app's own
+  /// proxy at 127.0.0.1:[port] (the port the proxy was set to; when null, the one remembered). The
+  /// setting that was found before is never touched when it is somebody else's proxy.
+  Future<void> restore({int? port});
 
   static SystemProxy forPlatform(String dataDir) {
     if (Platform.isWindows) return WinProxy(dataDir);
@@ -92,13 +95,17 @@ class LinuxProxy implements SystemProxy {
         'string:',
       ]);
 
+  int? _port;
+
   @override
   Future<void> enable(int port) async {
+    _port = port;
     try {
       if (!await _backup.exists()) {
         await _backup.parent.create(recursive: true);
         if (_kde) {
           await _backup.writeAsString(jsonEncode({
+            'ours': port,
             'kde': {
               for (final k in const ['ProxyType', 'httpProxy', 'httpsProxy', 'socksProxy', 'NoProxyFor'])
                 k: await _kdeRead(k),
@@ -106,6 +113,7 @@ class LinuxProxy implements SystemProxy {
           }));
         } else {
           await _backup.writeAsString(jsonEncode({
+            'ours': port,
             'gnome': {
               for (final e in _gnome) '${e[0]} ${e[1]}': await _run('gsettings', ['get', e[0], e[1]]),
             },
@@ -139,11 +147,43 @@ class LinuxProxy implements SystemProxy {
     } catch (_) {}
   }
 
+  /// Switches off a proxy that still points at [port] (checked, and tried again).
+  Future<void> _clearOurs(int port) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      var left = false;
+      if (_kde) {
+        final type = await _kdeRead('ProxyType');
+        final http = await _kdeRead('httpProxy');
+        left = type == '1' && http.contains('127.0.0.1') && http.contains('$port');
+        if (left) {
+          final write = await _kdeWriter();
+          if (write != null) {
+            await _run(write, ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', 'ProxyType', '0']);
+            await _kdeNotify();
+          }
+        }
+      } else {
+        final mode = await _run('gsettings', ['get', 'org.gnome.system.proxy', 'mode']);
+        final host = await _run('gsettings', ['get', 'org.gnome.system.proxy.http', 'host']);
+        final p = await _run('gsettings', ['get', 'org.gnome.system.proxy.http', 'port']);
+        left = mode.contains('manual') && host.contains('127.0.0.1') && p.trim() == '$port';
+        if (left) await _run('gsettings', ['set', 'org.gnome.system.proxy', 'mode', 'none']);
+      }
+      if (!left) return;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+  }
+
   @override
-  Future<void> restore() async {
+  Future<void> restore({int? port}) async {
+    int? ours = port ?? _port;
     try {
-      if (!await _backup.exists()) return;
+      if (!await _backup.exists()) {
+        if (ours != null) await _clearOurs(ours);
+        return;
+      }
       final j = jsonDecode(await _backup.readAsString()) as Map<String, dynamic>;
+      ours ??= (j['ours'] as num?)?.toInt();
       final gnome = j['gnome'];
       if (gnome is Map) {
         // mode last, so the old mode only returns once its details are back
@@ -168,8 +208,10 @@ class LinuxProxy implements SystemProxy {
           await _kdeNotify();
         }
       }
+      if (ours != null) await _clearOurs(ours);
       await _backup.delete();
     } catch (_) {}
+    _port = null;
   }
 }
 
@@ -200,8 +242,11 @@ class MacProxy implements SystemProxy {
     return (on: field('Enabled') == 'Yes', server: field('Server'), port: field('Port'));
   }
 
+  int? _port;
+
   @override
   Future<void> enable(int port) async {
+    _port = port;
     try {
       final services = await _services();
       if (!await _backup.exists()) {
@@ -217,6 +262,7 @@ class MacProxy implements SystemProxy {
             'socks': [socks.on, socks.server, socks.port],
           };
         }
+        saved['_ours'] = port;
         await _backup.writeAsString(jsonEncode(saved));
       }
       for (final s in services) {
@@ -228,12 +274,40 @@ class MacProxy implements SystemProxy {
     } catch (_) {}
   }
 
+  /// Switches off every proxy of every service that still points at [port] (checked, and tried again).
+  Future<void> _clearOurs(int port) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      var left = false;
+      for (final s in await _services()) {
+        for (final q in const [
+          ['-getwebproxy', '-setwebproxystate'],
+          ['-getsecurewebproxy', '-setsecurewebproxystate'],
+          ['-getsocksfirewallproxy', '-setsocksfirewallproxystate'],
+        ]) {
+          final st = await _state(q[0], s);
+          if (st.on && st.server == '127.0.0.1' && st.port == '$port') {
+            left = true;
+            await _run('networksetup', [q[1], s, 'off']);
+          }
+        }
+      }
+      if (!left) return;
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+  }
+
   @override
-  Future<void> restore() async {
+  Future<void> restore({int? port}) async {
+    int? ours = port ?? _port;
     try {
-      if (!await _backup.exists()) return;
+      if (!await _backup.exists()) {
+        if (ours != null) await _clearOurs(ours);
+        return;
+      }
       final j = jsonDecode(await _backup.readAsString()) as Map<String, dynamic>;
+      ours ??= (j['_ours'] as num?)?.toInt();
       for (final e in j.entries) {
+        if (e.key == '_ours') continue;
         final s = e.key;
         final v = e.value as Map<String, dynamic>;
         Future<void> back(String set, String state, List<dynamic> old) async {
@@ -248,7 +322,9 @@ class MacProxy implements SystemProxy {
         await back('-setsecurewebproxy', '-setsecurewebproxystate', v['secure'] as List);
         await back('-setsocksfirewallproxy', '-setsocksfirewallproxystate', v['socks'] as List);
       }
+      if (ours != null) await _clearOurs(ours);
       await _backup.delete();
     } catch (_) {}
+    _port = null;
   }
 }

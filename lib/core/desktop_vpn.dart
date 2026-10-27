@@ -22,6 +22,10 @@ class DesktopVpn {
 
   // Cores left over from a run that was killed would hold the tunnel and the ports.
   late final Future<void> _ready = _killStale().then((_) => _proxy.restore());
+
+  /// The port the system proxy was pointed at, while it is set. It is cleared only after the setting
+  /// was taken away again.
+  int? _sysPort;
   late final SystemProxy _proxy = SystemProxy.forPlatform(dataDir);
 
   final _states = StreamController<VpnState>.broadcast();
@@ -325,7 +329,10 @@ wait "\$P" 2>/dev/null
         }
         throw StateError(text.isEmpty ? 'sing-box did not start' : text);
       }
-      if (systemProxyPort != null) await _proxy.enable(systemProxyPort);
+      if (systemProxyPort != null) {
+        _sysPort = systemProxyPort;
+        await _proxy.enable(systemProxyPort);
+      }
       if (stale()) return;
       _emit(VpnStatus.started);
       _watchTraffic(api, gen);
@@ -452,9 +459,30 @@ wait "\$P" 2>/dev/null
     ]);
   }
 
+  /// Takes this app's system proxy away. It is tried again when the check afterwards shows the
+  /// setting is still there, so that disconnecting always leaves the system without our proxy.
+  Future<void> _releaseProxy() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await _proxy.restore(port: _sysPort);
+        break;
+      } catch (_) {}
+    }
+    _sysPort = null;
+  }
+
+  Future<void> _blockProxy() async {
+    _sysPort = 1;
+    await _proxy.enable(1);
+  }
+
   Future<void> stop() async {
     _gen++;
-    if (_state.status == VpnStatus.stopped) return;
+    if (_state.status == VpnStatus.stopped) {
+      // Nothing runs, but a setting left behind (a failed earlier removal) is still taken away.
+      if (_sysPort != null) await _releaseProxy();
+      return;
+    }
     _emit(VpnStatus.stopping);
     await _killAll();
     _emit(VpnStatus.stopped);
@@ -465,7 +493,7 @@ wait "\$P" 2>/dev/null
   Future<void> _killAll({bool keepBlocked = false}) async {
     // The proxy settings are put back while the cores are being stopped, not before: the two
     // are independent and each used to wait for the other.
-    final proxy = keepBlocked ? _proxy.enable(1) : _proxy.restore();
+    final proxy = keepBlocked ? _blockProxy() : _releaseProxy();
     _beat?.cancel();
     _beat = null;
     final wasElevated = _elevated;
