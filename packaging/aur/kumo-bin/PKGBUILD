@@ -1,0 +1,39 @@
+# Maintainer: AbolDev <abolfazlbaghery07@gmail.com>
+pkgname=kumo-bin
+pkgver=1.7.0
+pkgrel=1
+pkgdesc="Free VPN client powered by sing-box and Xray"
+arch=('x86_64' 'aarch64')
+url="https://github.com/AbolDev/kumo-client"
+license=('GPL-3.0-only')
+depends=('gtk3' 'libayatana-appindicator' 'polkit')
+provides=('kumo')
+conflicts=('kumo')
+options=('!strip' '!debug')
+install=kumo.install
+source_x86_64=("kumo-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/kumo-linux-x64-portable.tar.gz")
+source_aarch64=("kumo-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/kumo-linux-arm64-portable.tar.gz")
+sha256sums_x86_64=('3c4069dde9f7488fd9d0401cae3d9c829bbbefcc014c5a7648b086e44aa23e1b')
+sha256sums_aarch64=('77786b0e707e46126f9a61898f450858100640b79ed4004172412e78ae6e6e54')
+
+package() {
+  install -d "$pkgdir/opt/kumo"
+  cp -a "$srcdir/kumo/." "$pkgdir/opt/kumo/"
+  # the "portable" marker would keep the data next to the program
+  rm -f "$pkgdir/opt/kumo/portable" "$pkgdir/opt/kumo/.gitignore"
+
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/kumo/kumo "$pkgdir/usr/bin/kumo"
+  install -Dm644 "$pkgdir/opt/kumo/data/kumo.png" "$pkgdir/usr/share/pixmaps/kumo.png"
+
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/kumo.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Kumo
+Comment=Free VPN client powered by sing-box and Xray
+Exec=/opt/kumo/kumo
+Icon=kumo
+Terminal=false
+Categories=Network;
+EOF
+}

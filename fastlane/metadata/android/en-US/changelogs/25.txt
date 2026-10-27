@@ -1,0 +1,1 @@
+Stronger ad blocking, a more reliable DNS leak test, the proxy can stay up without cuts, and an Info page for subscriptions.

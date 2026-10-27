@@ -1,0 +1,1 @@
+Free VPN client powered by sing-box and Xray. One tap to connect.

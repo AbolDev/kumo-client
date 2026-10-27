@@ -1,0 +1,39 @@
+app-id: app.kumo.vpn
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: kumo
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # the tray icon
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --filesystem=xdg-download
+modules:
+  - name: kumo
+    buildsystem: simple
+    build-commands:
+      - mkdir -p /app/lib/kumo
+      - cp -a . /app/lib/kumo/
+      - rm -f /app/lib/kumo/portable /app/lib/kumo/.gitignore
+      - mkdir -p /app/bin
+      - ln -s /app/lib/kumo/kumo /app/bin/kumo
+      - install -Dm644 data/kumo.png /app/share/icons/hicolor/512x512/apps/app.kumo.vpn.png
+      - install -Dm644 app.kumo.vpn.desktop /app/share/applications/app.kumo.vpn.desktop
+      - install -Dm644 app.kumo.vpn.metainfo.xml /app/share/metainfo/app.kumo.vpn.metainfo.xml
+    sources:
+      - type: archive
+        url: https://github.com/AbolDev/kumo-client/releases/download/v1.7.0/kumo-linux-x64-portable.tar.gz
+        sha256: 3c4069dde9f7488fd9d0401cae3d9c829bbbefcc014c5a7648b086e44aa23e1b
+        only-arches: [x86_64]
+      - type: archive
+        url: https://github.com/AbolDev/kumo-client/releases/download/v1.7.0/kumo-linux-arm64-portable.tar.gz
+        sha256: 77786b0e707e46126f9a61898f450858100640b79ed4004172412e78ae6e6e54
+        only-arches: [aarch64]
+      - type: file
+        path: app.kumo.vpn.desktop
+      - type: file
+        path: app.kumo.vpn.metainfo.xml

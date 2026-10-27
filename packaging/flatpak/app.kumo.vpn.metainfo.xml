@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.kumo.vpn</id>
+  <name>Kumo</name>
+  <summary>Free VPN client powered by sing-box and Xray</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <developer id="io.github.AbolDev"><name>AbolDev</name></developer>
+  <description>
+    <p>Kumo connects to the servers and subscriptions you choose. It can run as a local proxy (also set as the system proxy) or tunnel the whole computer, and it supports many protocols, subscriptions, routing rules, ad blocking and more.</p>
+    <p>In this package the tunnel cannot be opened (the sandbox does not allow it): Kumo works as a local proxy.</p>
+  </description>
+  <launchable type="desktop-id">app.kumo.vpn.desktop</launchable>
+  <url type="homepage">https://github.com/AbolDev/kumo-client</url>
+  <url type="bugtracker">https://github.com/AbolDev/kumo-client/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/AbolDev/kumo-client/main/docs/screenshots/desktop-connected.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="1.7.0" date="2026-10-27" />
+  </releases>
+</component>

@@ -1,0 +1,8 @@
+# Lets the VPN core open the tunnel (TUN) without asking for a password every time.
+post_install() {
+  setcap cap_net_admin,cap_net_bind_service,cap_net_raw+ep /opt/kumo/kumo-core || true
+}
+
+post_upgrade() {
+  post_install
+}

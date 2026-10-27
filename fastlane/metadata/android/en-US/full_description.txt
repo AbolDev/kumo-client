@@ -1,0 +1,14 @@
+Kumo is a free, open-source VPN client built on sing-box and Xray.
+
+<b>What it does</b>
+• Connects with one tap to the servers and subscriptions you add
+• Many protocols: VLESS, VMess, Trojan, Shadowsocks, Hysteria2, TUIC, WireGuard, XHTTP and more
+• Subscription links with usage and expiry, automatic updates, and the routing rules a provider sends
+• Automatic mode picks the fastest servers and switches when one stops answering
+• Per-app routing, country bypass lists, custom routing rules, kill switch
+• Strong ad and tracker blocking, DNS leak test, what-is-my-IP check
+• Quick Settings tile, home-screen widgets, Android TV support
+• Interface in English, Persian, Russian, Vietnamese, Chinese and Arabic
+
+<b>Open source</b>
+Kumo is licensed under the GPL-3.0. Source code and issues: https://github.com/AbolDev/kumo-client

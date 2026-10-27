@@ -1,0 +1,36 @@
+name: kumo
+base: core24
+version: '1.7.0'
+summary: Free VPN client powered by sing-box and Xray
+description: |
+  Kumo connects to the servers and subscriptions you choose. It can run as a local proxy (also set as the system proxy) or tunnel the whole computer, and it supports many protocols, subscriptions, routing rules, ad blocking and more.
+  In the Snap the tunnel cannot be opened (strict confinement): Kumo works as a local proxy.
+grade: stable
+confinement: strict
+platforms:
+  amd64:
+  arm64:
+apps:
+  kumo:
+    command: opt/kumo/kumo
+    extensions: [gnome]
+    plugs:
+      - network
+      - network-bind
+      - home
+parts:
+  kumo:
+    plugin: nil
+    build-packages: [curl]
+    override-build: |
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64) file=kumo-linux-x64-portable.tar.gz; sum=3c4069dde9f7488fd9d0401cae3d9c829bbbefcc014c5a7648b086e44aa23e1b ;;
+        arm64) file=kumo-linux-arm64-portable.tar.gz; sum=77786b0e707e46126f9a61898f450858100640b79ed4004172412e78ae6e6e54 ;;
+      esac
+      curl -fsSL -o /tmp/kumo.tgz "https://github.com/AbolDev/kumo-client/releases/download/v1.7.0/$file"
+      echo "$sum  /tmp/kumo.tgz" | sha256sum -c -
+      mkdir -p "$CRAFT_PART_INSTALL/opt"
+      tar -xzf /tmp/kumo.tgz -C "$CRAFT_PART_INSTALL/opt"
+      rm -f "$CRAFT_PART_INSTALL/opt/kumo/portable" "$CRAFT_PART_INSTALL/opt/kumo/.gitignore"
+    stage-packages:
+      - libayatana-appindicator3-1
