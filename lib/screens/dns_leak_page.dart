@@ -43,30 +43,45 @@ class _DnsLeakPageState extends State<DnsLeakPage> {
     });
   }
 
-  /// Leaking means a resolver sits in another country than the address the VPN gives.
-  bool _leaks(DnsLeakResult r) {
-    final home = r.address?.country ?? '';
-    if (home.isEmpty || r.resolvers.isEmpty) return false;
-    return r.resolvers.any((e) => e.country.isNotEmpty && e.country != home);
+  Widget _entry(DnsLeakEntry e, DnsEntryKind kind, ColorScheme scheme) {
+    final (icon, color, label) = switch (kind) {
+      DnsEntryKind.safe => (Icons.check_circle, Colors.green.shade600, 'dnsKindSafe'),
+      DnsEntryKind.publicDns => (Icons.public, Colors.orange.shade700, 'dnsKindPublic'),
+      DnsEntryKind.leak => (Icons.warning_amber_rounded, scheme.error, 'dnsKindLeak'),
+    };
+    final name = publicDnsName(e);
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.15),
+        child: Icon(icon, color: color),
+      ),
+      title: SelectableText(e.ip, textDirection: TextDirection.ltr),
+      subtitle: Text(
+          [e.country, if (name != null) name else e.org, if (e.asn.isNotEmpty) e.asn]
+              .where((s) => s.isNotEmpty)
+              .join(' · '),
+          textDirection: TextDirection.ltr),
+      trailing: Text(tr(context, label), style: TextStyle(color: color, fontWeight: FontWeight.w600)),
+    );
   }
 
-  Widget _entry(DnsLeakEntry e, IconData icon) {
+  Widget _address(DnsLeakEntry e) {
     final scheme = Theme.of(context).colorScheme;
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: scheme.primaryContainer,
-        child: Icon(icon, color: scheme.onPrimaryContainer),
+        child: Icon(Icons.public, color: scheme.onPrimaryContainer),
       ),
       title: SelectableText(e.ip, textDirection: TextDirection.ltr),
       subtitle: Text([e.country, e.org].where((s) => s.isNotEmpty).join(' · '),
           textDirection: TextDirection.ltr),
     );
   }
-
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final r = _result;
+    final judged = r == null ? null : judgeDnsLeak(r);
     return Scaffold(
       appBar: AppBar(
         title: Text(tr(context, 'menuDnsLeak')),
@@ -109,12 +124,12 @@ class _DnsLeakPageState extends State<DnsLeakPage> {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        _verdict(r, scheme),
+                        _verdict(judged!.verdict, scheme),
                         const SizedBox(height: 16),
                         if (r.address != null) ...[
                           Text(tr(context, 'dnsLeakYourAddress'),
                               style: Theme.of(context).textTheme.titleSmall),
-                          _entry(r.address!, Icons.public),
+                          _address(r.address!),
                           const SizedBox(height: 8),
                         ],
                         Text(tr(context, 'dnsLeakServers', {'n': r.resolvers.length}),
@@ -124,7 +139,8 @@ class _DnsLeakPageState extends State<DnsLeakPage> {
                             padding: const EdgeInsets.all(12),
                             child: Text(tr(context, 'dnsLeakNone')),
                           ),
-                        for (final e in r.resolvers) _entry(e, Icons.dns),
+                        for (final e in r.resolvers)
+                          _entry(e, judged!.kinds[e] ?? DnsEntryKind.safe, scheme),
                         const SizedBox(height: 12),
                         Text(
                           tr(context, 'dnsLeakNote'),
@@ -141,15 +157,13 @@ class _DnsLeakPageState extends State<DnsLeakPage> {
     );
   }
 
-  Widget _verdict(DnsLeakResult r, ColorScheme scheme) {
-    final unknown = r.resolvers.isEmpty || (r.address?.country ?? '').isEmpty;
-    final leaks = _leaks(r);
-    final (icon, color, title, text) = unknown
-        ? (Icons.help_outline, scheme.outline, 'dnsLeakUnknown', 'dnsLeakUnknownDesc')
-        : leaks
-            ? (Icons.warning_amber_rounded, scheme.error, 'dnsLeakYes', 'dnsLeakYesDesc')
-            : (Icons.verified_user, Colors.green.shade600, 'dnsLeakNo', 'dnsLeakNoDesc');
-    return Card(
+  Widget _verdict(DnsLeakVerdict v, ColorScheme scheme) {
+    final (icon, color, title, text) = switch (v) {
+      DnsLeakVerdict.unknown => (Icons.help_outline, scheme.outline, 'dnsLeakUnknown', 'dnsLeakUnknownDesc'),
+      DnsLeakVerdict.leak => (Icons.warning_amber_rounded, scheme.error, 'dnsLeakYes', 'dnsLeakYesDesc'),
+      DnsLeakVerdict.possible => (Icons.info_outline, Colors.orange.shade700, 'dnsLeakPossible', 'dnsLeakPossibleDesc'),
+      DnsLeakVerdict.ok => (Icons.verified_user, Colors.green.shade600, 'dnsLeakNo', 'dnsLeakNoDesc'),
+    };    return Card(
       elevation: 0,
       color: color.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(

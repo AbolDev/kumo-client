@@ -2,6 +2,11 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'dnsLeakPossible': 'Probably fine, check it',
+  'dnsKindLeak': 'Leak',
+  'dnsKindSafe': 'OK',
+  'dnsLeakPossibleDesc': 'A big public DNS service (such as Google or Cloudflare) answered from another country than your VPN address. That usually means the lookup went through the VPN, but make sure DNS is not set outside it.',
+  'dnsKindPublic': 'Public',
   'adsStandard': 'Standard: ads and trackers',
   'adsLevel': 'Blocking strength',
   'adsLevelDesc': 'Strong uses a bigger list (about 200 thousand names). Turn it down to Standard if a site or app stops working.',
@@ -90,6 +95,11 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'dnsLeakPossible': 'احتمالاً مشکلی نیست، بررسی کنید',
+  'dnsKindLeak': 'نشت',
+  'dnsKindSafe': 'سالم',
+  'dnsLeakPossibleDesc': 'یک سرویس DNS عمومی بزرگ (مثل Google یا Cloudflare) از کشوری غیر از کشور آدرس VPN شما جواب داد. معمولاً یعنی جست‌وجو از داخل VPN رد شده، ولی مطمئن شوید DNS بیرون از آن تنظیم نشده باشد.',
+  'dnsKindPublic': 'عمومی',
   'adsStandard': 'معمولی: تبلیغات و ردیاب‌ها',
   'adsLevel': 'قدرت مسدودسازی',
   'adsLevelDesc': '«قوی» از فهرست بزرگ‌تری (حدود ۲۰۰ هزار نام) استفاده می‌کند. اگر سایت یا برنامه‌ای کار نکرد، آن را روی «معمولی» بگذارید.',
@@ -178,6 +188,11 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'dnsLeakPossible': 'Скорее всего, всё в порядке, проверьте',
+  'dnsKindLeak': 'Утечка',
+  'dnsKindSafe': 'ОК',
+  'dnsLeakPossibleDesc': 'Крупный публичный DNS-сервис (например, Google или Cloudflare) ответил из другой страны, чем адрес вашего VPN. Обычно это значит, что запрос прошёл через VPN, но убедитесь, что DNS не задан вне его.',
+  'dnsKindPublic': 'Публичный',
   'adsStandard': 'Обычная: реклама и трекеры',
   'adsLevel': 'Сила блокировки',
   'adsLevelDesc': '«Сильная» использует больший список (около 200 тысяч имён). Если сайт или приложение перестало работать, переключите на «Обычную».',
@@ -266,6 +281,11 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'dnsLeakPossible': 'Có lẽ ổn, hãy kiểm tra',
+  'dnsKindLeak': 'Rò rỉ',
+  'dnsKindSafe': 'Ổn',
+  'dnsLeakPossibleDesc': 'Một dịch vụ DNS công cộng lớn (như Google hoặc Cloudflare) trả lời từ nước khác với địa chỉ VPN của bạn. Thường điều đó nghĩa là truy vấn đã đi qua VPN, nhưng hãy chắc rằng DNS không được đặt bên ngoài nó.',
+  'dnsKindPublic': 'Công cộng',
   'adsStandard': 'Tiêu chuẩn: quảng cáo và trình theo dõi',
   'adsLevel': 'Mức độ chặn',
   'adsLevelDesc': 'Mức Mạnh dùng danh sách lớn hơn (khoảng 200 nghìn tên). Nếu trang web hoặc ứng dụng ngừng hoạt động, hãy chuyển về Tiêu chuẩn.',
@@ -354,6 +374,11 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'dnsLeakPossible': '可能没问题，请检查',
+  'dnsKindLeak': '泄漏',
+  'dnsKindSafe': '正常',
+  'dnsLeakPossibleDesc': '大型公共 DNS 服务（如 Google 或 Cloudflare）从与你的 VPN 地址不同的国家作出了回答。这通常说明查询经过了 VPN，但请确认 DNS 没有设置在 VPN 之外。',
+  'dnsKindPublic': '公共',
   'adsStandard': '标准：广告和跟踪器',
   'adsLevel': '拦截强度',
   'adsLevelDesc': '“强”使用更大的列表（约 20 万个名称）。如果某个网站或应用无法使用，请调回“标准”。',
@@ -442,6 +467,11 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'dnsLeakPossible': 'غالبًا لا بأس، تحقق من ذلك',
+  'dnsKindLeak': 'تسريب',
+  'dnsKindSafe': 'سليم',
+  'dnsLeakPossibleDesc': 'أجابت خدمة DNS عامة كبيرة (مثل Google أو Cloudflare) من بلد غير بلد عنوان VPN لديك. هذا يعني عادة أن الاستعلام مرّ عبر VPN، لكن تأكد من أن DNS غير معيّن خارجه.',
+  'dnsKindPublic': 'عام',
   'adsStandard': 'عادي: الإعلانات والمتتبعات',
   'adsLevel': 'قوة الحظر',
   'adsLevelDesc': 'الوضع القوي يستخدم قائمة أكبر (نحو 200 ألف اسم). إن توقف موقع أو تطبيق عن العمل فارجع إلى العادي.',

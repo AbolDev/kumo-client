@@ -18,11 +18,14 @@ class IpInfo {
 
 /// One resolver (or the address) the DNS leak test saw.
 class DnsLeakEntry {
-  const DnsLeakEntry(this.ip, this.country, this.org);
+  const DnsLeakEntry(this.ip, this.country, this.org, [this.asn = '']);
 
   final String ip;
   final String country;
   final String org;
+
+  /// The network number (AS15169), when known.
+  final String asn;
 }
 
 class DnsLeakResult {
@@ -159,9 +162,13 @@ IpInfo chooseIpInfo(IpInfo others, IpInfo? iran) {
     isp: iran.isp,
   );
 }
+
 /// The DNS leak test: asks the system resolver for names of a test domain that only the test
 /// server answers, then asks that server which resolvers came to it. The lookups use the
-/// device's own resolver on purpose, as an app would.
+/// device's own resolver on purpose, as an app would. Two waves of lookups are made, and the
+/// answer is read again until it stops changing, so a slow or rotating resolver is still seen.
+/// Without the proxy, `whoami.akamai.net` (which answers with the address of the resolver that
+/// asked) is a second, independent view; its resolver is added when the first test missed it.
 Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
   final id = (await _get(Uri.parse('https://bash.ws/id'), proxyPort)).trim();
   if (id.isEmpty || id.length > 64) throw const FormatException('bad id');
@@ -169,12 +176,13 @@ Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
   // With the local proxy (VPN without the tunnel) the names are given to the proxy, which looks
   // them up through the VPN: that is the lookup an app using the connection causes. With the
   // tunnel, or with no VPN, the device's own resolver is asked, as an app would.
-  Future<void> lookup(String name) async {
+  Future<List<InternetAddress>> lookup(String name) async {
     if (proxyPort == null) {
       try {
-        await InternetAddress.lookup(name).timeout(const Duration(seconds: 6));
-      } catch (_) {}
-      return;
+        return await InternetAddress.lookup(name).timeout(const Duration(seconds: 6));
+      } catch (_) {
+        return const [];
+      }
     }
     final client = _client(proxyPort);
     try {
@@ -185,13 +193,63 @@ Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
     } finally {
       client.close(force: true);
     }
+    return const [];
   }
 
-  await Future.wait([
-    for (var i = 1; i <= 10; i++) lookup('${i + random.nextInt(1000) * 10}.$id.bash.ws'),
-  ]);
-  await Future<void>.delayed(const Duration(seconds: 1));
-  final body = await _get(Uri.parse('https://bash.ws/dnsleak/test/$id?json'), proxyPort);
+  Future<void> wave() => Future.wait([
+        for (var i = 1; i <= 10; i++) lookup('${i + random.nextInt(100000) * 10}.$id.bash.ws'),
+      ]);
+
+  final akamai = proxyPort == null ? lookup('whoami.akamai.net') : Future.value(const <InternetAddress>[]);
+  await wave();
+  await Future<void>.delayed(const Duration(milliseconds: 600));
+  await wave();
+
+  // Read the answer until two reads in a row agree (at most six reads).
+  DnsLeakResult? last;
+  var same = 0;
+  for (var i = 0; i < 6; i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    DnsLeakResult now;
+    try {
+      now = parseDnsLeak(await _get(Uri.parse('https://bash.ws/dnsleak/test/$id?json'), proxyPort));
+    } catch (_) {
+      if (last != null && i >= 2) break;
+      continue;
+    }
+    if (last != null && now.resolvers.map((e) => e.ip).toSet().length == last.resolvers.map((e) => e.ip).toSet().length &&
+        now.resolvers.isNotEmpty) {
+      same++;
+    } else {
+      same = 0;
+    }
+    last = now;
+    if (same >= 1) break;
+  }
+  if (last == null) throw const FormatException('no answer');
+
+  // The second view: the resolver Akamai saw.
+  final resolvers = List<DnsLeakEntry>.of(last.resolvers);
+  try {
+    for (final a in await akamai) {
+      final ip = a.address;
+      if (a.type != InternetAddressType.IPv4 || resolvers.any((e) => e.ip == ip)) continue;
+      final j = jsonDecode(await _get(Uri.parse('https://ipwho.is/$ip'), proxyPort));
+      if (j is Map && j['success'] != false) {
+        final c = j['connection'];
+        resolvers.add(DnsLeakEntry(
+            ip,
+            '${j['country'] ?? ''}',
+            c is Map ? '${c['org'] ?? c['isp'] ?? ''}' : '',
+            c is Map && c['asn'] != null ? 'AS${c['asn']}' : ''));
+      }
+    }
+  } catch (_) {}
+  return DnsLeakResult(last.address, resolvers, last.conclusion);
+}
+
+/// Reads the answer of bash.ws.
+DnsLeakResult parseDnsLeak(String body) {
   final list = jsonDecode(body);
   if (list is! List) throw const FormatException('bad answer');
   DnsLeakEntry? address;
@@ -199,8 +257,9 @@ Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
   var conclusion = '';
   for (final e in list) {
     if (e is! Map) continue;
-    final entry = DnsLeakEntry('${e['ip'] ?? ''}', '${e['country_name'] ?? ''}',
-        '${e['org'] ?? e['asn'] ?? ''}');
+    // "asn" is "AS13335 CloudFlare Inc": the number is kept apart from the name.
+    final asn = RegExp(r'AS\d+').firstMatch('${e['asn'] ?? ''}')?.group(0) ?? '';
+    final entry = DnsLeakEntry('${e['ip'] ?? ''}', '${e['country_name'] ?? ''}', '${e['org'] ?? ''}', asn);
     switch (e['type']) {
       case 'ip':
         address = entry;
@@ -211,4 +270,66 @@ Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
     }
   }
   return DnsLeakResult(address, resolvers, conclusion);
+}
+
+/// What the test decided.
+enum DnsLeakVerdict { ok, possible, leak, unknown }
+
+/// How each resolver is judged: [safe] (the VPN's own network, or the same country as the VPN
+/// address), [publicDns] (a big public resolver answering from another country: probably the
+/// connection is fine) or [leak] (a resolver of another country that is nobody's public service:
+/// most likely the network's own).
+enum DnsEntryKind { safe, publicDns, leak }
+
+/// The name of the big public DNS service a resolver belongs to, or null.
+String? publicDnsName(DnsLeakEntry e) {
+  final s = '${e.org} ${e.asn}'.toLowerCase();
+  const names = {
+    'google': 'Google',
+    'cloudflare': 'Cloudflare',
+    'quad9': 'Quad9',
+    'opendns': 'OpenDNS',
+    'cisco': 'OpenDNS',
+    'adguard': 'AdGuard',
+    'nextdns': 'NextDNS',
+    'cleanbrowsing': 'CleanBrowsing',
+    'controld': 'Control D',
+    'verisign': 'Verisign',
+    'level 3': 'Level 3',
+    'akamai': 'Akamai',
+    'yandex': 'Yandex',
+  };
+  for (final n in names.entries) {
+    if (s.contains(n.key)) return n.value;
+  }
+  return null;
+}
+
+/// Decides whether the resolvers that answered show a DNS leak. The address the test saw is the
+/// VPN's; a resolver on the same network or in the same country as it is fine.
+({DnsLeakVerdict verdict, Map<DnsLeakEntry, DnsEntryKind> kinds}) judgeDnsLeak(DnsLeakResult r) {
+  final home = r.address;
+  final kinds = <DnsLeakEntry, DnsEntryKind>{};
+  if (home == null || home.country.isEmpty || r.resolvers.isEmpty) {
+    return (verdict: DnsLeakVerdict.unknown, kinds: kinds);
+  }
+  bool sameNetwork(DnsLeakEntry e) =>
+      e.ip == home.ip ||
+      (e.asn.isNotEmpty && e.asn == home.asn) ||
+      (e.org.isNotEmpty && e.org.toLowerCase() == home.org.toLowerCase());
+  for (final e in r.resolvers) {
+    if (sameNetwork(e) || e.country.isEmpty || e.country == home.country) {
+      kinds[e] = DnsEntryKind.safe;
+    } else if (publicDnsName(e) != null) {
+      kinds[e] = DnsEntryKind.publicDns;
+    } else {
+      kinds[e] = DnsEntryKind.leak;
+    }
+  }
+  final verdict = kinds.values.contains(DnsEntryKind.leak)
+      ? DnsLeakVerdict.leak
+      : kinds.values.contains(DnsEntryKind.publicDns)
+          ? DnsLeakVerdict.possible
+          : DnsLeakVerdict.ok;
+  return (verdict: verdict, kinds: kinds);
 }
