@@ -1,7 +1,7 @@
 name: kumo
 description: "Free V2ray config collector and VPN client powered by sing-box."
 publish_to: 'none'
-version: 1.4.0+22
+version: 1.5.0+23
 
 environment:
   sdk: ^3.6.2
