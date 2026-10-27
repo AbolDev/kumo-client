@@ -1419,14 +1419,14 @@ class _GroupHeader extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600)),
+      // A subscription whose provider sends no usage numbers shows nothing under its name.
       subtitle: isSub
-          ? Padding(
-              padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
-              child: group.info != null
-                  ? _SubscriptionInfo(info: group.info!)
-                  : Text(t.noSubInfo,
-                      style: TextStyle(color: scheme.onSurfaceVariant)),
-            )
+          ? (group.info == null
+              ? null
+              : Padding(
+                  padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
+                  child: _SubscriptionInfo(info: group.info!),
+                ))
           : (group.kind == GroupKind.collector && state.tests[group.id] != null
               ? _testStat(
                   t.testStat(state.tests[group.id]!.alive,
