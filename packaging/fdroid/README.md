@@ -6,10 +6,9 @@ A draft of what the F-Droid maintainers need in https://gitlab.com/fdroid/fdroid
 - `srclibs/sing-box.yml` and `srclibs/xray-core.yml` go to `srclibs/` there (the `flutter` and `go`
   entries already exist).
 
-**The build steps are not tested.** F-Droid builds everything from source on its own servers, so the
-recipe has to run there: run `fdroid build app.kumo.vpn` (fdroidserver, Debian) and fix what fails, or
-let the merge request's CI do it. The steps copy `.github/workflows/build.yml` (libbox with gomobile,
-Xray with the NDK, then `flutter build apk`). Things to decide before sending the merge request:
+**Tested so far** (workflow `.github/workflows/fdroid-test.yml`, run by hand): the metadata passes droid rewritemeta, and the recipe's steps work on a plain runner: Go from source, libbox and Xray from source (`tools/fdroid_build.sh`), then `flutter build apk --dart-define=FDROID=true` (an APK with all three CPUs, 118 MB). **Not tested:** F-Droid's own build server (its sandbox, the scanner and the rules about binaries), so the merge request's CI may still ask for changes.
+
+Things to decide before sending the merge request:
 
 1. **License.** `GPL-3.0-only` everywhere (the macOS and Windows resource files and CONTRIBUTING.md follow it).
 2. **`assets/npvs/*.bin` and `crypt5-keys.json`.** Binary data files; the reviewers will ask where they

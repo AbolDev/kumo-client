@@ -1,6 +1,6 @@
 Categories:
-  - Connectivity
   - Internet
+  - VPN & Proxy
 License: GPL-3.0-only
 AuthorName: AbolDev
 WebSite: https://github.com/AbolDev/kumo-client
@@ -13,13 +13,17 @@ AutoName: Kumo
 RepoType: git
 Repo: https://github.com/AbolDev/kumo-client.git
 
-# DRAFT. The native parts are built by tools/fdroid_build.sh (what .github/workflows/build.yml does for the APK:
-# libbox from sing-box, Xray for XHTTP), then flutter build. See packaging/fdroid/README.md for what is tested.
+# The native parts are built by tools/fdroid_build.sh (what .github/workflows/build.yml does for the APK:
+# libbox from sing-box, Xray for XHTTP), then flutter build. See packaging/fdroid/README.md.
+
 Builds:
   - versionName: 1.7.0
     versionCode: 25
     commit: v1.7.0
     timeout: 14400
+    sudo:
+      - apt-get update
+      - apt-get install -y golang-go gcc make
     output: build/app/outputs/flutter-apk/app-release.apk
     srclibs:
       - flutter@3.27.4
@@ -27,16 +31,10 @@ Builds:
       - sing-box@v1.13.21
       - xray-core@v26.10.21
     rm:
-      # binaries that were committed for convenience: they are built from source below
       - android/app/libs/libbox.aar
       - android/app/src/main/jniLibs
-    sudo:
-      - apt-get update
-      - apt-get install -y golang-go gcc make
     prebuild:
-      # the self-updater has no place in this build
       - sed -i '/REQUEST_INSTALL_PACKAGES/d' android/app/src/main/AndroidManifest.xml
-      # libbox.aar (sing-box) and the Xray executables, built from source
       - bash tools/fdroid_build.sh $$go$$ $$sing-box$$ $$xray-core$$ $$NDK$$
     build:
       - $$flutter$$/bin/flutter config --no-analytics
