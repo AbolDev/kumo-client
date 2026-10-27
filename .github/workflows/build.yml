@@ -264,7 +264,8 @@ jobs:
           archive: false
 
   # Windows on ARM. Flutter builds Windows for the machine it runs on, so this needs an ARM64 runner.
-  # It is a separate job and is not required by the release: if it fails, the other files are still
+  # That runner image only has Visual Studio 2026, which Flutter 3.27 (used for everything else) does not
+  # know, so a newer Flutter is used here. It is a separate job and is not required by the release: if it fails, the other files are still
   # released. The program is checked to really be an ARM64 one before it is packaged.
   windows-arm64:
     runs-on: windows-11-arm
@@ -275,41 +276,9 @@ jobs:
       - name: Flutter from source
         shell: pwsh
         run: |
-          git clone --depth 1 --branch 3.27.4 https://github.com/flutter/flutter.git "$env:USERPROFILE\flutter"
+          git clone --depth 1 --branch 3.44.9 https://github.com/flutter/flutter.git "$env:USERPROFILE\flutter"
           "$env:USERPROFILE\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           & "$env:USERPROFILE\flutter\bin\flutter.bat" --version
-
-      # This runner image only has Visual Studio 2026, which Flutter 3.27 does not know ("could not
-      # find any instance of Visual Studio"), so the 2022 build tools with the ARM64 compiler are
-      # installed next to it.
-      - name: Visual Studio 2022 build tools (ARM64)
-        shell: pwsh
-        run: |
-          Invoke-WebRequest https://aka.ms/vs/17/release/vs_BuildTools.exe -OutFile vs_buildtools.exe
-          $p = Start-Process -Wait -PassThru -FilePath .\vs_buildtools.exe -ArgumentList @(
-            '--quiet', '--wait', '--norestart', '--nocache',
-            '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop', '--includeRecommended',
-            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
-            '--add', 'Microsoft.VisualStudio.Component.VC.CMake.Project',
-            '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.22621')
-          Write-Host "installer exit code $($p.ExitCode)"
-          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw 'Visual Studio build tools failed to install' }
-
-      # Flutter 3.27 picks the newest Visual Studio it finds (2026) and then asks CMake for a
-      # generator that does not exist ("Visual Studio 16 2019"), so 2026 is hidden from vswhere by
-      # renaming its instance record; 2022, just installed, is then the one it uses.
-      - name: Hide Visual Studio 2026
-        shell: pwsh
-        run: |
-          $root = "$env:ProgramData\Microsoft\VisualStudio\Packages\_Instances"
-          foreach ($dir in Get-ChildItem $root -Directory -ErrorAction SilentlyContinue) {
-            $state = Join-Path $dir.FullName 'state.json'
-            if ((Test-Path $state) -and ((Get-Content $state -Raw) -match 'Microsoft Visual Studio\\\\18\\\\')) {
-              Write-Host "hiding $($dir.Name)"
-              Rename-Item $dir.FullName "$($dir.Name).hidden"
-            }
-          }
-          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -products * -format text -property displayName,installationVersion
 
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
