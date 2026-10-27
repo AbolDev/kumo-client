@@ -793,15 +793,15 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
           alignment: Alignment.center,
           children: [
             Positioned(
-              left: -136,
-              top: -136,
-              width: 400,
-              height: 400,
+              left: -176,
+              top: -176,
+              width: 480,
+              height: 480,
               child: IgnorePointer(
                 child: RepaintBoundary(
                   child: CustomPaint(
                       painter: _RingsPainter(
-                          color: color, on: widget.on, time: _time, gap: isDesktop ? 14.3 : 16)),
+                          color: color, on: widget.on, time: _time, gap: isDesktop ? 14.3 : 27)),
                 ),
               ),
             ),
