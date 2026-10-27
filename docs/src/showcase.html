@@ -1,7 +1,8 @@
 <!doctype html>
-<!-- Source of docs/images/banner.png and docs/images/devices.png (rendered by docs/src/render.ps1
-     with headless Chrome at 2x). The screenshots live in docs/screenshots (not committed); the
-     host names and the speed figures in them are replaced here with demo values. -->
+<!-- Source of docs/images/banner.png (rendered by docs/src/render.ps1 with headless Chrome at 2x).
+     The screenshots live in docs/screenshots (not committed). The server names (masked like the
+     app does), the speed figures, the server counts and the pings in them are demo values drawn
+     over the screenshots here. -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -15,38 +16,45 @@ body { font-family: 'Roboto', 'Segoe UI', sans-serif; overflow: hidden; -webkit-
 .shot { position: relative; overflow: hidden; transform-origin: top left; }
 .shot img { position: absolute; left: 0; top: 0; display: block; }
 .cover { position: absolute; display: flex; align-items: center; white-space: nowrap; }
+.dot { position: relative; top: -3px; }
 
+/* phone: 1080 x 2236 of the original 1080 x 2340 */
 .phone-shot { width: 1080px; height: 2236px; }
 .phone-shot img { width: 1080px; height: 2340px; }
 .phone-shot .t { color: #49454f; }
 .sb { left: 0; top: 0; width: 1080px; height: 96px; background: #ddeede; }
 .sb .time { position: absolute; left: 130px; top: 22px; font: 500 44px 'Roboto'; color: #1c1b1f; }
 .sb svg { position: absolute; top: 24px; }
+.pchip { display: inline-block; background: rgba(46, 160, 80, .18); color: #17843f; font-weight: 700;
+  border-radius: 16px; padding: 0 17px; line-height: 54px; margin-right: 14px; }
 
-.desk-shot { width: 1555px; height: 930px; }
+/* desktop: 1430 x 930 of the original window */
+.desk-shot { width: 1430px; height: 930px; }
 .desk-shot img { width: 1559px; height: 1081px; left: -2px; top: -2px; }
 .desk-shot .t { font-family: 'Segoe UI', 'Roboto', sans-serif; }
+.chip { display: inline-block; background: rgba(46, 160, 80, .17); color: #17843f; font-weight: 700;
+  border-radius: 9px; padding: 0 9px; line-height: 27px; margin-right: 8px; }
 
 /* ------------------------------------------------------------ the window and the phone */
-.window-wrap { position: absolute; left: 0; top: 40px; width: 900px; height: 538px;
+.window-wrap { position: absolute; left: 0; top: 40px; width: 900px; height: 585px;
   filter: drop-shadow(0 22px 30px rgba(10, 60, 70, .20)) drop-shadow(0 6px 10px rgba(10, 60, 70, .12)); }
-.window { position: absolute; left: 0; top: 0; width: 900px; height: 538px; border-radius: 16px 16px 0 0;
+.window { position: absolute; left: 0; top: 0; width: 900px; height: 585px; border-radius: 14px 14px 0 0;
   overflow: hidden; background: #f4fbf8; box-shadow: 0 0 0 1.5px rgba(20, 70, 70, .16);
-  -webkit-mask-image: linear-gradient(#000 88%, transparent 100%); mask-image: linear-gradient(#000 88%, transparent 100%); }
-.window .shot { transform: scale(.5788); }
+  -webkit-mask-image: linear-gradient(#000 90%, transparent 100%); mask-image: linear-gradient(#000 90%, transparent 100%); }
+.window .shot { transform: scale(.6294); }
 
-.phone { position: absolute; left: 850px; top: 0; width: 336px; padding: 12px; border-radius: 60px;
+.phone { position: absolute; left: 790px; top: 0; width: 336px; padding: 12px; border-radius: 46px;
   background: linear-gradient(145deg, #2a2a31, #0d0d11 40%, #17171c);
   box-shadow: 0 0 0 1.5px #55555e inset, 0 0 0 1px rgba(0,0,0,.4), 0 50px 90px rgba(20, 50, 60, .38), 0 14px 30px rgba(20,50,60,.2); }
 .phone::before, .phone::after { content: ''; position: absolute; width: 4px; background: #2e2e36; border-radius: 3px; }
 .phone::before { left: -4px; top: 150px; height: 70px; }
 .phone::after { right: -4px; top: 190px; height: 100px; }
-.phone .screen { width: 312px; height: 646px; border-radius: 48px; overflow: hidden; position: relative; background: #fff; }
+.phone .screen { width: 312px; height: 646px; border-radius: 34px; overflow: hidden; position: relative; background: #fff; }
 .phone .screen .shot { transform: scale(.2889); }
 .phone .screen::after { content: ''; position: absolute; left: 50%; top: 16px; width: 16px; height: 16px;
   margin-left: -8px; border-radius: 50%; background: #0b0b0e; box-shadow: 0 0 0 3px rgba(255,255,255,.04); }
 
-.devices { position: relative; width: 1200px; height: 760px; }
+.devices { position: relative; width: 1126px; height: 700px; }
 
 /* ------------------------------------------------------------ banner */
 .banner { width: 1774px; height: 887px; position: relative; overflow: hidden;
@@ -58,20 +66,18 @@ body { font-family: 'Roboto', 'Segoe UI', sans-serif; overflow: hidden; -webkit-
 .banner .rings { position: absolute; left: 930px; top: -170px; width: 1100px; height: 1100px; border-radius: 50%;
   border: 2px solid rgba(60, 170, 140, .16);
   box-shadow: 0 0 0 100px rgba(80,190,160,.035), 0 0 0 210px rgba(80,190,160,.03), 0 0 0 330px rgba(120,120,230,.025); }
-.banner .copy { position: absolute; left: 96px; top: 0; height: 887px; width: 600px; display: flex; flex-direction: column; justify-content: center; }
-.banner .icon { width: 150px; height: 150px; border-radius: 36px; display: block;
+.banner .copy { position: absolute; left: 88px; top: 0; height: 887px; width: 540px; display: flex; flex-direction: column; justify-content: center; }
+.banner .icon { width: 140px; height: 140px; border-radius: 33px; display: block;
   box-shadow: 0 22px 44px rgba(20, 90, 150, .32), 0 0 0 1px rgba(255,255,255,.5) inset; }
-.banner h1 { font: 900 156px/1 'Roboto'; color: #0e2233; letter-spacing: -4px; margin-top: 30px; }
-.banner .tag { font: 500 38px/1.32 'Roboto'; color: #3b4957; margin-top: 22px; }
-.banner .tag2 { font: 400 28px 'Roboto'; color: #5d6a77; margin-top: 14px; letter-spacing: .2px; }
-.banner .pills { display: flex; gap: 12px; margin-top: 34px; }
-.banner .pill { border: 2.5px solid #2aa876; color: #17855a; border-radius: 40px; padding: 7px 22px; font: 500 26px 'Roboto'; background: rgba(255,255,255,.55); }
-.banner .devices-pos { position: absolute; left: 600px; top: 150px; transform: scale(.88); transform-origin: top left; }
+.banner h1 { font: 900 144px/1 'Roboto'; color: #0e2233; letter-spacing: -4px; margin-top: 26px; }
+.banner .tag { font: 500 33px/1.32 'Roboto'; color: #3b4957; margin-top: 20px; }
+.banner .tag2 { font: 400 25px 'Roboto'; color: #5d6a77; margin-top: 12px; letter-spacing: .2px; }
+.banner .pills { display: flex; gap: 10px; margin-top: 30px; }
+.banner .pill { border: 2.5px solid #2aa876; color: #17855a; border-radius: 40px; padding: 6px 18px; font: 500 23px 'Roboto'; background: rgba(255,255,255,.55); }
+.banner .devices-pos { position: absolute; left: 640px; top: 100px; transform: scale(.98); transform-origin: top left; }
 
-.only-banner, .only-devices { display: none; }
+.only-banner { display: none; }
 body.banner-mode .only-banner { display: block; }
-body.devices-mode .only-devices { display: block; }
-.devices-wrap { width: 1200px; height: 680px; position: relative; padding-top: 0; }
 </style>
 </head>
 <body>
@@ -81,19 +87,23 @@ body.devices-mode .only-devices { display: block; }
     <div class="window-wrap"><div class="window">
       <div class="shot desk-shot">
         <img src="../screenshots/desktop-connected.png">
+        <!-- counts -->
+        <div class="cover t" style="left:672px;top:163px;width:200px;height:30px;background:#f4fbf8;font:600 22px 'Segoe UI';color:#1c1b1f;letter-spacing:.2px;">Servers (4513)</div>
+        <div class="cover t" style="left:716px;top:237px;width:330px;height:32px;background:#eff5f2;font:600 23px 'Segoe UI';color:#1c1b1f;letter-spacing:.2px;">Public servers (4508)</div>
+        <!-- server card: ping chip and host -->
+        <div class="cover t" style="left:326px;top:458px;width:110px;height:38px;background:#dde4e1;"><span class="chip" style="font-size:19px;line-height:28px;margin:0 0 0 4px;">112 ms</span></div>
+        <div class="cover t" style="left:140px;top:498px;width:330px;height:32px;background:#dde4e1;justify-content:center;font:400 19px 'Segoe UI';color:#49454f;">vless · eu1***.com:443</div>
         <!-- speed cards -->
-        <div class="cover t" style="left:60px;top:600px;width:230px;height:32px;background:#e3eae7;font:500 26px 'Segoe UI';color:#1c1b1f;padding-left:4px;">2.4 MB/s</div>
+        <div class="cover t" style="left:60px;top:600px;width:230px;height:32px;background:#e3eae7;font:600 26px 'Segoe UI';color:#1c1b1f;padding-left:4px;">2.4 MB/s</div>
         <div class="cover t" style="left:60px;top:634px;width:230px;height:22px;background:#e3eae7;font:400 18px 'Segoe UI';color:#49454f;padding-left:4px;">This session: 18.6 MB</div>
-        <div class="cover t" style="left:328px;top:600px;width:230px;height:32px;background:#e3eae7;font:500 26px 'Segoe UI';color:#1c1b1f;padding-left:4px;">380 KB/s</div>
+        <div class="cover t" style="left:328px;top:600px;width:230px;height:32px;background:#e3eae7;font:600 26px 'Segoe UI';color:#1c1b1f;padding-left:4px;">380 KB/s</div>
         <div class="cover t" style="left:328px;top:634px;width:230px;height:22px;background:#e3eae7;font:400 18px 'Segoe UI';color:#49454f;padding-left:4px;">This session: 3.2 MB</div>
-        <!-- server card -->
-        <div class="cover t" style="left:140px;top:498px;width:330px;height:32px;background:#dde4e1;justify-content:center;font:400 19px 'Segoe UI';color:#49454f;">vless · eu1.example.com:443</div>
-        <!-- list rows -->
-        <div class="cover t" style="left:861px;top:462px;width:200px;height:28px;padding-left:4px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;">cdn.example.net:443</div>
-        <div class="cover t" style="left:785px;top:560px;width:260px;height:28px;padding-left:5px;background:#9ff2e2;font:400 21px 'Segoe UI';color:#49454f;"><span style="position:relative;top:-4px">·</span>&nbsp;eu1.example.com:443</div>
-        <div class="cover t" style="left:786px;top:657px;width:260px;height:28px;padding-left:5px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span style="position:relative;top:-4px">·</span>&nbsp;eu2.example.com:443</div>
-        <div class="cover t" style="left:782px;top:754px;width:260px;height:28px;padding-left:5px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span style="position:relative;top:-4px">·</span>&nbsp;us1.example.com:8880</div>
-        <div class="cover t" style="left:782px;top:852px;width:260px;height:28px;padding-left:5px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span style="position:relative;top:-4px">·</span>&nbsp;us2.example.com:8880</div>
+        <!-- list rows: ping chip + the rest of the line -->
+        <div class="cover t" style="left:646px;top:461px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">148 ms</span><span class="dot">·</span>&nbsp;vless + xhttp&nbsp;<span class="dot">·</span>&nbsp;cdn***.net:443</div>
+        <div class="cover t" style="left:646px;top:559px;width:440px;height:30px;background:#9ff2e2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip" style="background:rgba(20,130,60,.2)">112 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;eu1***.com:443</div>
+        <div class="cover t" style="left:646px;top:656px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">96 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;eu2***.com:443</div>
+        <div class="cover t" style="left:646px;top:753px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">131 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;us1***.com:8880</div>
+        <div class="cover t" style="left:646px;top:851px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">157 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;us2***.com:8880</div>
       </div>
     </div></div>
     <div class="phone">
@@ -106,20 +116,25 @@ body.devices-mode .only-devices { display: block; }
             <svg style="left:722px" width="54" height="48" viewBox="0 0 20 18"><path fill="#1c1b1f" d="M1 15h3v2H1zm5-4h3v6H6zm5-4h3v10h-3zm5-5h3v15h-3z"/></svg>
             <svg style="left:792px;top:26px" width="76" height="42" viewBox="0 0 38 21"><rect x="1" y="2" width="32" height="17" rx="4.5" fill="none" stroke="#1c1b1f" stroke-width="2"/><rect x="3.6" y="4.6" width="26.8" height="11.8" rx="2.4" fill="#1c1b1f"/><rect x="34.5" y="7.5" width="3" height="6" rx="1.4" fill="#1c1b1f"/></svg>
           </div>
-          <div class="cover t" style="left:260px;top:1038px;width:560px;height:50px;background:#dee4e2;justify-content:center;font:400 37px 'Roboto';">vless · eu1.example.com:443</div>
-          <div class="cover t" style="left:70px;top:1222px;width:350px;height:72px;background:#e4eae8;font:500 46px 'Roboto';color:#1c1b1f;padding-left:10px;">2.4 MB/s</div>
+          <!-- server card: the flag and name, moved left to make room for the ping chip -->
+          <div class="cover t" style="left:330px;top:962px;width:420px;height:72px;background:#dee4e2;">
+            <div style="position:absolute;left:16px;top:0;width:242px;height:72px;background:url('../screenshots/phone-connected.png') -420px -962px no-repeat;"></div>
+            <span class="pchip" style="position:absolute;left:276px;top:9px;margin:0;font:700 37px 'Roboto';">112 ms</span>
+          </div>
+          <div class="cover t" style="left:260px;top:1038px;width:560px;height:50px;background:#dee4e2;justify-content:center;font:400 37px 'Roboto';">vless · eu1***.com:443</div>
+          <!-- speed -->
+          <div class="cover t" style="left:70px;top:1222px;width:350px;height:72px;background:#e4eae8;font:700 46px 'Roboto';color:#1c1b1f;padding-left:10px;">2.4 MB/s</div>
           <div class="cover t" style="left:70px;top:1302px;width:350px;height:56px;background:#e4eae8;font:400 32px 'Roboto';padding-left:10px;">This session: 18.6 MB</div>
-          <div class="cover t" style="left:580px;top:1222px;width:400px;height:72px;background:#e4eae8;font:500 46px 'Roboto';color:#1c1b1f;padding-left:11px;">380 KB/s</div>
+          <div class="cover t" style="left:580px;top:1222px;width:400px;height:72px;background:#e4eae8;font:700 46px 'Roboto';color:#1c1b1f;padding-left:11px;">380 KB/s</div>
           <div class="cover t" style="left:580px;top:1302px;width:400px;height:56px;background:#e4eae8;font:400 32px 'Roboto';padding-left:11px;">This session: 3.2 MB</div>
-          <div class="cover t" style="left:70px;top:1936px;width:800px;height:62px;background:#f0f5f1;font:400 38px 'Roboto';padding-left:10px;"><b style="font-weight:500;color:#43a047">148 ms</b>&nbsp;· vless + xhttp · cdn.example.net:443</div>
-          <div class="cover t" style="left:70px;top:2138px;width:700px;height:62px;background:#b2f0e1;font:400 38px 'Roboto';padding-left:10px;">vless · eu1.example.com:443</div>
+          <!-- list rows with ping chips -->
+          <div class="cover t" style="left:70px;top:1936px;width:850px;height:62px;background:#f0f5f1;font:400 38px 'Roboto';padding-left:6px;"><span class="pchip" style="font-size:36px;">148 ms</span><span class="dot" style="top:-5px">·</span>&nbsp;vless + xhttp&nbsp;<span class="dot" style="top:-5px">·</span>&nbsp;cdn***.net:443</div>
+          <div class="cover t" style="left:70px;top:2138px;width:850px;height:62px;background:#b2f0e1;font:400 38px 'Roboto';padding-left:6px;"><span class="pchip" style="font-size:36px;background:rgba(20,130,60,.22);">112 ms</span><span class="dot" style="top:-5px">·</span>&nbsp;vless&nbsp;<span class="dot" style="top:-5px">·</span>&nbsp;eu1***.com:443</div>
         </div>
       </div>
     </div>
   </div>
 </template>
-
-<div class="only-devices devices-wrap" id="devices-slot"></div>
 
 <div class="only-banner banner">
   <div class="rings"></div>
@@ -134,10 +149,8 @@ body.devices-mode .only-devices { display: block; }
 </div>
 
 <script>
-  const mode = (location.hash || '#banner').slice(1);
-  document.body.classList.add(mode + '-mode');
-  const tpl = document.getElementById('devices').content;
-  document.getElementById(mode === 'banner' ? 'banner-slot' : 'devices-slot').appendChild(tpl.cloneNode(true));
+  document.body.classList.add('banner-mode');
+  document.getElementById('banner-slot').appendChild(document.getElementById('devices').content.cloneNode(true));
 </script>
 </body>
 </html>
