@@ -109,22 +109,19 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) async {
   return out;
 }
 
-/// Real delay: time to fetch a page through the server (handshake included), -1 on failure.
-/// Servers only Xray can carry (XHTTP ...) are measured with a throw-away Xray the same way; if
-/// that cannot run, they keep the TCP time.
+/// Real delay: time to fetch a page through the server (handshake included), -1 on failure and -2
+/// when the test was skipped (the tunnel is being started or stopped). Servers only Xray can carry
+/// (XHTTP ...) are measured with a throw-away Xray the same way. A TCP connect is never put in its
+/// place: a server that fails the real delay has failed it.
 Future<int> realDelay(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 8)}) async {
   if (!c.canSingBox) {
-    if (c.canXray) {
-      final ms = await VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
-          timeoutMs: timeout.inMilliseconds);
-      if (ms >= 0) return ms;
-    }
-    return tcpLatency(c);
+    if (!c.canXray) return -1;
+    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
+        timeoutMs: timeout.inMilliseconds);
   }
-  final ms = await VpnChannel.delay(_delayConfig(await _resolvedLayers(c)), delayTestUrl,
+  return VpnChannel.delay(_delayConfig(await _resolvedLayers(c)), delayTestUrl,
       timeoutMs: timeout.inMilliseconds);
-  return ms == -2 ? tcpLatency(c) : ms;
 }
 
 /// Delay of fetching [delayTestUrl] while the VPN is up, in ms, -1 on failure. The request
@@ -301,14 +298,18 @@ Future<void> testReal(
       (stopAfterAlive != null && alive >= stopAfterAlive);
 
   // Stage 1: only the TCP servers. Servers never reached because it stopped early stay untested.
+  // The TCP times only decide who goes on to the real delay; they are not shown as pings.
+  final tcpMs = <ProxyConfig, int>{};
   final stage1 = testLatencies(
     tcp,
     stopAfterAlive: stopAfterAlive == null ? null : stopAfterAlive * 3,
     isCancelled: stop,
+    into: tcpMs,
     onResult: (c) {
-      if (c.isAlive) {
+      if ((tcpMs[c] ?? -1) >= 0) {
         queue.add(c);
       } else {
+        c.latencyMs = -1;
         onResult?.call(c);
       }
     },
@@ -323,7 +324,9 @@ Future<void> testReal(
         continue;
       }
       final c = queue.removeFirst();
-      c.latencyMs = await realDelay(c, timeout: const Duration(seconds: 5));
+      final ms = await realDelay(c, timeout: const Duration(seconds: 5));
+      // -2: skipped, so the old value stays
+      if (ms != -2) c.latencyMs = ms;
       if (c.isAlive) alive++;
       onResult?.call(c);
     }
@@ -363,6 +366,7 @@ Future<void> testLatencies(
   Duration timeout = const Duration(seconds: 3),
   bool Function()? isCancelled,
   void Function(ProxyConfig c)? onResult,
+  Map<ProxyConfig, int>? into,
 }) async {
   var next = 0;
   var alive = 0;
@@ -375,8 +379,14 @@ Future<void> testLatencies(
   Future<void> worker() async {
     while (!done()) {
       final c = candidates[next++];
-      c.latencyMs = await tcpLatency(c, timeout: timeout);
-      if (c.isAlive) alive++;
+      final ms = await tcpLatency(c, timeout: timeout);
+      // into keeps the time out of the config (it is not its ping)
+      if (into != null) {
+        into[c] = ms;
+      } else {
+        c.latencyMs = ms;
+      }
+      if (ms >= 0) alive++;
       onResult?.call(c);
     }
   }

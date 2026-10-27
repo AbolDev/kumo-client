@@ -986,7 +986,8 @@ class AppState extends ChangeNotifier {
     testing.add(c);
     notifyListeners();
     try {
-      c.latencyMs = real ? await realDelay(c) : await tcpLatency(c);
+      final ms = real ? await realDelay(c) : await tcpLatency(c);
+      if (ms != -2) c.latencyMs = ms;
     } finally {
       testing.remove(c);
       _save();
