@@ -577,7 +577,7 @@ class _ConnectCard extends StatelessWidget {
       ),
       child: Padding(
       padding: EdgeInsets.fromLTRB(16,
-          isDesktop ? 84 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
+          isDesktop ? 100 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
       child: Column(
         children: [
           _PowerButton(
@@ -801,7 +801,7 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
                 child: RepaintBoundary(
                   child: CustomPaint(
                       painter: _RingsPainter(
-                          color: color, on: widget.on, time: _time, gap: isDesktop ? 11 : 16)),
+                          color: color, on: widget.on, time: _time, gap: isDesktop ? 14.3 : 16)),
                 ),
               ),
             ),
