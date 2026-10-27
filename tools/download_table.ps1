@@ -26,7 +26,9 @@ $android = @(
 ) -join "<br>`n      "
 $windows = @(
   (Badge 'Setup' 'x64' '1565c0' 'windows11' 'kumo-windows-x64-setup.exe'),
-  (Badge 'Portable' 'x64' '1976d2' 'windows11' 'kumo-windows-x64-portable.zip')
+  (Badge 'Portable' 'x64' '1976d2' 'windows11' 'kumo-windows-x64-portable.zip'),
+  (Badge 'Setup' 'ARM64' '2f80d6' 'windows11' 'kumo-windows-arm64-setup.exe'),
+  (Badge 'Portable' 'ARM64' '4d94dd' 'windows11' 'kumo-windows-arm64-portable.zip')
 ) -join "<br>`n      "
 $macos = @(
   (Badge 'DMG' 'Universal' '424242' 'apple' 'kumo-macos-universal.dmg'),
