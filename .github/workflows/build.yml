@@ -582,8 +582,8 @@ jobs:
           gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}"
           --title "Kumo ${{ github.ref_name }}" --generate-notes
 
-  # After a release: refreshes the manifests in packaging/ and, when the WINGET_TOKEN secret is set,
-  # sends the new version to winget. A tag with a dash (v1.8.0-beta) is a test version and is skipped.
+  # After a release: refreshes the manifests in packaging/. A tag with a dash (v1.8.0-beta) is a test
+  # version and is skipped. (The new version is sent to winget by hand: no token is kept here.)
   packaging:
     if: >-
       startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') &&
@@ -592,8 +592,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    env:
-      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -616,12 +614,3 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
-
-      - name: Send the new version to winget
-        if: env.WINGET_TOKEN != ''
-        continue-on-error: true
-        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # main, pinned so a change to that repository cannot run here unseen
-        with:
-          identifier: AbolDev.Kumo
-          installers-regex: '-setup\.exe$'
-          token: ${{ secrets.WINGET_TOKEN }}
