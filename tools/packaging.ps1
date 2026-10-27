@@ -50,6 +50,9 @@ $short = 'Free VPN client powered by sing-box and Xray'
 $long = 'Kumo connects to the servers and subscriptions you choose. It can run as a local proxy (also set as the system proxy) or tunnel the whole computer, and it supports many protocols, subscriptions, routing rules, ad blocking and more.'
 
 # ----------------------------------------------------------------------------------- winget
+# only the newest version stays in the repository
+$wroot = Join-Path $root 'packaging/winget/manifests/a/AbolDev/Kumo'
+if (Test-Path $wroot) { Get-ChildItem $wroot -Directory | Where-Object { $_.Name -ne $ver } | Remove-Item -Recurse -Force }
 $wdir = 'packaging/winget/manifests/a/AbolDev/Kumo/@@VER@@'
 Put "$wdir/AbolDev.Kumo.yaml" @'
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
