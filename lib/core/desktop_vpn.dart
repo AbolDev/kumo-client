@@ -243,7 +243,8 @@ wait "\$P" 2>/dev/null
       required int apiPort,
       String? apiSecret,
       int? systemProxyPort,
-      bool killSwitch = false}) async {
+      bool killSwitch = false,
+      bool keepStandby = false}) async {
     _killSwitch = killSwitch;
     _secret = apiSecret;
     final gen = ++_gen;
@@ -252,8 +253,10 @@ wait "\$P" 2>/dev/null
     final output = StringBuffer();
     try {
       await _ready;
-      // The standby proxy holds the same port.
-      await stopStandby();
+      // The standby proxy holds the same port, so it gives way to a core that serves the proxy too.
+      // A tunnel core serves no proxy: the standby stays, and its programs are not cut.
+      final withStandby = keepStandby && _sbCore != null;
+      if (!withStandby) await stopStandby();
       await Directory(dataDir).create(recursive: true);
       if (stale()) return;
       if (xrayConfig != null && xrayPort != null) {
@@ -288,6 +291,16 @@ wait "\$P" 2>/dev/null
         final route = cfg['route'] as Map<String, dynamic>;
         (route['rules'] as List).insert(0, {
           'process_name': [_program('kumo-xray')],
+          'outbound': 'direct',
+        });
+        route['find_process'] = true;
+      }
+      if (withStandby) {
+        // The proxy ports belong to the standby core, and its own traffic must not loop into the tunnel.
+        (cfg['inbounds'] as List).removeWhere((i) => i is Map && (i['tag'] == 'mixed-in' || i['tag'] == 'lan-in'));
+        final route = cfg['route'] as Map<String, dynamic>;
+        (route['rules'] as List).insert(0, {
+          'process_name': [_program('kumo-core'), _program('kumo-xray')],
           'outbound': 'direct',
         });
         route['find_process'] = true;
@@ -378,6 +391,11 @@ wait "\$P" 2>/dev/null
   Process? _sbCore;
   Process? _sbXray;
   int _sbGen = 0;
+  int _sbApi = 0;
+  String? _sbSecret;
+
+  /// True while the connection is the standby core itself (see [adoptStandby]).
+  bool _adopted = false;
 
   /// True while the standby proxy is up.
   final standby = ValueNotifier<bool>(false);
@@ -394,7 +412,7 @@ wait "\$P" 2>/dev/null
 
   /// Starts the standby proxy. Returns false when it could not (the port is taken ...).
   Future<bool> startStandby(String configJson,
-      {String? xrayConfig, int? xrayPort, required int apiPort}) async {
+      {String? xrayConfig, int? xrayPort, required int apiPort, String? apiSecret}) async {
     await stopStandby();
     final gen = ++_sbGen;
     bool stale() => gen != _sbGen;
@@ -429,14 +447,24 @@ wait "\$P" 2>/dev/null
           _sbXray?.kill();
           _sbXray = null;
           standby.value = false;
+          // The connection was this core: it ended with it.
+          if (_adopted) {
+            _adopted = false;
+            _gen++;
+            _stats?.close(force: true);
+            _stats = null;
+            _releaseProxy().then((_) => _emit(VpnStatus.error, 'sing-box stopped'));
+          }
         }
       });
-      final up = await _waitHttp(apiPort, () => exited || stale(), const Duration(seconds: 15));
+      final up = await _waitHttp(apiPort, () => exited || stale(), const Duration(seconds: 15), apiSecret);
       if (stale()) return false;
       if (!up) {
         final text = output.toString().trim();
         throw StateError(text.isEmpty ? 'sing-box did not start' : text);
       }
+      _sbApi = apiPort;
+      _sbSecret = apiSecret;
       standby.value = true;
       return true;
     } catch (e) {
@@ -445,7 +473,28 @@ wait "\$P" 2>/dev/null
     }
   }
 
+  /// Makes the core that is already running the connection: nothing is restarted, so the programs
+  /// using the proxy are not cut. Only for the proxy mode (the tunnel is a core of its own). The
+  /// system proxy is pointed at [systemProxyPort]; false when there is no standby core.
+  Future<bool> adoptStandby({required int systemProxyPort}) async {
+    if (_sbCore == null || !standby.value) return false;
+    final gen = ++_gen;
+    _emit(VpnStatus.starting);
+    try {
+      _sysPort = systemProxyPort;
+      await _proxy.enable(systemProxyPort);
+    } catch (_) {}
+    if (gen != _gen || _sbCore == null) return false;
+    _adopted = true;
+    _secret = _sbSecret;
+    _emit(VpnStatus.started);
+    _watchTraffic(_sbApi, gen);
+    return true;
+  }
+
   Future<void> stopStandby() async {
+    // Giving the standby core up ends a connection that is that core.
+    if (_adopted) await stop();
     _sbGen++;
     final procs = [_sbCore, _sbXray].whereType<Process>().toList();
     _sbCore = null;
@@ -484,7 +533,15 @@ wait "\$P" 2>/dev/null
       return;
     }
     _emit(VpnStatus.stopping);
-    await _killAll();
+    if (_adopted) {
+      // Only the system proxy goes; the core stays, with the programs that use it.
+      _adopted = false;
+      _stats?.close(force: true);
+      _stats = null;
+      await _releaseProxy();
+    } else {
+      await _killAll();
+    }
     _emit(VpnStatus.stopped);
   }
 

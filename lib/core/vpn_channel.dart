@@ -73,6 +73,7 @@ class VpnChannel {
     String? apiSecret,
     int? systemProxyPort,
     bool killSwitch = false,
+    bool keepStandby = false,
     String? standbyConfig,
     String? standbyXrayConfig,
     int? proxyPort,
@@ -84,7 +85,8 @@ class VpnChannel {
           apiPort: apiPort ?? 9090,
           apiSecret: apiSecret,
           systemProxyPort: systemProxyPort,
-          killSwitch: killSwitch)
+          killSwitch: killSwitch,
+          keepStandby: keepStandby)
       : _control.invokeMethod('start', {
         'config': configJson,
         'names': serverNames,
@@ -130,10 +132,10 @@ class VpnChannel {
 
   /// Desktop: keeps the local proxy running while the VPN is off (see [DesktopVpn.startStandby]).
   static Future<bool> startStandby(String configJson,
-          {String? xrayConfig, int? xrayPort, required int apiPort, int? proxyPort}) =>
+          {String? xrayConfig, int? xrayPort, required int apiPort, String? apiSecret, int? proxyPort}) =>
       _win
           ? DesktopVpn.instance.startStandby(configJson,
-              xrayConfig: xrayConfig, xrayPort: xrayPort, apiPort: apiPort)
+              xrayConfig: xrayConfig, xrayPort: xrayPort, apiPort: apiPort, apiSecret: apiSecret)
           : _control
               .invokeMethod<bool>('startStandby', {
                 'config': configJson,
@@ -142,6 +144,11 @@ class VpnChannel {
                 'proxyPort': proxyPort,
               })
               .then((v) => v ?? false);
+
+  /// Desktop: the standby core becomes the connection (false when it is not running).
+  static Future<bool> adoptStandby({required int systemProxyPort}) => _win
+      ? DesktopVpn.instance.adoptStandby(systemProxyPort: systemProxyPort)
+      : Future.value(false);
 
   static Future<void> stopStandby() async {
     if (_win) {
