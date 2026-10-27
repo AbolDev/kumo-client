@@ -875,9 +875,17 @@ class AppState extends ChangeNotifier {
 
   // ---------------------------------------------------------------- usage
 
-  /// Data used per day ("2026-10-25" -> [down, up] bytes) and per server name.
+  /// Data used per day ("2026-10-25" -> [down, up, seconds connected]) and per server name
+  /// ([down, up, seconds connected, last used in ms since epoch, bytes from before the split]).
   final dayUsage = <String, List<int>>{};
-  final serverUsage = <String, int>{};
+  final serverUsage = <String, List<int>>{};
+
+  /// What a server used in total.
+  static int serverTotal(List<int> l) => l[0] + l[1] + (l.length > 4 ? l[4] : 0);
+
+  /// The fastest speed seen since the app started (bytes per second).
+  int peakDown = 0, peakUp = 0;
+  DateTime? _lastTick;
 
   /// The last two minutes of speed, one sample a second (bytes per second).
   final downHistory = <int>[];
@@ -900,18 +908,27 @@ class AppState extends ChangeNotifier {
     _lastUp = t.upTotal;
     downHistory.add(t.down);
     upHistory.add(t.up);
+    if (t.down > peakDown) peakDown = t.down;
+    if (t.up > peakUp) peakUp = t.up;
     if (downHistory.length > 120) {
       downHistory.removeAt(0);
       upHistory.removeAt(0);
     }
-    if (dd + du > 0) {
-      final day = dayUsage.putIfAbsent(_dayKey(DateTime.now()), () => [0, 0]);
-      day[0] += dd;
-      day[1] += du;
-      final name = selected?.name ?? 'Automatic';
-      serverUsage[name] = (serverUsage[name] ?? 0) + dd + du;
-      _usageTimer ??= Timer(const Duration(seconds: 30), _writeUsage);
-    }
+    // Time connected: the gap since the last sample (a long gap means the link was off).
+    final now = DateTime.now();
+    final gap = _lastTick == null ? 1 : now.difference(_lastTick!).inSeconds.clamp(0, 3);
+    _lastTick = now;
+    final day = dayUsage.putIfAbsent(_dayKey(now), () => [0, 0, 0]);
+    day[0] += dd;
+    day[1] += du;
+    day[2] += gap;
+    final name = selected?.name ?? 'Automatic';
+    final s = serverUsage.putIfAbsent(name, () => [0, 0, 0, 0]);
+    s[0] += dd;
+    s[1] += du;
+    s[2] += gap;
+    s[3] = now.millisecondsSinceEpoch;
+    _usageTimer ??= Timer(const Duration(seconds: 30), _writeUsage);
   }
 
   void _writeUsage() {
@@ -928,10 +945,23 @@ class AppState extends ChangeNotifier {
       final j = jsonDecode(raw) as Map<String, dynamic>;
       (j['days'] as Map?)?.forEach((k, v) {
         final l = (v as List).map((e) => (e as num).toInt()).toList();
-        if (l.length == 2) dayUsage['$k'] = l;
+        if (l.length >= 2) dayUsage['$k'] = [l[0], l[1], l.length > 2 ? l[2] : 0];
       });
-      (j['servers'] as Map?)
-          ?.forEach((k, v) => serverUsage['$k'] = (v as num).toInt());
+      (j['servers'] as Map?)?.forEach((k, v) {
+        if (v is num) {
+          // Saved by an older version: only the total is known.
+          serverUsage['$k'] = [0, 0, 0, 0, v.toInt()];
+        } else if (v is List) {
+          final l = v.map((e) => (e as num).toInt()).toList();
+          while (l.length < 4) {
+            l.add(0);
+          }
+          serverUsage['$k'] = l;
+        }
+      });
+      // Keep about a year and a half; older days only make the file longer.
+      final old = _dayKey(DateTime.now().subtract(const Duration(days: 550)));
+      dayUsage.removeWhere((k, _) => k.compareTo(old) < 0);
     } catch (_) {
       // no statistics yet
     }
@@ -940,6 +970,7 @@ class AppState extends ChangeNotifier {
   void resetUsage() {
     dayUsage.clear();
     serverUsage.clear();
+    peakDown = peakUp = 0;
     _writeUsage();
     notifyListeners();
   }

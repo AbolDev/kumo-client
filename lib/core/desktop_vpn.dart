@@ -8,6 +8,7 @@ import 'latency_tester.dart' show socksWarmDelay;
 import 'platform.dart';
 import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
+import 'win_dpapi.dart';
 import 'win_job.dart';
 
 /// The VPN on the desktop: the same sing-box core as on Android, run as a child process
@@ -87,15 +88,27 @@ class DesktopVpn {
 
   String _exePath(String name) => '$_exeDir$_sep${_program(name)}';
 
+  /// Servers, settings (proxy login) and cached subscriptions are kept encrypted for the Windows
+  /// user. Not in the portable build, whose folder is meant to move to other computers.
+  static bool _sealed(String name) =>
+      Platform.isWindows &&
+      !portable &&
+      (name == 'servers.json' || name == 'settings.json' || name.startsWith('subcache/'));
+
   Future<String?> readFile(String name) async {
     final f = File('$dataDir$_sep$name');
-    return await f.exists() ? f.readAsString() : null;
+    if (!await f.exists()) return null;
+    final text = await f.readAsString();
+    // A file written by an older version is plain text; it is encrypted the next time it is saved.
+    if (Platform.isWindows && WinDpapi.isSealed(text)) return WinDpapi.open(text);
+    return text;
   }
 
   Future<void> writeFile(String name, String content) async {
     final f = File('$dataDir$_sep$name');
     await f.parent.create(recursive: true);
-    await f.writeAsString(content, flush: true);
+    final text = _sealed(name) ? (WinDpapi.seal(content) ?? content) : content;
+    await f.writeAsString(text, flush: true);
   }
 
   // ------------------------------------------------------------------ helpers
