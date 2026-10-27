@@ -19,28 +19,28 @@ Kumo is a free VPN app for Android, Windows, Linux and macOS. It collects public
 <table>
   <tr><th>System</th><th>Download</th></tr>
   <tr><td>Android</td><td>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-universal.apk"><img src="https://img.shields.io/badge/APK-Universal-2e7d32?style=flat-square&logo=android&logoColor=white&labelColor=555555" alt="APK Universal"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-arm64-v8a.apk"><img src="https://img.shields.io/badge/APK-ARM64%20(most%20phones)-388e3c?style=flat-square&logo=android&logoColor=white&labelColor=555555" alt="APK ARM64 (most phones)"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-armeabi-v7a.apk"><img src="https://img.shields.io/badge/APK-ARMv7-43a047?style=flat-square&logo=android&logoColor=white&labelColor=555555" alt="APK ARMv7"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-x86_64.apk"><img src="https://img.shields.io/badge/APK-x64-66bb6a?style=flat-square&logo=android&logoColor=white&labelColor=555555" alt="APK x64"></a>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-universal.apk"><img src="https://img.shields.io/badge/APK-Universal-2e7d32?style=flat&logo=android&logoColor=white&labelColor=555555" alt="APK Universal"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-arm64-v8a.apk"><img src="https://img.shields.io/badge/APK-ARM64%20(most%20phones)-388e3c?style=flat&logo=android&logoColor=white&labelColor=555555" alt="APK ARM64 (most phones)"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-armeabi-v7a.apk"><img src="https://img.shields.io/badge/APK-ARMv7-43a047?style=flat&logo=android&logoColor=white&labelColor=555555" alt="APK ARMv7"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-android-x86_64.apk"><img src="https://img.shields.io/badge/APK-x64-66bb6a?style=flat&logo=android&logoColor=white&labelColor=555555" alt="APK x64"></a>
   </td></tr>
   <tr><td>Windows</td><td>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-windows-x64-setup.exe"><img src="https://img.shields.io/badge/Setup-x64-1565c0?style=flat-square&logo=windows11&logoColor=white&labelColor=555555" alt="Setup x64"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-windows-x64-portable.zip"><img src="https://img.shields.io/badge/Portable-x64-1976d2?style=flat-square&logo=windows11&logoColor=white&labelColor=555555" alt="Portable x64"></a>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-windows-x64-setup.exe"><img src="https://img.shields.io/badge/Setup-x64-1565c0?style=flat&logo=windows11&logoColor=white&labelColor=555555" alt="Setup x64"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-windows-x64-portable.zip"><img src="https://img.shields.io/badge/Portable-x64-1976d2?style=flat&logo=windows11&logoColor=white&labelColor=555555" alt="Portable x64"></a>
   </td></tr>
   <tr><td>macOS</td><td>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-universal.dmg"><img src="https://img.shields.io/badge/DMG-Universal-424242?style=flat-square&logo=apple&logoColor=white&labelColor=555555" alt="DMG Universal"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-arm64.dmg"><img src="https://img.shields.io/badge/DMG-Apple%20silicon-505050?style=flat-square&logo=apple&logoColor=white&labelColor=555555" alt="DMG Apple silicon"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-x64.dmg"><img src="https://img.shields.io/badge/DMG-Intel-616161?style=flat-square&logo=apple&logoColor=white&labelColor=555555" alt="DMG Intel"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-universal-portable.zip"><img src="https://img.shields.io/badge/Portable-Universal-757575?style=flat-square&logo=apple&logoColor=white&labelColor=555555" alt="Portable Universal"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-arm64-portable.zip"><img src="https://img.shields.io/badge/Portable-Apple%20silicon-808080?style=flat-square&logo=apple&logoColor=white&labelColor=555555" alt="Portable Apple silicon"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-x64-portable.zip"><img src="https://img.shields.io/badge/Portable-Intel-8a8a8a?style=flat-square&logo=apple&logoColor=white&labelColor=555555" alt="Portable Intel"></a>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-universal.dmg"><img src="https://img.shields.io/badge/DMG-Universal-424242?style=flat&logo=apple&logoColor=white&labelColor=555555" alt="DMG Universal"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-arm64.dmg"><img src="https://img.shields.io/badge/DMG-Apple%20silicon-505050?style=flat&logo=apple&logoColor=white&labelColor=555555" alt="DMG Apple silicon"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-x64.dmg"><img src="https://img.shields.io/badge/DMG-Intel-616161?style=flat&logo=apple&logoColor=white&labelColor=555555" alt="DMG Intel"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-universal-portable.zip"><img src="https://img.shields.io/badge/Portable-Universal-757575?style=flat&logo=apple&logoColor=white&labelColor=555555" alt="Portable Universal"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-arm64-portable.zip"><img src="https://img.shields.io/badge/Portable-Apple%20silicon-808080?style=flat&logo=apple&logoColor=white&labelColor=555555" alt="Portable Apple silicon"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-macos-x64-portable.zip"><img src="https://img.shields.io/badge/Portable-Intel-8a8a8a?style=flat&logo=apple&logoColor=white&labelColor=555555" alt="Portable Intel"></a>
   </td></tr>
   <tr><td>Linux</td><td>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-x64.deb"><img src="https://img.shields.io/badge/DEB-amd64-e65100?style=flat-square&logo=linux&logoColor=white&labelColor=555555" alt="DEB amd64"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-arm64.deb"><img src="https://img.shields.io/badge/DEB-ARM64-ef6c00?style=flat-square&logo=linux&logoColor=white&labelColor=555555" alt="DEB ARM64"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-x64-portable.tar.gz"><img src="https://img.shields.io/badge/Portable-amd64-f57c00?style=flat-square&logo=linux&logoColor=white&labelColor=555555" alt="Portable amd64"></a><br>
-      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-arm64-portable.tar.gz"><img src="https://img.shields.io/badge/Portable-ARM64-fb8c00?style=flat-square&logo=linux&logoColor=white&labelColor=555555" alt="Portable ARM64"></a>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-x64.deb"><img src="https://img.shields.io/badge/DEB-amd64-e65100?style=flat&logo=linux&logoColor=white&labelColor=555555" alt="DEB amd64"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-arm64.deb"><img src="https://img.shields.io/badge/DEB-ARM64-ef6c00?style=flat&logo=linux&logoColor=white&labelColor=555555" alt="DEB ARM64"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-x64-portable.tar.gz"><img src="https://img.shields.io/badge/Portable-amd64-f57c00?style=flat&logo=linux&logoColor=white&labelColor=555555" alt="Portable amd64"></a><br>
+      <a href="https://github.com/AbolDev/kumo-client/releases/latest/download/kumo-linux-arm64-portable.tar.gz"><img src="https://img.shields.io/badge/Portable-ARM64-fb8c00?style=flat&logo=linux&logoColor=white&labelColor=555555" alt="Portable ARM64"></a>
   </td></tr>
 </table>
 

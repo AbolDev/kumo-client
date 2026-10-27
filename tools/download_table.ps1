@@ -14,7 +14,7 @@ $base = if ($Tag -eq 'latest') { "https://github.com/$repo/releases/latest/downl
 function Badge($label, $message, $color, $logo, $file) {
   $l = [uri]::EscapeDataString($label).Replace('-', '--')
   $m = [uri]::EscapeDataString($message).Replace('-', '--')
-  $img = "https://img.shields.io/badge/$l-$m-$color`?style=flat-square&logo=$logo&logoColor=white&labelColor=555555"
+  $img = "https://img.shields.io/badge/$l-$m-$color`?style=flat&logo=$logo&logoColor=white&labelColor=555555"
   return "<a href=`"$base/$file`"><img src=`"$img`" alt=`"$label $message`"></a>"
 }
 
