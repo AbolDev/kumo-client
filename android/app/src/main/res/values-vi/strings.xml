@@ -31,4 +31,6 @@
     <string name="alert_exp_soon">%1$s: hết hạn sau %2$d ngày.</string>
     <string name="alert_exp_today">%1$s: hết hạn hôm nay.</string>
     <string name="alert_expired">%1$s: đã hết hạn.</string>
+    <string name="notif_proxy">Proxy đang chạy tại 127.0.0.1:%1$d</string>
+    <string name="notif_stop_proxy">Dừng proxy</string>
 </resources>

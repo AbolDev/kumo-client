@@ -31,4 +31,6 @@
     <string name="alert_exp_soon">%1$s: истекает через %2$d дн.</string>
     <string name="alert_exp_today">%1$s: истекает сегодня.</string>
     <string name="alert_expired">%1$s: срок истёк.</string>
+    <string name="notif_proxy">Прокси работает: 127.0.0.1:%1$d</string>
+    <string name="notif_stop_proxy">Остановить прокси</string>
 </resources>

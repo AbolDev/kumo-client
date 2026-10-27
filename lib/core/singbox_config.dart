@@ -318,6 +318,7 @@ String buildSingBoxConfig(
   ProxyConfig? chain,
   bool viaXray = false,
   ProviderRouting? routing,
+  bool localLogin = false,
 }) {
   assert(servers.isNotEmpty);
   final o = options ?? NetOptions();
@@ -391,6 +392,12 @@ String buildSingBoxConfig(
       'tag': 'mixed-in',
       'listen': '127.0.0.1',
       'listen_port': o.proxyPort,
+      // The login applies when the proxy is not the app's own way in: with the tunnel, and when it
+      // is kept running alone. (The system proxy and the app's own tests have no login.)
+      if ((o.tun || localLogin) && o.proxyUser.isNotEmpty && o.proxyPassword.isNotEmpty)
+        'users': [
+          {'username': o.proxyUser, 'password': o.proxyPassword},
+        ],
     },
   ];
   // A second proxy for other devices on the network. It always needs the user name and password,

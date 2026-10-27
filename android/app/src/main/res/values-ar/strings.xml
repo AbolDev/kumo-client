@@ -31,4 +31,6 @@
     <string name="alert_exp_soon">%1$s: ينتهي خلال %2$d أيام.</string>
     <string name="alert_exp_today">%1$s: ينتهي اليوم.</string>
     <string name="alert_expired">%1$s: انتهت صلاحيته.</string>
+    <string name="notif_proxy">الوكيل يعمل على 127.0.0.1:%1$d</string>
+    <string name="notif_stop_proxy">إيقاف الوكيل</string>
 </resources>

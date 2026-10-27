@@ -63,6 +63,13 @@ class MainActivity : FlutterActivity() {
                         intent.putExtra(BoxVpnService.EXTRA_XRAY_CONFIG_PATH, xrayFile.path)
                             .putExtra(BoxVpnService.EXTRA_XRAY_PORT, call.argument<Int>("xrayPort") ?: 0)
                     }
+                    // The configuration of the proxy kept running after the tunnel stops (none: off).
+                    val standbyConfig = call.argument<String>("standbyConfig")
+                    val standby = writeStandby(
+                        standbyConfig, call.argument<String>("standbyXrayConfig"),
+                        call.argument<Int>("xrayPort") ?: 0, call.argument<Int>("proxyPort") ?: 0,
+                    )
+                    standby?.let { intent.putExtras(it) }
                     // Remembered so the device-startup receiver can repeat this connection.
                     File(filesDir, "last_start.json").writeText(
                         JSONObject()
@@ -72,6 +79,8 @@ class MainActivity : FlutterActivity() {
                             .put("showName", showName)
                             .put("killSwitch", call.argument<Boolean>("killSwitch") ?: false)
                             .put("xrayPort", if (xrayConfig.isNullOrBlank()) 0 else (call.argument<Int>("xrayPort") ?: 0))
+                            .put("standby", standby != null)
+                            .put("proxyPort", call.argument<Int>("proxyPort") ?: 0)
                             .toString(),
                     )
                     try {
@@ -80,6 +89,33 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) {
                         result.error("start_failed", e.message, null)
                     }
+                }
+                // Only the local proxy, no tunnel (the "keep the proxy running" setting).
+                "startStandby" -> {
+                    val extras = writeStandby(
+                        call.argument<String>("config"), call.argument<String>("xrayConfig"),
+                        call.argument<Int>("xrayPort") ?: 0, call.argument<Int>("proxyPort") ?: 0,
+                    )
+                    if (extras == null) {
+                        result.error("bad_args", "config is empty", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        ContextCompat.startForegroundService(
+                            this,
+                            Intent(this, BoxVpnService::class.java).setAction(BoxVpnService.ACTION_PROXY).putExtras(extras),
+                        )
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "stopStandby" -> {
+                    try {
+                        startService(Intent(this, BoxVpnService::class.java).setAction(BoxVpnService.ACTION_STOP_PROXY))
+                    } catch (_: Exception) {
+                    }
+                    result.success(null)
                 }
                 // Real delay: fetch a URL through a throw-away sing-box instance holding one outbound.
                 "delay" -> {
@@ -261,7 +297,7 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent(Settings.ACTION_VPN_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     result.success(null)
                 }
-                "status" -> result.success(mapOf("status" to VpnBridge.status, "error" to VpnBridge.lastError))
+                "status" -> result.success(mapOf("status" to VpnBridge.status, "error" to VpnBridge.lastError, "standby" to VpnBridge.standby))
                 // Tiny key/value store (a file per key in the app's private dir).
                 "readFile" -> {
                     val f = File(filesDir, call.argument<String>("name")!!)
@@ -292,8 +328,10 @@ class MainActivity : FlutterActivity() {
         EventChannel(messenger, "kumo/status").setStreamHandler(
             object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
-                    VpnBridge.listener = { status, error -> events.success(mapOf("status" to status, "error" to error)) }
-                    events.success(mapOf("status" to VpnBridge.status, "error" to VpnBridge.lastError))
+                    VpnBridge.listener = { status, error ->
+                        events.success(mapOf("status" to status, "error" to error, "standby" to VpnBridge.standby))
+                    }
+                    events.success(mapOf("status" to VpnBridge.status, "error" to VpnBridge.lastError, "standby" to VpnBridge.standby))
                 }
 
                 override fun onCancel(arguments: Any?) {
@@ -301,6 +339,23 @@ class MainActivity : FlutterActivity() {
                 }
             },
         )
+    }
+
+    /** Saves the configuration of the proxy-only mode and returns the extras that name it (null when empty). */
+    private fun writeStandby(config: String?, xrayConfig: String?, xrayPort: Int, proxyPort: Int): android.os.Bundle? {
+        if (config.isNullOrBlank()) return null
+        val file = File(filesDir, "standby_config.json")
+        file.writeText(config)
+        val extras = android.os.Bundle()
+        extras.putString(BoxVpnService.EXTRA_STANDBY_PATH, file.path)
+        extras.putInt(BoxVpnService.EXTRA_PROXY_PORT, proxyPort)
+        if (!xrayConfig.isNullOrBlank() && xrayPort > 0) {
+            val x = File(filesDir, "standby_xray.json")
+            x.writeText(xrayConfig)
+            extras.putString(BoxVpnService.EXTRA_STANDBY_XRAY_PATH, x.path)
+            extras.putInt(BoxVpnService.EXTRA_STANDBY_XRAY_PORT, xrayPort)
+        }
+        return extras
     }
 
     private fun prepare(result: MethodChannel.Result) {

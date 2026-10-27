@@ -19,6 +19,17 @@ object VpnBridge {
     var lastError: String? = null
         private set
 
+    /** True while the service keeps only the local proxy running (no tunnel). */
+    @Volatile
+    var standby: Boolean = false
+        private set
+
+    fun setStandby(on: Boolean) {
+        if (standby == on) return
+        standby = on
+        main.post { listener?.invoke(status, lastError) }
+    }
+
     var listener: ((String, String?) -> Unit)? = null
 
     /** Extra listeners (the Quick Settings tile). */

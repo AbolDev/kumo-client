@@ -410,7 +410,7 @@ class AppState extends ChangeNotifier {
         }
         liveDelay = null;
       }
-      if (changed) _syncStandby();
+      if (changed) _syncStandby(const Duration(milliseconds: 800), false);
       if (s.status == VpnStatus.started && changed) {
         if (measurePing) _measureLive();
         _misses = 0;
@@ -1344,19 +1344,23 @@ class AppState extends ChangeNotifier {
   Timer? _standbyTimer;
 
   /// Whether the standby proxy (the local proxy kept up while the VPN is off) is running.
-  bool get standbyUp => isDesktop && DesktopVpn.instance.standby.value;
+  bool get standbyUp => isDesktop ? DesktopVpn.instance.standby.value : vpn.standby;
 
   /// Brings the standby proxy in line with the setting and the connection state, a moment after
   /// the last change (a reconnect passes through "stopped" for a short while).
-  void _syncStandby([Duration wait = const Duration(milliseconds: 800)]) {
-    if (!isDesktop) return;
+  void _syncStandby([Duration wait = const Duration(milliseconds: 800), bool force = true]) {
     _standbyTimer?.cancel();
-    _standbyTimer = Timer(wait, _applyStandby);
+    _standbyTimer = Timer(wait, () {
+      // The phone's service starts the proxy by itself when the tunnel stops.
+      if (!force && !isDesktop && standbyUp) return;
+      _applyStandby();
+    });
   }
 
   Future<void> _applyStandby() async {
     if (!net.keepProxy || !_idle || _preparing || all.isEmpty) {
-      if (!net.keepProxy || connected || vpn.status == VpnStatus.starting) {
+      // On the phone the service gives the proxy up by itself when a tunnel starts.
+      if (!net.keepProxy || (isDesktop && (connected || vpn.status == VpnStatus.starting))) {
         await VpnChannel.stopStandby();
       }
       return;
@@ -1369,39 +1373,53 @@ class AppState extends ChangeNotifier {
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
               ads: net.blockAds, tags: tags, wait: false)
           : <String, String>{};
-      // The same options without the tunnel, the kill switch and the system proxy.
-      final o = NetOptions()
-        ..load(net.toJson())
-        ..tun = false
-        ..killSwitch = false;
-      final api = await _freePort();
-      final chain = o.chain.isEmpty ? null : parseLink(o.chain);
       final viaXray = chosen.length == 1 &&
           chosen.first.canXray &&
-          (chosen.first.needsXray || o.core == 'xray');
+          (chosen.first.needsXray || net.core == 'xray');
       final xrayPort = viaXray ? 30000 + Random().nextInt(30000) : null;
-      final config = buildSingBoxConfig(chosen,
-          xrayPort: xrayPort,
-          options: o,
-          ruleSets: sets,
-          apiPort: api,
-          apiSecret: null,
-          windows: true,
-          chain: chain,
-          viaXray: viaXray,
-          routing: routing);
+      final parts = _standbyParts(chosen, routing, sets, xrayPort);
       // Something changed while this was being prepared.
       if (!net.keepProxy || !_idle || _preparing) return;
-      final ok = await VpnChannel.startStandby(config,
-          xrayConfig: viaXray ? buildXrayConfig(chosen.first, xrayPort!, options: o) : null,
+      final ok = await VpnChannel.startStandby(parts.config,
+          xrayConfig: parts.xrayConfig,
           xrayPort: xrayPort,
-          apiPort: api);
-      if (!ok) log('The standby proxy could not start');
+          apiPort: parts.api,
+          proxyPort: net.proxyPort);
+      if (!ok) log('The proxy could not be kept running');
     } catch (e) {
-      log('The standby proxy could not start: $e');
+      log('The proxy could not be kept running: $e');
     }
   }
 
+  /// The configuration of the proxy that stays up without the tunnel: the same options without
+  /// the tunnel, the kill switch and the system proxy, with the login when one is set.
+  ({String config, String? xrayConfig, int api}) _standbyParts(List<ProxyConfig> chosen,
+      ProviderRouting? routing, Map<String, String> sets, int? xrayPort) {
+    final o = NetOptions()
+      ..load(net.toJson())
+      ..tun = false
+      ..killSwitch = false;
+    final chain = o.chain.isEmpty ? null : parseLink(o.chain);
+    final viaXray = xrayPort != null;
+    // The port of the control API is only used on the desktop; any free one will do.
+    final api = 20000 + Random().nextInt(20000);
+    final config = buildSingBoxConfig(chosen,
+        xrayPort: xrayPort,
+        options: o,
+        ruleSets: sets,
+        apiPort: api,
+        apiSecret: null,
+        windows: isDesktop,
+        chain: chain,
+        viaXray: viaXray,
+        routing: routing,
+        localLogin: true);
+    return (
+      config: config,
+      xrayConfig: viaXray ? buildXrayConfig(chosen.first, xrayPort, options: o) : null,
+      api: api,
+    );
+  }
   /// Never blocks: a tap while connecting cancels, a tap while connected disconnects.
   Future<void> toggle() async {
     if (vpn.status == VpnStatus.stopping) return;
@@ -1476,8 +1494,13 @@ class AppState extends ChangeNotifier {
           routing: routing);
       final proxyPort =
           isDesktop && !net.tun ? net.proxyPort : null;
+      final xrayPortNew = viaXray ? 30000 + Random().nextInt(30000) : null;
+      // The phone keeps the proxy alone after the tunnel stops; the desktop does it from here.
+      final standby = !isDesktop && net.keepProxy
+          ? _standbyParts(chosen, routing, sets, viaXray ? xrayPortNew : null)
+          : null;
       if (viaXray) {
-        final port = 30000 + Random().nextInt(30000);
+        final port = xrayPortNew!;
         _xrayPort = port;
         await VpnChannel.start(
           config(port),
@@ -1491,6 +1514,9 @@ class AppState extends ChangeNotifier {
           apiSecret: apiSecret,
           systemProxyPort: proxyPort,
           killSwitch: net.killSwitch,
+          standbyConfig: standby?.config,
+          standbyXrayConfig: standby?.xrayConfig,
+          proxyPort: net.proxyPort,
         );
       } else {
         await VpnChannel.start(config(null),
@@ -1501,7 +1527,9 @@ class AppState extends ChangeNotifier {
             apiPort: apiPort,
             apiSecret: apiSecret,
             systemProxyPort: proxyPort,
-            killSwitch: net.killSwitch);
+            killSwitch: net.killSwitch,
+            standbyConfig: standby?.config,
+            proxyPort: net.proxyPort);
       }
     } catch (e) {
       log('Could not start the connection: $e');

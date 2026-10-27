@@ -31,4 +31,6 @@
     <string name="widget_cfg_total">حجم کل</string>
     <string name="widget_cfg_both">هر دو</string>
     <string name="widget_cfg_done">تأیید</string>
+    <string name="notif_proxy">پروکسی روی 127.0.0.1:%1$d فعال است</string>
+    <string name="notif_stop_proxy">توقف پروکسی</string>
 </resources>

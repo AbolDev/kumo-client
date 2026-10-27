@@ -204,6 +204,10 @@ class NetOptions {
   /// without being set as the system proxy).
   bool keepProxy = false;
 
+  /// A login for the local proxy while the tunnel is used or the proxy is kept running. Empty: none.
+  String proxyUser = '';
+  String proxyPassword = '';
+
   String get dnsAddress {
     if (dns == 'custom' && customDns.trim().isNotEmpty) return customDns.trim();
     return dnsPresets
@@ -253,6 +257,8 @@ class NetOptions {
         'minimizeToTray': minimizeToTray,
         'startWithWindows': startWithWindows,
         'keepProxy': keepProxy,
+        'proxyUser': proxyUser,
+        'proxyPassword': proxyPassword,
       };
 
   void load(Map<String, dynamic> j) {
@@ -318,5 +324,7 @@ class NetOptions {
     minimizeToTray = flag('minimizeToTray', true);
     startWithWindows = flag('startWithWindows', false);
     keepProxy = flag('keepProxy', false);
+    proxyUser = j['proxyUser'] is String ? j['proxyUser'] as String : '';
+    proxyPassword = j['proxyPassword'] is String ? j['proxyPassword'] as String : '';
   }
 }

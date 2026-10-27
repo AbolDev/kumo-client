@@ -29,4 +29,26 @@ void main() {
     expect(isNewer('1.3.10', '1.3.9'), true);
     expect(isNewer('1.3.9', '1.3.9'), false);
   });
+
+  test('the proxy login is off by default and applies only where the proxy is not the system proxy', () {
+    expect(NetOptions().proxyUser, '');
+    final servers = parseLinks(['trojan://p@h1.example.com:443#a']);
+    List users(NetOptions o, {bool login = false}) {
+      final cfg = jsonDecode(buildSingBoxConfig(servers, options: o, localLogin: login)) as Map;
+      final mixed = (cfg['inbounds'] as List).cast<Map>().firstWhere((i) => i['tag'] == 'mixed-in');
+      return (mixed['users'] as List?) ?? const [];
+    }
+
+    final o = NetOptions()
+      ..tun = false
+      ..proxyUser = 'me'
+      ..proxyPassword = 'secret';
+    expect(users(o), isEmpty); // the system proxy has no login
+    expect(users(o, login: true), isNotEmpty); // kept running alone
+    o.tun = true;
+    expect(users(o), isNotEmpty); // with the tunnel
+    o.proxyPassword = '';
+    expect(users(o), isEmpty); // half a login is no login
+    expect((NetOptions()..load((NetOptions()..proxyUser = 'a'..proxyPassword = 'b').toJson())).proxyUser, 'a');
+  });
 }

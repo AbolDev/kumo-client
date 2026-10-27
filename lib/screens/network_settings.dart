@@ -51,7 +51,21 @@ List<Widget> networkSections(
         subtitle: Text(tr(context, 'proxyPortDesc', {'port': o.proxyPort})),
         onTap: () => _editPort(context, state),
       ),
+      SwitchListTile(
+        value: o.keepProxy,
+        onChanged: (v) => state.updateNet((o) => o.keepProxy = v, reconnect: false),
+        secondary: const Icon(Icons.hub_outlined),
+        title: Text(tr(context, 'keepProxy')),
+        subtitle: Text(tr(context, win ? 'keepProxyDesc' : 'keepProxyDescPhone', {'port': o.proxyPort})),
+      ),
       ListTile(
+        leading: const Icon(Icons.password),
+        title: Text(tr(context, 'proxyLogin')),
+        subtitle: Text(o.proxyUser.isEmpty || o.proxyPassword.isEmpty
+            ? tr(context, 'proxyLoginOff')
+            : tr(context, 'proxyLoginOn', {'user': o.proxyUser})),
+        onTap: () => _editProxyLogin(context, state),
+      ),      ListTile(
         leading: const Icon(Icons.apps_outage),
         title: Text(tr(context, 'appRouting')),
         subtitle: Text(modeText),
@@ -467,6 +481,51 @@ class RadioGroupLike extends StatelessWidget {
       );
 }
 
+Future<void> _editProxyLogin(BuildContext context, AppState state) async {
+  final user = TextEditingController(text: state.net.proxyUser);
+  final pass = TextEditingController(text: state.net.proxyPassword);
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: Text(tr(dialog, 'proxyLogin')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(tr(dialog, 'proxyLoginDesc')),
+          const SizedBox(height: 12),
+          TextField(
+            controller: user,
+            autofocus: true,
+            textDirection: TextDirection.ltr,
+            decoration: InputDecoration(
+                labelText: tr(dialog, 'proxyUser'), border: const OutlineInputBorder()),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: pass,
+            textDirection: TextDirection.ltr,
+            decoration: InputDecoration(
+                labelText: tr(dialog, 'proxyPass'), border: const OutlineInputBorder()),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('✕')),
+        FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('OK')),
+      ],
+    ),
+  );
+  final u = user.text.trim(), p = pass.text;
+  user.dispose();
+  pass.dispose();
+  if (ok != true) return;
+  // Both or none: a half login would lock everything out.
+  final both = u.isNotEmpty && p.isNotEmpty;
+  await state.updateNet((o) {
+    o.proxyUser = both ? u : '';
+    o.proxyPassword = both ? p : '';
+  });
+}
 Future<void> _editPort(BuildContext context, AppState state) async {
   final controller = TextEditingController(text: '${state.net.proxyPort}');
   final port = await showDialog<int>(

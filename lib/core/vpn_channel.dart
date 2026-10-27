@@ -7,9 +7,12 @@ import 'platform.dart';
 enum VpnStatus { stopped, starting, started, stopping, error }
 
 class VpnState {
-  const VpnState(this.status, [this.error]);
+  const VpnState(this.status, [this.error, this.standby = false]);
   final VpnStatus status;
   final String? error;
+
+  /// Android: only the local proxy is running (the tunnel is off).
+  final bool standby;
 }
 
 /// Live speed and totals since the connection started, in bytes.
@@ -44,6 +47,7 @@ class VpnChannel {
           VpnStatus.values.firstWhere((s) => s.name == m['status'],
               orElse: () => VpnStatus.stopped),
           m['error'] as String?,
+          m['standby'] == true,
         );
       });
 
@@ -69,6 +73,9 @@ class VpnChannel {
     String? apiSecret,
     int? systemProxyPort,
     bool killSwitch = false,
+    String? standbyConfig,
+    String? standbyXrayConfig,
+    int? proxyPort,
   }) =>
       _win
       ? DesktopVpn.instance.start(configJson,
@@ -82,11 +89,14 @@ class VpnChannel {
         'config': configJson,
         'names': serverNames,
         'xrayConfig': xrayConfig,
-        'xrayPort': xrayPort,
         'showSpeed': showSpeed,
         'showVolume': showVolume,
         'showName': showName,
         'killSwitch': killSwitch,
+        'standbyConfig': standbyConfig,
+        'standbyXrayConfig': standbyXrayConfig,
+        'xrayPort': xrayPort,
+        'proxyPort': proxyPort,
       });
 
   /// Real delay in ms: fetches [url] through a temporary core built from [configJson]
@@ -120,14 +130,25 @@ class VpnChannel {
 
   /// Desktop: keeps the local proxy running while the VPN is off (see [DesktopVpn.startStandby]).
   static Future<bool> startStandby(String configJson,
-          {String? xrayConfig, int? xrayPort, required int apiPort}) =>
+          {String? xrayConfig, int? xrayPort, required int apiPort, int? proxyPort}) =>
       _win
           ? DesktopVpn.instance.startStandby(configJson,
               xrayConfig: xrayConfig, xrayPort: xrayPort, apiPort: apiPort)
-          : Future.value(false);
+          : _control
+              .invokeMethod<bool>('startStandby', {
+                'config': configJson,
+                'xrayConfig': xrayConfig,
+                'xrayPort': xrayPort,
+                'proxyPort': proxyPort,
+              })
+              .then((v) => v ?? false);
 
   static Future<void> stopStandby() async {
-    if (_win) await DesktopVpn.instance.stopStandby();
+    if (_win) {
+      await DesktopVpn.instance.stopStandby();
+    } else {
+      await _control.invokeMethod('stopStandby');
+    }
   }
 
   static Future<void> stop() =>

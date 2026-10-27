@@ -31,4 +31,6 @@
     <string name="alert_exp_soon">%1$s：%2$d 天后到期。</string>
     <string name="alert_exp_today">%1$s：今天到期。</string>
     <string name="alert_expired">%1$s：已到期。</string>
+    <string name="notif_proxy">代理运行中：127.0.0.1:%1$d</string>
+    <string name="notif_stop_proxy">停止代理</string>
 </resources>

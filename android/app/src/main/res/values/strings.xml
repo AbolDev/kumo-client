@@ -31,4 +31,6 @@
     <string name="widget_cfg_total">Total data</string>
     <string name="widget_cfg_both">Both</string>
     <string name="widget_cfg_done">Done</string>
+    <string name="notif_proxy">Proxy running at 127.0.0.1:%1$d</string>
+    <string name="notif_stop_proxy">Stop proxy</string>
 </resources>

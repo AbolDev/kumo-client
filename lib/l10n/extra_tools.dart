@@ -2,6 +2,13 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'proxyLoginOff': 'No login',
+  'proxyPass': 'Password',
+  'proxyLoginDesc': 'A user name and password for the local proxy. Leave both empty for no login. It is used when the proxy runs without the system proxy (with the tunnel, or kept running alone).',
+  'proxyLogin': 'Proxy login',
+  'proxyLoginOn': 'User: {user}',
+  'proxyUser': 'User name',
+  'keepProxyDescPhone': 'After you disconnect, the local proxy at 127.0.0.1:{port} stays available (no VPN tunnel), so apps that use it keep working. A notification stays while it runs.',
   'keepProxy': 'Keep the proxy running',
   'keepProxyDesc': 'After you disconnect, the local proxy at 127.0.0.1:{port} stays available (no tunnel, not set as the system proxy), so programs that use it keep working.',
   'keepProxyUp': 'Proxy still available at 127.0.0.1:{port}',
@@ -79,6 +86,13 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'proxyLoginOff': 'بدون ورود',
+  'proxyPass': 'رمز عبور',
+  'proxyLoginDesc': 'نام کاربری و رمز عبور برای پروکسی محلی. برای بدون ورود، هر دو را خالی بگذارید. وقتی پروکسی بدون پروکسی سیستم کار می‌کند (با تانل، یا به‌تنهایی روشن‌مانده) اعمال می‌شود.',
+  'proxyLogin': 'نام کاربری و رمز پروکسی',
+  'proxyLoginOn': 'کاربر: {user}',
+  'proxyUser': 'نام کاربری',
+  'keepProxyDescPhone': 'بعد از قطع اتصال، پروکسی محلی روی 127.0.0.1:{port} در دسترس می‌ماند (بدون تانل VPN)، تا برنامه‌هایی که از آن استفاده می‌کنند کار کنند. تا وقتی اجراست یک اعلان می‌ماند.',
   'keepProxy': 'پروکسی همیشه در دسترس',
   'keepProxyDesc': 'بعد از قطع اتصال، پروکسی محلی روی 127.0.0.1:{port} در دسترس می‌ماند (بدون تانل و بدون تنظیم به‌عنوان پروکسی سیستم)، تا برنامه‌هایی که از آن استفاده می‌کنند کار کنند.',
   'keepProxyUp': 'پروکسی همچنان روی 127.0.0.1:{port} در دسترس است',
@@ -156,6 +170,13 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'proxyLoginOff': 'Без логина',
+  'proxyPass': 'Пароль',
+  'proxyLoginDesc': 'Имя пользователя и пароль для локального прокси. Оставьте оба поля пустыми, чтобы не было входа. Действует, когда прокси работает без системного прокси (с туннелем или отдельно).',
+  'proxyLogin': 'Логин прокси',
+  'proxyLoginOn': 'Пользователь: {user}',
+  'proxyUser': 'Имя пользователя',
+  'keepProxyDescPhone': 'После отключения локальный прокси 127.0.0.1:{port} остаётся доступным (без VPN-туннеля), поэтому приложения, которые его используют, продолжают работать. Пока он работает, висит уведомление.',
   'keepProxy': 'Держать прокси включённым',
   'keepProxyDesc': 'После отключения локальный прокси 127.0.0.1:{port} остаётся доступным (без туннеля и не как системный прокси), поэтому программы, которые его используют, продолжают работать.',
   'keepProxyUp': 'Прокси по-прежнему доступен: 127.0.0.1:{port}',
@@ -233,6 +254,13 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'proxyLoginOff': 'Không đăng nhập',
+  'proxyPass': 'Mật khẩu',
+  'proxyLoginDesc': 'Tên người dùng và mật khẩu cho proxy cục bộ. Để trống cả hai nếu không cần đăng nhập. Áp dụng khi proxy chạy mà không đặt làm proxy hệ thống (cùng đường hầm, hoặc chạy riêng).',
+  'proxyLogin': 'Đăng nhập proxy',
+  'proxyLoginOn': 'Người dùng: {user}',
+  'proxyUser': 'Tên người dùng',
+  'keepProxyDescPhone': 'Sau khi ngắt kết nối, proxy cục bộ tại 127.0.0.1:{port} vẫn khả dụng (không có đường hầm VPN), nên các ứng dụng dùng nó vẫn hoạt động. Một thông báo hiện trong lúc nó chạy.',
   'keepProxy': 'Giữ proxy luôn chạy',
   'keepProxyDesc': 'Sau khi ngắt kết nối, proxy cục bộ tại 127.0.0.1:{port} vẫn khả dụng (không có đường hầm, không đặt làm proxy hệ thống), nên các chương trình dùng nó vẫn hoạt động.',
   'keepProxyUp': 'Proxy vẫn khả dụng tại 127.0.0.1:{port}',
@@ -310,6 +338,13 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'proxyLoginOff': '无需登录',
+  'proxyPass': '密码',
+  'proxyLoginDesc': '本地代理的用户名和密码。两项都留空则无需登录。在代理不作为系统代理运行时生效（配合隧道，或单独保持运行）。',
+  'proxyLogin': '代理登录',
+  'proxyLoginOn': '用户：{user}',
+  'proxyUser': '用户名',
+  'keepProxyDescPhone': '断开连接后，本地代理 127.0.0.1:{port} 仍然可用（没有 VPN 隧道），使用它的应用可继续工作。运行期间会保留一条通知。',
   'keepProxy': '保持代理运行',
   'keepProxyDesc': '断开连接后，本地代理 127.0.0.1:{port} 仍然可用（没有隧道，也不设为系统代理），使用它的程序可继续工作。',
   'keepProxyUp': '代理仍可用：127.0.0.1:{port}',
@@ -387,6 +422,13 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'proxyLoginOff': 'بدون تسجيل دخول',
+  'proxyPass': 'كلمة المرور',
+  'proxyLoginDesc': 'اسم مستخدم وكلمة مرور للوكيل المحلي. اترك الحقلين فارغين لعدم وجود تسجيل دخول. يُطبَّق عندما يعمل الوكيل دون أن يكون وكيل النظام (مع النفق، أو يعمل وحده).',
+  'proxyLogin': 'تسجيل دخول الوكيل',
+  'proxyLoginOn': 'المستخدم: {user}',
+  'proxyUser': 'اسم المستخدم',
+  'keepProxyDescPhone': 'بعد قطع الاتصال يبقى الوكيل المحلي 127.0.0.1:{port} متاحًا (بدون نفق VPN)، فتستمر التطبيقات التي تستخدمه في العمل. يبقى إشعار أثناء تشغيله.',
   'keepProxy': 'إبقاء الوكيل يعمل',
   'keepProxyDesc': 'بعد قطع الاتصال يبقى الوكيل المحلي 127.0.0.1:{port} متاحًا (بدون نفق ودون تعيينه كوكيل للنظام)، فتستمر البرامج التي تستخدمه في العمل.',
   'keepProxyUp': 'الوكيل ما زال متاحًا على 127.0.0.1:{port}',

@@ -621,7 +621,7 @@ class _ConnectCard extends StatelessWidget {
               ),
             ),
           ),
-          if (isDesktop && !state.connected && state.standbyUp)
+          if (!state.connected && state.standbyUp)
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(tr(context, 'keepProxyUp', {'port': state.net.proxyPort}),

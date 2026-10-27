@@ -39,6 +39,17 @@ object VpnControl {
             start.putExtra(BoxVpnService.EXTRA_XRAY_CONFIG_PATH, xray.path)
                 .putExtra(BoxVpnService.EXTRA_XRAY_PORT, xrayPort)
         }
+        // The proxy that stays up after the tunnel stops, when the connection asked for it.
+        val standby = File(context.filesDir, "standby_config.json")
+        if (last?.optBoolean("standby", false) == true && standby.exists()) {
+            start.putExtra(BoxVpnService.EXTRA_STANDBY_PATH, standby.path)
+                .putExtra(BoxVpnService.EXTRA_PROXY_PORT, last.optInt("proxyPort", 0))
+            val sx = File(context.filesDir, "standby_xray.json")
+            if (xrayPort > 0 && sx.exists()) {
+                start.putExtra(BoxVpnService.EXTRA_STANDBY_XRAY_PATH, sx.path)
+                    .putExtra(BoxVpnService.EXTRA_STANDBY_XRAY_PORT, xrayPort)
+            }
+        }
         return start
     }
 

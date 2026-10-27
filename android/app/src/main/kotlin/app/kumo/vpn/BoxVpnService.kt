@@ -71,6 +71,12 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         const val ACTION_STOP = "app.kumo.vpn.STOP"
         const val ACTION_RESTART = "app.kumo.vpn.RESTART"
         const val ACTION_CONNECT = "app.kumo.vpn.CONNECT"
+        const val ACTION_PROXY = "app.kumo.vpn.PROXY"
+        const val ACTION_STOP_PROXY = "app.kumo.vpn.STOP_PROXY"
+        const val EXTRA_STANDBY_PATH = "standby_path"
+        const val EXTRA_STANDBY_XRAY_PATH = "standby_xray_path"
+        const val EXTRA_STANDBY_XRAY_PORT = "standby_xray_port"
+        const val EXTRA_PROXY_PORT = "proxy_port"
         const val EXTRA_CONFIG_PATH = "config_path"
         const val EXTRA_SERVER_NAMES = "server_names"
         const val EXTRA_XRAY_CONFIG_PATH = "xray_config_path"
@@ -127,6 +133,14 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     // Why the next stop happens, when it was not the user's own doing.
     @Volatile private var stopReason: String? = null
 
+    // Keep-the-proxy mode: after the tunnel stops (or on request) only the local proxy runs, from a
+    // configuration without a tunnel. The paths are given with the connection or with the request.
+    private var standbyPath: String? = null
+    private var standbyXrayPath: String? = null
+    private var standbyXrayPort = 0
+    private var proxyPort = 0
+    @Volatile private var proxyMode = false
+
     override fun onCreate() {
         super.onCreate()
         live = this
@@ -140,6 +154,14 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             }
             ACTION_RESTART -> {
                 restartVpn()
+                return START_NOT_STICKY
+            }
+            ACTION_STOP_PROXY -> {
+                stopProxy()
+                return START_NOT_STICKY
+            }
+            ACTION_PROXY -> {
+                startProxyRequest(startIntent)
                 return START_NOT_STICKY
             }
         }
@@ -174,13 +196,149 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         showVolume = intent.getBooleanExtra(EXTRA_SHOW_VOLUME, false)
         showName = intent.getBooleanExtra(EXTRA_SHOW_NAME, true)
         killSwitch = intent.getBooleanExtra(EXTRA_KILL_SWITCH, false)
+        readStandby(intent)
         serverNames = intent?.getStringArrayListExtra(EXTRA_SERVER_NAMES) ?: emptyList()
         currentName = if (serverNames.size == 1) serverNames[0] else null
         speedText = null
         VpnBridge.update(VpnBridge.STARTING)
         showForeground()
-        scope.launch { lifecycle.withLock { startVpn(path) } }
+        scope.launch {
+            lifecycle.withLock {
+                // The proxy that was kept running holds the same port: it gives way to the tunnel.
+                if (proxyMode) {
+                    shutDown()
+                    proxyMode = false
+                    VpnBridge.setStandby(false)
+                }
+                startVpn(path)
+            }
+        }
         return START_NOT_STICKY
+    }
+
+    private fun readStandby(intent: Intent) {
+        standbyPath = intent.getStringExtra(EXTRA_STANDBY_PATH)
+        standbyXrayPath = intent.getStringExtra(EXTRA_STANDBY_XRAY_PATH)
+        standbyXrayPort = intent.getIntExtra(EXTRA_STANDBY_XRAY_PORT, 0)
+        proxyPort = intent.getIntExtra(EXTRA_PROXY_PORT, 0)
+    }
+
+    /** The app asks for the proxy alone (nothing is connected). */
+    private fun startProxyRequest(intent: Intent) {
+        readStandby(intent)
+        val idle = VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.ERROR
+        // Every startForegroundService() must be answered by startForeground().
+        runCatching { if (idle) showProxyForeground() else showForeground() }
+        if (!idle || standbyPath == null) {
+            if (idle) stopForegroundAndSelf()
+            return
+        }
+        scope.launch {
+            lifecycle.withLock {
+                if (proxyMode) {
+                    shutDown()
+                    proxyMode = false
+                    VpnBridge.setStandby(false)
+                }
+                startProxy()
+            }
+        }
+    }
+
+    /** Runs with [lifecycle] held. Starts the core with the configuration that has no tunnel. */
+    private suspend fun startProxy() {
+        val path = standbyPath ?: return
+        if (VpnBridge.status != VpnBridge.STOPPED && VpnBridge.status != VpnBridge.ERROR) return
+        VpnBridge.closeGate()
+        try {
+            App.ensureLibbox()
+            val content = File(path).readText()
+            require(content.isNotBlank()) { "empty configuration" }
+            standbyXrayPath?.let {
+                xrayPort = standbyXrayPort
+                startXray(it)
+            }
+            DefaultNetworkMonitor.start()
+            val server = CommandServer(this, this)
+            server.start()
+            commandServer = server
+            server.startOrReloadService(content, OverrideOptions())
+            proxyMode = true
+            VpnBridge.setStandby(true)
+        } catch (e: Throwable) {
+            Log.e(TAG, "proxy start failed", e)
+            teardown()
+            proxyMode = false
+            VpnBridge.setStandby(false)
+            stopForegroundAndSelf()
+            IdleNotification.show(this)
+        } finally {
+            VpnBridge.openGate()
+        }
+    }
+
+    private fun stopProxy() {
+        if (!proxyMode) {
+            if (VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.ERROR) {
+                stopForegroundAndSelf()
+            }
+            return
+        }
+        scope.launch {
+            lifecycle.withLock {
+                if (!proxyMode) return@withLock
+                shutDown()
+                proxyMode = false
+                VpnBridge.setStandby(false)
+            }
+            // Only when no tunnel was started in the meantime.
+            if (!proxyMode && (VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.ERROR)) {
+                stopForegroundAndSelf()
+                IdleNotification.show(this@BoxVpnService)
+            }
+        }
+    }
+
+    private fun proxyNotification(): android.app.Notification {
+        val open = PendingIntent.getActivity(
+            this, 0,
+            Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        fun action(requestCode: Int, name: String) = PendingIntent.getService(
+            this, requestCode,
+            Intent(this, BoxVpnService::class.java).setAction(name),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Kumo")
+            .setContentText(getString(R.string.notif_proxy, if (proxyPort > 0) proxyPort else 2080))
+            .setSmallIcon(R.drawable.ic_notification)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
+            .setContentIntent(open)
+            .addAction(0, getString(R.string.notif_connect), action(3, ACTION_CONNECT))
+            .addAction(0, getString(R.string.notif_stop_proxy), action(4, ACTION_STOP_PROXY))
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun showProxyForeground() {
+        IdleNotification.cancel(this)
+        val nm = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW),
+            )
+        }
+        val notification = proxyNotification()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     // ---- notification ----------------------------------------------------------
@@ -372,6 +530,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     private fun stopVpn() {
+        if (proxyMode) {
+            stopProxy()
+            return
+        }
         if (VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.STOPPING) {
             if (VpnBridge.status == VpnBridge.STOPPED) stopForegroundAndSelf()
             return
@@ -379,6 +541,14 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         VpnBridge.update(VpnBridge.STOPPING)
         scope.launch {
             lifecycle.withLock { shutDown() }
+            // With the proxy kept running the service stays: only the tunnel ends.
+            if (standbyPath != null) {
+                runCatching { showProxyForeground() }
+                VpnBridge.update(VpnBridge.STOPPED, stopReason)
+                stopReason = null
+                lifecycle.withLock { startProxy() }
+                return@launch
+            }
             // The service is released first: a new connection requested the moment the status
             // turns "stopped" must find a service that is already going away, not this one.
             stopForegroundAndSelf()
@@ -479,6 +649,13 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                         // Only if this process is still the one in use (not replaced or stopped).
                         if (xrayProcess !== process || xrayStopping) return@withLock
                         shutDown()
+                        if (proxyMode) {
+                            proxyMode = false
+                            VpnBridge.setStandby(false)
+                            stopForegroundAndSelf()
+                            IdleNotification.show(this@BoxVpnService)
+                            return@withLock
+                        }
                         if (killSwitch && engageBlock()) {
                             // Stay up so the block holds until the user acts.
                             VpnBridge.update(VpnBridge.ERROR, "xray stopped unexpectedly: internet blocked (kill switch)")
@@ -558,6 +735,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         // A newer instance may already own the state; only the current one reports it.
         if (live === this) {
             live = null
+            VpnBridge.setStandby(false)
             if (VpnBridge.status == VpnBridge.STARTED) VpnBridge.update(VpnBridge.STOPPED)
         }
         super.onDestroy()
