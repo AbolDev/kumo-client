@@ -141,7 +141,10 @@ class HomePage extends StatelessWidget {
                 ),
                 if (state.anyTesting)
                   PopupMenuItem(
-                    value: state.cancelAllPings,
+                    value: () async {
+                      final remove = state.collectorTesting ? await _askUntested(context) : false;
+                      if (remove != null) state.cancelAllPings(removeUntested: remove);
+                    },
                     child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest')),
                   ),
                 PopupMenuItem(
@@ -1264,6 +1267,34 @@ Future<bool?> _askRemoveDead(BuildContext context) {
   );
 }
 
+/// Asks what to do with the public servers that were not tested yet when the test is stopped:
+/// keep them (the default) or delete them. Null = the user changed their mind.
+Future<bool?> _askUntested(BuildContext context) {
+  var remove = false;
+  return showDialog<bool>(
+    context: context,
+    builder: (dialog) => StatefulBuilder(builder: (dialog, setState) {
+      final t = S.of(dialog);
+      return AlertDialog(
+        title: Text(tr(dialog, 'cancelTest')),
+        content: CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: remove,
+          onChanged: (v) => setState(() => remove = v ?? false),
+          title: Text(tr(dialog, 'removeUntested')),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog), child: Text(t.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialog, remove),
+              child: Text(tr(dialog, 'cancelTest'))),
+        ],
+      );
+    }),
+  );
+}
+
 enum _GroupAction { tcping, realDelay, cancelTest, refresh, cancelRefresh, edit, share, delete }
 
 /// The title row of a dropdown: the collector, a subscription, or configs added by hand.
@@ -1296,7 +1327,13 @@ class _GroupHeader extends StatelessWidget {
       case _GroupAction.tcping:
         state.ping(group, real: false);
       case _GroupAction.cancelTest:
-        state.cancelPing(group);
+        if (group.kind == GroupKind.collector) {
+          _askUntested(context).then((remove) {
+            if (remove != null) state.cancelPing(group, removeUntested: remove);
+          });
+        } else {
+          state.cancelPing(group);
+        }
       case _GroupAction.realDelay:
         _askRemoveDead(context).then((remove) {
           if (remove != null) state.ping(group, real: true, removeDead: remove);

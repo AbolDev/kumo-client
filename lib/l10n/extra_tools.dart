@@ -2,6 +2,7 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'removeUntested': 'Delete the servers that were not tested yet',
   'cancelTest': 'Stop testing',
   'measurePing': 'Ping after connecting',
   'measurePingDesc': 'After you connect, measures the real delay of the connection and shows it on the card. Turn off to send no extra request.',
@@ -35,6 +36,7 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'removeUntested': 'سرورهایی که هنوز تست نشده‌اند حذف شوند',
   'cancelTest': 'توقف تست',
   'measurePing': 'پینگ پس از اتصال',
   'measurePingDesc': 'بعد از اتصال، تأخیر واقعی اتصال را می‌سنجد و روی کارت نشان می‌دهد. خاموش کنید تا درخواست اضافه نفرستد.',
@@ -68,6 +70,7 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'removeUntested': 'Удалить серверы, которые ещё не проверены',
   'cancelTest': 'Остановить проверку',
   'measurePing': 'Пинг после подключения',
   'measurePingDesc': 'После подключения измеряет реальную задержку соединения и показывает её на карточке. Выключите, чтобы не отправлять лишний запрос.',
@@ -101,6 +104,7 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'removeUntested': 'Xóa các máy chủ chưa được kiểm tra',
   'cancelTest': 'Dừng kiểm tra',
   'measurePing': 'Ping sau khi kết nối',
   'measurePingDesc': 'Sau khi kết nối, đo độ trễ thực của kết nối và hiện trên thẻ. Tắt để không gửi thêm yêu cầu.',
@@ -134,6 +138,7 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'removeUntested': '删除尚未测试的服务器',
   'cancelTest': '停止测试',
   'measurePing': '连接后测延迟',
   'measurePingDesc': '连接后测量连接的真实延迟并显示在卡片上。关闭后不会发送额外请求。',
@@ -167,6 +172,7 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'removeUntested': 'احذف الخوادم التي لم تُختبر بعد',
   'cancelTest': 'إيقاف الاختبار',
   'measurePing': 'قياس الاستجابة بعد الاتصال',
   'measurePingDesc': 'بعد الاتصال يقيس التأخير الفعلي للاتصال ويعرضه على البطاقة. أوقفه حتى لا يُرسل طلبًا إضافيًا.',

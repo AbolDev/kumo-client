@@ -923,6 +923,8 @@ class AppState extends ChangeNotifier {
     final key = 'ping-${g.id}';
     final gen = _begin(key);
     final list = List.of(g.configs);
+    final done = <ProxyConfig>{};
+    _pingRuns[g.id] = (list: list, done: done);
     final test = tests[g.id] = GroupTest(list.length);
     working.add(g.id);
     final clock = Stopwatch()..start();
@@ -947,6 +949,7 @@ class AppState extends ChangeNotifier {
           list,
           isCancelled: () => _stale(key, gen),
           onResult: (c) {
+            done.add(c);
             test.done++;
             if (c.isAlive) {
               test.alive++;
@@ -1385,20 +1388,35 @@ class AppState extends ChangeNotifier {
   /// Whether any list is being tested now.
   bool get anyTesting => tests.values.any((t) => t.running);
 
-  /// Stops the test of one list; the results so far stay.
-  void cancelPing(ServerGroup g) {
+  // The servers of each running test and the ones whose result is in.
+  final _pingRuns = <String, ({List<ProxyConfig> list, Set<ProxyConfig> done})>{};
+
+  /// Stops the test of one list; the results so far stay. With [removeUntested] the servers that
+  /// were not tested yet are deleted from the list (they stay by default).
+  void cancelPing(ServerGroup g, {bool removeUntested = false}) {
+    final run = _pingRuns[g.id];
     _begin('ping-${g.id}');
     tests[g.id]?.running = false;
+    if (removeUntested && run != null) {
+      final untested = run.list.where((c) => !run.done.contains(c)).toSet();
+      g.configs.removeWhere(untested.contains);
+      if (selected != null && untested.contains(selected)) selected = null;
+      log('Removed ${untested.length} servers that were not tested from ${_title(g)}');
+      _save();
+    }
     notifyListeners();
   }
 
   /// Stops every test that is running, and the ones of a test-all that have not started.
-  void cancelAllPings() {
+  void cancelAllPings({bool removeUntested = false}) {
     _pingAllStopped = true;
     for (final g in groups) {
-      if (tests[g.id]?.running ?? false) cancelPing(g);
+      if (tests[g.id]?.running ?? false) cancelPing(g, removeUntested: removeUntested);
     }
   }
+
+  /// Whether the public servers are being tested (stopping that asks what to do with the rest).
+  bool get collectorTesting => tests[collector.id]?.running ?? false;
 
   /// Forgets all ping results.
   void clearTestResults() {
