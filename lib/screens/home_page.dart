@@ -800,7 +800,8 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
               child: IgnorePointer(
                 child: RepaintBoundary(
                   child: CustomPaint(
-                      painter: _RingsPainter(color: color, on: widget.on, time: _time)),
+                      painter: _RingsPainter(
+                          color: color, on: widget.on, time: _time, gap: isDesktop ? 11 : 16)),
                 ),
               ),
             ),
@@ -890,13 +891,17 @@ class _PanelGlowPainter extends CustomPainter {
 /// drift very slowly and unevenly (every wave of every line has its own random speed), so they
 /// never repeat and never stand still. Disconnected, they rest, fainter.
 class _RingsPainter extends CustomPainter {
-  _RingsPainter({required this.color, required this.on, required ValueListenable<double> time})
+  _RingsPainter(
+      {required this.color, required this.on, required ValueListenable<double> time, required this.gap})
       : _time = time,
         super(repaint: time);
 
   final Color color;
   final bool on;
   final ValueListenable<double> _time;
+
+  /// Pixels between two lines: the phone has the room for more than the desktop card.
+  final double gap;
 
   static const _rings = 6;
   static const _waves = 4; // wobbles with 2, 3, 4 and 5 bumps around the circle
@@ -932,7 +937,7 @@ class _RingsPainter extends CustomPainter {
     final line = Paint()..style = PaintingStyle.stroke;
     for (var i = 0; i < _rings; i++) {
       final f = i / (_rings - 1); // 0 = the line next to the button, 1 = the outermost
-      final base = 74.0 + 11.0 * i;
+      final base = 74.0 + gap * i;
       // the further out, the more it wobbles; the wobble itself swells and eases slowly
       // how far the line strays from a circle, in pixels: a little for the first, more further out
       final stray = (1.5 + 2.4 * i) * (0.75 + 0.25 * sin(t * 0.45 + i * 2.1));
