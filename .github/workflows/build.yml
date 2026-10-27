@@ -193,7 +193,7 @@ jobs:
           KUMO_KEYPASSWORD: ${{ secrets.KEY_PASSWORD }}
           KUMO_KEYALIAS: ${{ secrets.KEY_ALIAS }}
         run: >
-          flutter build apk --release ${{ matrix.args }}
+          flutter build apk --release --dart-define=KUMO_COMMIT=${{ github.sha }} ${{ matrix.args }}
           --obfuscate --split-debug-info=build/symbols --no-pub
 
       - run: |
@@ -232,7 +232,7 @@ jobs:
       # sing-box, Xray and the wintun driver that the app runs next to kumo.exe.
       - run: ./tools/fetch_windows_core.ps1 -Arch ${{ matrix.arch }}
 
-      - run: flutter build windows --release --no-pub ${{ matrix.target }}
+      - run: flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub ${{ matrix.target }}
 
       # One installer for the whole app: the program, the cores, the driver and an uninstaller.
       - name: Build the installer
@@ -290,10 +290,10 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          flutter build windows --release --no-pub --target-platform windows-arm64
+          flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub --target-platform windows-arm64
           if ($LASTEXITCODE -ne 0) {
             Write-Host 'The target flag was refused; building for this machine'
-            flutter build windows --release --no-pub
+            flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub
             if ($LASTEXITCODE -ne 0) { throw 'flutter build failed' }
           }
           Get-ChildItem build\windows -Directory | Select-Object Name
@@ -385,7 +385,7 @@ jobs:
       # sing-box, Xray and the library NaiveProxy needs, next to the program.
       - run: bash tools/fetch_unix_core.sh linux ${{ matrix.arch }}
 
-      - run: flutter build linux --release --no-pub
+      - run: flutter build linux --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub
 
       - name: Package
         run: |
@@ -483,7 +483,7 @@ jobs:
       # sing-box and Xray as universal binaries.
       - run: bash tools/fetch_unix_core.sh macos
 
-      - run: flutter build macos --release --no-pub
+      - run: flutter build macos --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub
 
       - name: Put the cores in the app, sign it and package it
         run: |

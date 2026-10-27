@@ -348,6 +348,13 @@ class _SettingsPageState extends State<SettingsPage> {
             if (isDesktop)
               _section(Icons.desktop_windows, tr(context, Platform.isWindows ? 'windows' : 'desktop'), [
                 SwitchListTile(
+                  value: state.net.keepProxy,
+                  onChanged: (v) =>
+                      state.updateNet((o) => o.keepProxy = v, reconnect: false),
+                  title: Text(tr(context, 'keepProxy')),
+                  subtitle: Text(tr(context, 'keepProxyDesc', {'port': state.net.proxyPort})),
+                ),
+                SwitchListTile(
                   value: state.net.minimizeToTray,
                   onChanged: (v) =>
                       state.updateNet((o) => o.minimizeToTray = v, reconnect: false),

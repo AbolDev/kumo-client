@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
+
 import 'latency_tester.dart' show socksWarmDelay;
 import 'platform.dart';
 import 'system_proxy.dart';
@@ -246,6 +248,8 @@ wait "\$P" 2>/dev/null
     final output = StringBuffer();
     try {
       await _ready;
+      // The standby proxy holds the same port.
+      await stopStandby();
       await Directory(dataDir).create(recursive: true);
       if (stale()) return;
       if (xrayConfig != null && xrayPort != null) {
@@ -358,6 +362,94 @@ wait "\$P" 2>/dev/null
     if (gen != _gen) return;
     _gen++;
     _killAll(keepBlocked: _killSwitch).then((_) => _emit(VpnStatus.error, message));
+  }
+
+  // ------------------------------------------------------------------ standby proxy
+
+  /// A core that only serves the local proxy (no tunnel, no system proxy), kept running while the
+  /// VPN is off so that programs which use the proxy address keep working.
+  Process? _sbCore;
+  Process? _sbXray;
+  int _sbGen = 0;
+
+  /// True while the standby proxy is up.
+  final standby = ValueNotifier<bool>(false);
+
+  Future<bool> _portOpen(int port) async {
+    try {
+      (await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 300)))
+          .destroy();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Starts the standby proxy. Returns false when it could not (the port is taken ...).
+  Future<bool> startStandby(String configJson,
+      {String? xrayConfig, int? xrayPort, required int apiPort}) async {
+    await stopStandby();
+    final gen = ++_sbGen;
+    bool stale() => gen != _sbGen;
+    final output = StringBuffer();
+    try {
+      await _ready;
+      if (stale()) return false;
+      await Directory(dataDir).create(recursive: true);
+      if (xrayConfig != null && xrayPort != null) {
+        final file = '$dataDir${_sep}standby_xray.json';
+        await File(file).writeAsString(xrayConfig);
+        final xray = _sbXray = await _spawn('kumo-xray', ['run', '-c', file], output);
+        var exited = false;
+        xray.exitCode.then((_) => exited = true);
+        final end = DateTime.now().add(const Duration(seconds: 8));
+        var listening = false;
+        while (!listening && !exited && !stale() && DateTime.now().isBefore(end)) {
+          listening = await _portOpen(xrayPort);
+          if (!listening) await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        if (stale()) return false;
+        if (!listening) throw StateError('xray failed to start: ${output.toString().trim()}');
+      }
+      final file = '$dataDir${_sep}standby_config.json';
+      await File(file).writeAsString(configJson);
+      final core = _sbCore = await _spawn('kumo-core', ['run', '-c', file], output);
+      var exited = false;
+      core.exitCode.then((_) {
+        exited = true;
+        if (identical(_sbCore, core)) {
+          _sbCore = null;
+          _sbXray?.kill();
+          _sbXray = null;
+          standby.value = false;
+        }
+      });
+      final up = await _waitHttp(apiPort, () => exited || stale(), const Duration(seconds: 15));
+      if (stale()) return false;
+      if (!up) {
+        final text = output.toString().trim();
+        throw StateError(text.isEmpty ? 'sing-box did not start' : text);
+      }
+      standby.value = true;
+      return true;
+    } catch (e) {
+      if (!stale()) await stopStandby();
+      return false;
+    }
+  }
+
+  Future<void> stopStandby() async {
+    _sbGen++;
+    final procs = [_sbCore, _sbXray].whereType<Process>().toList();
+    _sbCore = null;
+    _sbXray = null;
+    standby.value = false;
+    for (final p in procs) {
+      p.kill();
+    }
+    await Future.wait([
+      for (final p in procs) p.exitCode.timeout(const Duration(seconds: 4), onTimeout: () => -1),
+    ]);
   }
 
   Future<void> stop() async {

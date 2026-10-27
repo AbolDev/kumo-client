@@ -43,6 +43,34 @@ bool isNewer(String a, String b) {
   return false;
 }
 
+/// The commit this build was made from (set by the build: `--dart-define=KUMO_COMMIT=<sha>`).
+/// Empty for a build made by hand.
+const buildCommit = String.fromEnvironment('KUMO_COMMIT');
+
+/// The commit a release tag points to, or null when it cannot be found.
+Future<String?> _tagCommit(HttpClient client, String tag) async {
+  Future<Map<String, dynamic>?> get(String path) async {
+    final req = await client
+        .getUrl(Uri.parse('https://api.github.com/repos/$updateRepo/$path'))
+        .timeout(const Duration(seconds: 12));
+    req.headers
+      ..set('Accept', 'application/vnd.github+json')
+      ..set('User-Agent', 'Kumo');
+    final res = await req.close().timeout(const Duration(seconds: 12));
+    final body = await res.transform(utf8.decoder).join();
+    if (res.statusCode != 200) return null;
+    final j = jsonDecode(body);
+    return j is Map<String, dynamic> ? j : null;
+  }
+
+  var obj = (await get('git/ref/tags/$tag'))?['object'];
+  // An annotated tag points to a tag object, which points to the commit.
+  if (obj is Map && obj['type'] == 'tag') {
+    obj = (await get('git/tags/${obj['sha']}'))?['object'];
+  }
+  return obj is Map && obj['sha'] is String ? obj['sha'] as String : null;
+}
+
 /// Whether test versions are offered too. Only set for a single check the user confirmed.
 bool includePrerelease = false;
 
@@ -96,11 +124,19 @@ Future<UpdateInfo> checkForUpdate(String current) async {
         if (a is Map && a['name'] is String && a['size'] is int)
           a['name'] as String: a['size'] as int,
     };
+    // The same version number, but the release was rebuilt from other code (the tag was moved):
+    // this build knows its commit, so it can tell.
+    var newer = isNewer(tag, current);
+    if (!newer && !isNewer(current, tag) && buildCommit.isNotEmpty) {
+      try {
+        final sha = await _tagCommit(client, '${j['tag_name']}');
+        if (sha != null && sha.toLowerCase() != buildCommit.toLowerCase()) newer = true;
+      } catch (_) {}
+    }
     return UpdateInfo(
         tag,
         '${j['html_url'] ?? 'https://github.com/$updateRepo/releases'}',
-        isNewer(tag, current),
-        assets,
+        newer,        assets,
         notes: '${j['body'] ?? ''}',
         sizes: sizes,
         history: history);

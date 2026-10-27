@@ -2,6 +2,9 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'keepProxy': 'Keep the proxy running',
+  'keepProxyDesc': 'After you disconnect, the local proxy at 127.0.0.1:{port} stays available (no tunnel, not set as the system proxy), so programs that use it keep working.',
+  'keepProxyUp': 'Proxy still available at 127.0.0.1:{port}',
   'unlimited': 'Unlimited',
   'subscription': 'Subscription',
   'providerRouting': 'Routing rules',
@@ -76,6 +79,9 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'keepProxy': 'پروکسی همیشه در دسترس',
+  'keepProxyDesc': 'بعد از قطع اتصال، پروکسی محلی روی 127.0.0.1:{port} در دسترس می‌ماند (بدون تانل و بدون تنظیم به‌عنوان پروکسی سیستم)، تا برنامه‌هایی که از آن استفاده می‌کنند کار کنند.',
+  'keepProxyUp': 'پروکسی همچنان روی 127.0.0.1:{port} در دسترس است',
   'unlimited': 'نامحدود',
   'subscription': 'اشتراک',
   'providerRouting': 'قوانین مسیریابی',
@@ -150,6 +156,9 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'keepProxy': 'Держать прокси включённым',
+  'keepProxyDesc': 'После отключения локальный прокси 127.0.0.1:{port} остаётся доступным (без туннеля и не как системный прокси), поэтому программы, которые его используют, продолжают работать.',
+  'keepProxyUp': 'Прокси по-прежнему доступен: 127.0.0.1:{port}',
   'unlimited': 'Без ограничений',
   'subscription': 'Подписка',
   'providerRouting': 'Правила маршрутизации',
@@ -224,6 +233,9 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'keepProxy': 'Giữ proxy luôn chạy',
+  'keepProxyDesc': 'Sau khi ngắt kết nối, proxy cục bộ tại 127.0.0.1:{port} vẫn khả dụng (không có đường hầm, không đặt làm proxy hệ thống), nên các chương trình dùng nó vẫn hoạt động.',
+  'keepProxyUp': 'Proxy vẫn khả dụng tại 127.0.0.1:{port}',
   'unlimited': 'Không giới hạn',
   'subscription': 'Gói đăng ký',
   'providerRouting': 'Quy tắc định tuyến',
@@ -298,6 +310,9 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'keepProxy': '保持代理运行',
+  'keepProxyDesc': '断开连接后，本地代理 127.0.0.1:{port} 仍然可用（没有隧道，也不设为系统代理），使用它的程序可继续工作。',
+  'keepProxyUp': '代理仍可用：127.0.0.1:{port}',
   'unlimited': '无限制',
   'subscription': '订阅',
   'providerRouting': '路由规则',
@@ -372,6 +387,9 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'keepProxy': 'إبقاء الوكيل يعمل',
+  'keepProxyDesc': 'بعد قطع الاتصال يبقى الوكيل المحلي 127.0.0.1:{port} متاحًا (بدون نفق ودون تعيينه كوكيل للنظام)، فتستمر البرامج التي تستخدمه في العمل.',
+  'keepProxyUp': 'الوكيل ما زال متاحًا على 127.0.0.1:{port}',
   'unlimited': 'غير محدود',
   'subscription': 'الاشتراك',
   'providerRouting': 'قواعد التوجيه',

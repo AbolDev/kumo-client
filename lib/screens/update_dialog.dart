@@ -429,6 +429,7 @@ Future<void> _install(BuildContext context, UpdateInfo info,
   if (Platform.isWindows) {
     // The VPN is put away first; the installer then closes Kumo and replaces it.
     await VpnChannel.stop();
+    await VpnChannel.stopStandby();
     await Process.start(path, const [], mode: ProcessStartMode.detached);
     exit(0);
   }

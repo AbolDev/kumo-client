@@ -124,6 +124,7 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
   Future<void> _quit() async {
     // The system proxy and the VPN processes must be put away before the app goes.
     await VpnChannel.stop();
+    await VpnChannel.stopStandby();
     try {
       await trayManager.destroy();
     } catch (_) {}

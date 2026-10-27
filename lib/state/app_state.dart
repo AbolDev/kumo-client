@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
 import '../core/latency_tester.dart';
+import '../core/desktop_vpn.dart';
 import '../core/net_options.dart';
 import '../core/platform.dart';
 import '../core/proxy_config.dart';
@@ -409,6 +410,7 @@ class AppState extends ChangeNotifier {
         }
         liveDelay = null;
       }
+      if (changed) _syncStandby();
       if (s.status == VpnStatus.started && changed) {
         if (measurePing) _measureLive();
         _misses = 0;
@@ -443,6 +445,8 @@ class AppState extends ChangeNotifier {
     delayTestUrl = delayUrl;
     if (idleNotification) VpnChannel.setIdleNotification(true);
     VpnChannel.scheduleSubUpdates(autoUpdateSubs).catchError((_) {});
+    if (isDesktop) DesktopVpn.instance.standby.addListener(notifyListeners);
+    _syncStandby(const Duration(seconds: 1));
     _dueTimer?.cancel();
     _dueTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       if (autoUpdateSubs) _updateDueSubscriptions();
@@ -612,6 +616,7 @@ class AppState extends ChangeNotifier {
     _save();
     notifyListeners();
     if (connected) await _reconnect();
+    _syncStandby();
   }
 
   Future<void> _reconnect() async {
@@ -775,6 +780,7 @@ class AppState extends ChangeNotifier {
           .catchError((_) => <String, String>{});
     }
     if (reconnect && connected) await _reconnect();
+    _syncStandby();
   }
 
   void setDelayUrl(String url) {
@@ -1321,6 +1327,81 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The server(s) a connection would use: the picked one, or in automatic mode the fastest few.
+  /// Automatic mode only groups sing-box servers; the ones only Xray can carry (XHTTP, mKCP ...)
+  /// need their own Xray process, so they are used when picked by hand (or when nothing else is
+  /// available).
+  List<ProxyConfig> _chosenServers() {
+    final plain = all.where((c) => c.canSingBox).toList();
+    final alive = plain.where((c) => c.isAlive).toList()
+      ..sort((a, b) => _rank(a).compareTo(_rank(b)));
+    final auto = (alive.isNotEmpty ? alive : plain).take(_autoGroupSize).toList();
+    return selected != null ? [selected!] : (auto.isNotEmpty ? auto : [all.first]);
+  }
+
+  // ---------------------------------------------------------------- standby proxy
+
+  Timer? _standbyTimer;
+
+  /// Whether the standby proxy (the local proxy kept up while the VPN is off) is running.
+  bool get standbyUp => isDesktop && DesktopVpn.instance.standby.value;
+
+  /// Brings the standby proxy in line with the setting and the connection state, a moment after
+  /// the last change (a reconnect passes through "stopped" for a short while).
+  void _syncStandby([Duration wait = const Duration(milliseconds: 800)]) {
+    if (!isDesktop) return;
+    _standbyTimer?.cancel();
+    _standbyTimer = Timer(wait, _applyStandby);
+  }
+
+  Future<void> _applyStandby() async {
+    if (!net.keepProxy || !_idle || _preparing || all.isEmpty) {
+      if (!net.keepProxy || connected || vpn.status == VpnStatus.starting) {
+        await VpnChannel.stopStandby();
+      }
+      return;
+    }
+    try {
+      final chosen = _chosenServers();
+      final routing = routingFor(chosen);
+      final tags = routing?.ruleSetTags ?? const <String>[];
+      final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
+          ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
+              ads: net.blockAds, tags: tags, wait: false)
+          : <String, String>{};
+      // The same options without the tunnel, the kill switch and the system proxy.
+      final o = NetOptions()
+        ..load(net.toJson())
+        ..tun = false
+        ..killSwitch = false;
+      final api = await _freePort();
+      final chain = o.chain.isEmpty ? null : parseLink(o.chain);
+      final viaXray = chosen.length == 1 &&
+          chosen.first.canXray &&
+          (chosen.first.needsXray || o.core == 'xray');
+      final xrayPort = viaXray ? 30000 + Random().nextInt(30000) : null;
+      final config = buildSingBoxConfig(chosen,
+          xrayPort: xrayPort,
+          options: o,
+          ruleSets: sets,
+          apiPort: api,
+          apiSecret: null,
+          windows: true,
+          chain: chain,
+          viaXray: viaXray,
+          routing: routing);
+      // Something changed while this was being prepared.
+      if (!net.keepProxy || !_idle || _preparing) return;
+      final ok = await VpnChannel.startStandby(config,
+          xrayConfig: viaXray ? buildXrayConfig(chosen.first, xrayPort!, options: o) : null,
+          xrayPort: xrayPort,
+          apiPort: api);
+      if (!ok) log('The standby proxy could not start');
+    } catch (e) {
+      log('The standby proxy could not start: $e');
+    }
+  }
+
   /// Never blocks: a tap while connecting cancels, a tap while connected disconnects.
   Future<void> toggle() async {
     if (vpn.status == VpnStatus.stopping) return;
@@ -1353,16 +1434,7 @@ class AppState extends ChangeNotifier {
         return;
       }
     }
-    // Automatic mode only groups sing-box servers; the ones only Xray can carry (XHTTP, mKCP ...)
-    // need their own Xray process, so they are used when picked by hand (or when nothing else
-    // is available).
-    final plain = all.where((c) => c.canSingBox).toList();
-    final alive = plain.where((c) => c.isAlive).toList()
-      ..sort((a, b) => _rank(a).compareTo(_rank(b)));
-    final auto =
-        (alive.isNotEmpty ? alive : plain).take(_autoGroupSize).toList();
-    final chosen =
-        selected != null ? [selected!] : (auto.isNotEmpty ? auto : [all.first]);
+    final chosen = _chosenServers();
     final granted = await VpnChannel.prepare();
     if (cancelled()) return;
     if (!granted) {

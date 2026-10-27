@@ -118,6 +118,18 @@ class VpnChannel {
         exe: exe, dataDir: dir, config: config, url: url, timeoutMs: timeoutMs, resolveNames: true);
   }
 
+  /// Desktop: keeps the local proxy running while the VPN is off (see [DesktopVpn.startStandby]).
+  static Future<bool> startStandby(String configJson,
+          {String? xrayConfig, int? xrayPort, required int apiPort}) =>
+      _win
+          ? DesktopVpn.instance.startStandby(configJson,
+              xrayConfig: xrayConfig, xrayPort: xrayPort, apiPort: apiPort)
+          : Future.value(false);
+
+  static Future<void> stopStandby() async {
+    if (_win) await DesktopVpn.instance.stopStandby();
+  }
+
   static Future<void> stop() =>
       _win ? DesktopVpn.instance.stop() : _control.invokeMethod('stop');
 

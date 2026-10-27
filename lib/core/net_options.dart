@@ -200,6 +200,10 @@ class NetOptions {
   bool minimizeToTray = true;
   bool startWithWindows = false;
 
+  /// Desktop: the local proxy keeps running after the VPN is turned off (without the tunnel and
+  /// without being set as the system proxy).
+  bool keepProxy = false;
+
   String get dnsAddress {
     if (dns == 'custom' && customDns.trim().isNotEmpty) return customDns.trim();
     return dnsPresets
@@ -248,6 +252,7 @@ class NetOptions {
         'chain': chain,
         'minimizeToTray': minimizeToTray,
         'startWithWindows': startWithWindows,
+        'keepProxy': keepProxy,
       };
 
   void load(Map<String, dynamic> j) {
@@ -312,5 +317,6 @@ class NetOptions {
     chain = j['chain'] is String ? j['chain'] as String : '';
     minimizeToTray = flag('minimizeToTray', true);
     startWithWindows = flag('startWithWindows', false);
+    keepProxy = flag('keepProxy', false);
   }
 }

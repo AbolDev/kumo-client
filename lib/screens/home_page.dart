@@ -621,6 +621,13 @@ class _ConnectCard extends StatelessWidget {
               ),
             ),
           ),
+          if (isDesktop && !state.connected && state.standbyUp)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(tr(context, 'keepProxyUp', {'port': state.net.proxyPort}),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+            ),
           // Windows: a warning about a subscription that is running out (the phone uses a
           // notification instead).
           if (state.alertText != null)
