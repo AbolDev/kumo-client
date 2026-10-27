@@ -150,69 +150,107 @@ Future<int> tunnelDelay(
 }
 
 Future<int> _delayOnce(Uri uri, int? socksPort, int? proxyPort, Duration timeout) async {
-  final sw = Stopwatch()..start();
+  final sw = Stopwatch();
   try {
-    if (socksPort == null) {
-      final client = HttpClient()..connectionTimeout = timeout;
-      // Without a tunnel the page is fetched through the local proxy instead.
-      if (proxyPort != null) {
-        client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
-      }
-      try {
+    if (socksPort != null) return socksWarmDelay(socksPort, uri, timeout);
+    final client = HttpClient()..connectionTimeout = timeout;
+    // Without a tunnel the page is fetched through the local proxy instead.
+    if (proxyPort != null) {
+      client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
+    }
+    try {
+      // Two requests one after the other over the same connection: the first opens everything on
+      // the way, the second is the round trip that traffic then sees (see [socksWarmDelay]).
+      for (var i = 0; i < 2; i++) {
+        sw
+          ..reset()
+          ..start();
         final req = await client.getUrl(uri).timeout(timeout);
         final res = await req.close().timeout(timeout);
         await res.drain<void>().timeout(timeout);
-      } finally {
-        client.close(force: true);
       }
-      return sw.elapsedMilliseconds;
-    }
-    final socket =
-        await Socket.connect('127.0.0.1', socksPort, timeout: timeout);
-    try {
-      final reader = StreamIterator<List<int>>(socket);
-      // Exactly [n] bytes; what arrives beyond them waits for the next call.
-      final buffer = <int>[];
-      Future<List<int>> take(int n) async {
-        while (buffer.length < n) {
-          if (!await reader.moveNext().timeout(timeout)) {
-            throw const SocketException('closed');
-          }
-          buffer.addAll(reader.current);
-        }
-        final out = buffer.sublist(0, n);
-        buffer.removeRange(0, n);
-        return out;
-      }
-
-      socket.add([5, 1, 0]);
-      if ((await take(2))[1] != 0) return -1;
-      final host = utf8.encode(uri.host);
-      final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
-      socket.add([5, 1, 0, 3, host.length, ...host, port >> 8, port & 255]);
-      if ((await take(2))[1] != 0) return -1;
-      // Xray answers the SOCKS request at once, before its own connection to the server is up,
-      // so that time says nothing (3 or 4 ms). The delay is the time until the page answers:
-      // a plain HTTP request is sent through the connection and the first reply byte awaited.
-      // (An https address is asked over http: only the round trip matters here.)
-      // the rest of the SOCKS reply: reserved byte, address type, the address and the port
-      final kind = (await take(2))[1];
-      if (kind == 3) {
-        await take((await take(1))[0] + 2);
-      } else {
-        await take((kind == 4 ? 16 : 4) + 2);
-      }
-      final path = uri.path.isEmpty ? '/' : uri.path;
-      final query = uri.hasQuery ? '?${uri.query}' : '';
-      socket.add(utf8.encode('GET $path$query HTTP/1.1\r\n'
-          'Host: ${uri.host}\r\nUser-Agent: Kumo\r\nConnection: close\r\n\r\n'));
-      await take(1);
       return sw.elapsedMilliseconds;
     } finally {
-      socket.destroy();
+      client.close(force: true);
     }
   } catch (_) {
     return -1;
+  }
+}
+
+/// The time of the second of two HTTP requests sent one after the other over one connection made
+/// through the SOCKS5 proxy at [socksPort]. The first request opens everything on the way (TCP,
+/// TLS or WebSocket to the server, and from the server to the page); the second is the round trip
+/// that a user's traffic then sees. That is what other clients such as v2rayN call the real delay;
+/// timing the first one counts the whole set-up, which came out about three times as high. Falls
+/// back to the time of the first request when the end of its answer cannot be told. -1 on failure.
+Future<int> socksWarmDelay(int socksPort, Uri uri, Duration timeout) async {
+  Socket? socket;
+  try {
+    socket = await Socket.connect('127.0.0.1', socksPort, timeout: timeout);
+    final reader = StreamIterator<List<int>>(socket);
+    final buffer = <int>[];
+    Future<int> nextByte() async {
+      if (buffer.isEmpty) {
+        if (!await reader.moveNext().timeout(timeout)) {
+          throw const SocketException('closed');
+        }
+        buffer.addAll(reader.current);
+      }
+      return buffer.removeAt(0);
+    }
+
+    Future<List<int>> take(int n) async => [for (var i = 0; i < n; i++) await nextByte()];
+
+    socket.add([5, 1, 0]);
+    if ((await take(2))[1] != 0) return -1;
+    final host = utf8.encode(uri.host);
+    final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+    socket.add([5, 1, 0, 3, host.length, ...host, port >> 8, port & 255]);
+    if ((await take(2))[1] != 0) return -1;
+    // the rest of the SOCKS reply: reserved byte, address type, the address and the port
+    final kind = (await take(2))[1];
+    if (kind == 3) {
+      await take((await nextByte()) + 2);
+    } else {
+      await take((kind == 4 ? 16 : 4) + 2);
+    }
+    final path = uri.path.isEmpty ? '/' : uri.path;
+    final query = uri.hasQuery ? '?${uri.query}' : '';
+    final request = utf8.encode('GET $path$query HTTP/1.1\r\n'
+        'Host: ${uri.host}\r\nUser-Agent: Kumo\r\nConnection: keep-alive\r\n\r\n');
+
+    // Sends the request, times the wait for the first byte of the answer, then reads the answer
+    // to its end. `reusable` is false when its end cannot be found (no length given).
+    Future<({int ms, bool reusable})> ask() async {
+      final t = Stopwatch()..start();
+      socket!.add(request);
+      final head = <int>[await nextByte()];
+      final ms = t.elapsedMilliseconds;
+      while (!(head.length >= 4 &&
+          head[head.length - 4] == 13 &&
+          head[head.length - 3] == 10 &&
+          head[head.length - 2] == 13 &&
+          head[head.length - 1] == 10)) {
+        head.add(await nextByte());
+        if (head.length > 16384) return (ms: ms, reusable: false);
+      }
+      final text = utf8.decode(head, allowMalformed: true).toLowerCase();
+      final status = RegExp(r'^http/1\.[01] (\d{3})').firstMatch(text)?.group(1);
+      final length = int.tryParse(RegExp(r'content-length:\s*(\d+)').firstMatch(text)?.group(1) ?? '');
+      final bodyless = status == '204' || status == '304' || length == 0;
+      if (!bodyless && (length == null || length > 65536)) return (ms: ms, reusable: false);
+      if (!bodyless) await take(length!);
+      return (ms: ms, reusable: true);
+    }
+
+    final first = await ask();
+    if (!first.reusable) return first.ms;
+    return (await ask()).ms;
+  } catch (_) {
+    return -1;
+  } finally {
+    socket?.destroy();
   }
 }
 /// Two-stage test. Stage 1 drops servers whose port does not even accept a TCP connection

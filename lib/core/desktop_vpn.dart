@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'latency_tester.dart' show socksWarmDelay;
 import 'platform.dart';
 import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
@@ -149,14 +150,6 @@ class DesktopVpn {
       client.close(force: true);
     }
     return false;
-  }
-
-  Map<String, dynamic> _withApi(String configJson, int port) {
-    final cfg = jsonDecode(configJson) as Map<String, dynamic>;
-    cfg['experimental'] = {
-      'clash_api': {'external_controller': '127.0.0.1:$port'},
-    };
-    return cfg;
   }
 
   // ------------------------------------------------------------------ elevated tunnel (Linux, macOS)
@@ -466,34 +459,45 @@ wait "\$P" 2>/dev/null
 
   // ------------------------------------------------------------------ real delay
 
-  /// Time to fetch [url] through the single outbound `proxy` of [configJson], -1 on failure.
-  /// A throw-away core answers it through its local API.
+  /// The real delay of the single outbound `proxy` of [configJson] to [url] in ms, -1 on failure:
+  /// a throw-away core with a SOCKS inbound, and two requests over one connection through it (see
+  /// [socksWarmDelay]).
   Future<int> delay(String configJson, String url, int timeoutMs) async {
     await _ready;
     final output = StringBuffer();
     Process? core;
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 2);
     File? file;
     try {
       final port = await _freePort();
+      final cfg = jsonDecode(configJson) as Map<String, dynamic>;
+      cfg['inbounds'] = [
+        {'type': 'socks', 'tag': 'in', 'listen': '127.0.0.1', 'listen_port': port},
+      ];
+      cfg['route'] = {...?(cfg['route'] as Map<String, dynamic>?), 'final': 'proxy'};
       await Directory('$dataDir${_sep}delay').create(recursive: true);
       file = File('$dataDir${_sep}delay$_sep$port.json');
-      await file.writeAsString(jsonEncode(_withApi(configJson, port)));
+      await file.writeAsString(jsonEncode(cfg));
       core = await _spawn('kumo-core', ['run', '-c', file.path], output);
       var exited = false;
       core.exitCode.then((_) => exited = true);
-      if (!await _waitHttp(port, () => exited, const Duration(seconds: 8))) return -1;
-      final req = await client.getUrl(Uri.parse(
-          'http://127.0.0.1:$port/proxies/proxy/delay'
-          '?url=${Uri.encodeQueryComponent(url)}&timeout=$timeoutMs'));
-      final res = await req.close().timeout(Duration(milliseconds: timeoutMs + 3000));
-      final body = await res.transform(utf8.decoder).join();
-      if (res.statusCode != 200) return -1;
-      return (jsonDecode(body)['delay'] as num).toInt();
+      // wait for the inbound to listen
+      final end = DateTime.now().add(const Duration(seconds: 8));
+      var ready = false;
+      while (!exited && DateTime.now().isBefore(end)) {
+        try {
+          final s = await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 500));
+          s.destroy();
+          ready = true;
+          break;
+        } catch (_) {
+          await Future<void>.delayed(const Duration(milliseconds: 60));
+        }
+      }
+      if (!ready) return -1;
+      return await socksWarmDelay(port, Uri.parse(url), Duration(milliseconds: timeoutMs));
     } catch (_) {
       return -1;
     } finally {
-      client.close(force: true);
       core?.kill();
       try {
         await file?.delete();
