@@ -301,6 +301,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   t.autoUpdateSubsDesc),
               _switch('updateOnStartup', state.updateOnStartup,
                   t.updateOnStartup, t.updateOnStartupDesc),
+              _switch('measurePing', state.measurePing, tr(context, 'measurePing'),
+                  tr(context, 'measurePingDesc')),
               _switch('usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
                   tr(context, 'usageAlertsDesc')),
               _switch('allowInsecure', state.allowInsecure, t.allowInsecure,

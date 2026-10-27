@@ -167,7 +167,7 @@ class AppState extends ChangeNotifier {
       await Future<void>.delayed(const Duration(milliseconds: 600));
       if (!connected) return;
       final ms = await tunnelDelay(
-          socksPort: _xrayPort, proxyPort: net.tun ? null : net.proxyPort);
+          socksPort: _xrayPort, proxyPort: net.tun ? null : net.proxyPort, samples: 2);
       if (!connected) return;
       if (ms >= 0 || attempt == 1) {
         liveDelay = ms;
@@ -229,6 +229,9 @@ class AppState extends ChangeNotifier {
   /// Warn when a subscription is nearly out of data or about to expire (a notification on
   /// Android, a banner on Windows).
   bool usageAlerts = true;
+
+  /// Measure the delay through the connection right after connecting and show it on the card.
+  bool measurePing = true;
 
   /// Windows: what was already warned about, per subscription (see usage_alert.dart).
   final _alertSeen = <String, String>{};
@@ -387,7 +390,7 @@ class AppState extends ChangeNotifier {
         liveDelay = null;
       }
       if (s.status == VpnStatus.started && changed) {
-        _measureLive();
+        if (measurePing) _measureLive();
         _misses = 0;
         _healthDown = 0;
         _watch?.cancel();
@@ -573,6 +576,7 @@ class AppState extends ChangeNotifier {
       showName = flag('showName', true);
       idleNotification = flag('idleNotification', true);
       usageAlerts = flag('usageAlerts', true);
+      measurePing = flag('measurePing', true);
       final seen = j['alertSeen'];
       if (seen is Map) {
         for (final e in seen.entries) {
@@ -615,6 +619,7 @@ class AppState extends ChangeNotifier {
           'showName': showName,
           'idleNotification': idleNotification,
           'usageAlerts': usageAlerts,
+          'measurePing': measurePing,
           'alertSeen': _alertSeen,
           'delayUrl': delayUrl,
           'net': net.toJson(),
@@ -651,6 +656,8 @@ class AppState extends ChangeNotifier {
       case 'idleNotification':
         idleNotification = value;
         VpnChannel.setIdleNotification(value);
+      case 'measurePing':
+        measurePing = value;
       case 'usageAlerts':
         usageAlerts = value;
       case 'showCollector':

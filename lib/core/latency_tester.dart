@@ -119,13 +119,37 @@ Future<int> realDelay(ProxyConfig c,
 }
 
 /// Delay of fetching [delayTestUrl] while the VPN is up, in ms, -1 on failure. The request
-/// rides the tunnel; with Xray running the app is outside it, so the time to open a SOCKS
-/// connection to the page's server through Xray's port ([socksPort]) is measured instead.
+/// rides the tunnel; with Xray running the app is outside it, so a SOCKS connection through
+/// Xray's port ([socksPort]) is used instead. The delay counts what a server's own delay test
+/// counts: the connection to the server and the request, not the lookup of the page's name, and
+/// with [samples] above one the lowest of that many requests is kept, since the first request
+/// of a connection pays for warming up everything on the way.
 Future<int> tunnelDelay(
     {int? socksPort,
     int? proxyPort,
+    int samples = 1,
     Duration timeout = const Duration(seconds: 8)}) async {
   final uri = Uri.parse(delayTestUrl);
+  // Through the tunnel the app looks the name up itself, and the first lookup of a session goes
+  // through a cold encrypted DNS connection: that is no part of the delay. (With a local proxy or
+  // Xray the name is given to them and their own cache takes care of it.)
+  if (socksPort == null && proxyPort == null) {
+    try {
+      await InternetAddress.lookup(uri.host).timeout(timeout);
+    } catch (_) {
+      return -1;
+    }
+  }
+  var best = -1;
+  for (var i = 0; i < samples; i++) {
+    final ms = await _delayOnce(uri, socksPort, proxyPort, timeout);
+    if (ms < 0) return best;
+    if (best < 0 || ms < best) best = ms;
+  }
+  return best;
+}
+
+Future<int> _delayOnce(Uri uri, int? socksPort, int? proxyPort, Duration timeout) async {
   final sw = Stopwatch()..start();
   try {
     if (socksPort == null) {
@@ -191,7 +215,6 @@ Future<int> tunnelDelay(
     return -1;
   }
 }
-
 /// Two-stage test. Stage 1 drops servers whose port does not even accept a TCP connection
 /// (cheap, many at once); stage 2 measures the real delay of the rest (a few at once).
 ///
@@ -266,19 +289,22 @@ Future<void> testReal(
 // numbers.
 const _realWorkers = 6;
 
-/// TCP connect time to the server in ms, or -1 if it can't be reached.
+/// TCP connect time to the server in ms, or -1 if it can't be reached. The lookup of the server's
+/// name comes first and is not counted: with it, every server with a name showed the time of a
+/// DNS query on top of its own ping.
 Future<int> tcpLatency(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 3)}) async {
-  final sw = Stopwatch()..start();
   try {
-    final s = await Socket.connect(c.host, c.port, timeout: timeout);
+    final address = InternetAddress.tryParse(c.host) ??
+        (await InternetAddress.lookup(c.host).timeout(timeout)).first;
+    final sw = Stopwatch()..start();
+    final s = await Socket.connect(address, c.port, timeout: timeout);
     s.destroy();
     return sw.elapsedMilliseconds;
   } catch (_) {
     return -1;
   }
 }
-
 /// Tests [candidates] with [concurrency] workers and calls [onResult] for each.
 ///
 /// Stops early once [stopAfterAlive] reachable servers were found (the app only

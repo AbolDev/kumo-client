@@ -2,6 +2,8 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'measurePing': 'Ping after connecting',
+  'measurePingDesc': 'After you connect, measures the real delay of the connection and shows it on the card. Turn off to send no extra request.',
   'menuMyIp': 'What is my IP',
   'menuDnsLeak': 'DNS leak test',
   'menuRestart': 'Restart the service',
@@ -32,6 +34,8 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'measurePing': 'پینگ پس از اتصال',
+  'measurePingDesc': 'بعد از اتصال، تأخیر واقعی اتصال را می‌سنجد و روی کارت نشان می‌دهد. خاموش کنید تا درخواست اضافه نفرستد.',
   'menuMyIp': 'آی‌پی من چیست',
   'menuDnsLeak': 'بررسی نشت DNS',
   'menuRestart': 'راه‌اندازی مجدد سرویس',
@@ -62,6 +66,8 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'measurePing': 'Пинг после подключения',
+  'measurePingDesc': 'После подключения измеряет реальную задержку соединения и показывает её на карточке. Выключите, чтобы не отправлять лишний запрос.',
   'menuMyIp': 'Мой IP',
   'menuDnsLeak': 'Проверка утечки DNS',
   'menuRestart': 'Перезапустить службу',
@@ -92,6 +98,8 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'measurePing': 'Ping sau khi kết nối',
+  'measurePingDesc': 'Sau khi kết nối, đo độ trễ thực của kết nối và hiện trên thẻ. Tắt để không gửi thêm yêu cầu.',
   'menuMyIp': 'IP của tôi',
   'menuDnsLeak': 'Kiểm tra rò rỉ DNS',
   'menuRestart': 'Khởi động lại dịch vụ',
@@ -122,6 +130,8 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'measurePing': '连接后测延迟',
+  'measurePingDesc': '连接后测量连接的真实延迟并显示在卡片上。关闭后不会发送额外请求。',
   'menuMyIp': '我的 IP',
   'menuDnsLeak': 'DNS 泄露检测',
   'menuRestart': '重启服务',
@@ -152,6 +162,8 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'measurePing': 'قياس الاستجابة بعد الاتصال',
+  'measurePingDesc': 'بعد الاتصال يقيس التأخير الفعلي للاتصال ويعرضه على البطاقة. أوقفه حتى لا يُرسل طلبًا إضافيًا.',
   'menuMyIp': 'ما هو IP الخاص بي',
   'menuDnsLeak': 'فحص تسريب DNS',
   'menuRestart': 'إعادة تشغيل الخدمة',
