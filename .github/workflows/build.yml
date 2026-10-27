@@ -268,6 +268,7 @@ jobs:
   # know, so a newer Flutter is used here. It is a separate job and is not required by the release: if it fails, the other files are still
   # released. The program is checked to really be an ARM64 one before it is packaged.
   windows-arm64:
+    name: windows (arm64, experimental)
     runs-on: windows-11-arm
     timeout-minutes: 60
     steps:
@@ -461,11 +462,12 @@ jobs:
           path: dist/kumo-linux-${{ matrix.arch }}-portable.tar.gz
           archive: false
 
-  # macOS: one universal app (Intel and Apple silicon) and a copy for each architecture, each as a
-  # disk image (the installer: drag the app to Applications) and a portable zip (the app with a
-  # `portable` file beside it, so its data stays in a folder next to it). Signed ad hoc only, so
-  # macOS asks the user to allow it the first time.
-  macos:
+  # macOS, in two steps so each package shows as its own job: the app is built once as a universal
+  # one (Intel and Apple silicon, signed ad hoc), then three jobs side by side make the packages for
+  # universal, arm64 and x64: a disk image (the installer: drag the app to Applications) and a
+  # portable zip (the app with a `portable` file beside it, so its data stays in a folder next to
+  # it). macOS asks the user to allow the app the first time.
+  macos-build:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -485,75 +487,75 @@ jobs:
 
       - run: flutter build macos --release --no-pub
 
-      - name: Put the cores in the app, sign it and package it
+      - name: Put the cores in the app and sign it
         run: |
           app="build/macos/Build/Products/Release/Kumo.app"
           cp macos/core/kumo-core macos/core/kumo-xray "$app/Contents/MacOS/"
           codesign --force --deep --sign - "$app"
-          mkdir -p dist work/universal
-          ditto "$app" work/universal/Kumo.app
+          # tar keeps the links and the permissions of the app
+          tar -cf macos-app.tar -C build/macos/Build/Products/Release Kumo.app
 
-          # The one-architecture copies are made side by side, and so are the six packages.
-          wait_all() { for pid in "$@"; do wait "$pid"; done; }
-          bash tools/thin_macos_app.sh "$app" work/arm64/Kumo.app arm64 & arm=$!
-          bash tools/thin_macos_app.sh "$app" work/x64/Kumo.app x86_64 & intel=$!
-          wait_all $arm $intel
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: macos-app.tar
+          compression-level: 0
 
-          package() {
-            a="$1"
-            # the disk image is the installer: the app and a shortcut to Applications
-            stage="work/dmg-$a"
-            mkdir -p "$stage"
-            ditto "work/$a/Kumo.app" "$stage/Kumo.app"
-            ln -s /Applications "$stage/Applications"
-            for try in 1 2 3; do
-              hdiutil create -volname "Kumo" -srcfolder "$stage" -ov -format UDZO "dist/kumo-macos-$a.dmg" && break
-              sleep 5
-            done
-            test -f "dist/kumo-macos-$a.dmg"
-            # the portable zip: the app with a marker beside it
-            portable="work/portable-$a/Kumo-portable"
-            mkdir -p "$portable"
-            ditto "work/$a/Kumo.app" "$portable/Kumo.app"
-            : > "$portable/portable"
-            ditto -c -k --sequesterRsrc --keepParent "$portable" "dist/kumo-macos-$a-portable.zip"
-          }
-          package universal & p1=$!
-          package arm64 & p2=$!
-          package x64 & p3=$!
-          wait_all $p1 $p2 $p3
+  macos:
+    needs: macos-build
+    runs-on: macos-15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [universal, arm64, x64]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-app
+          path: in
+
+      - name: Package
+        run: |
+          a="${{ matrix.arch }}"
+          mkdir -p work dist
+          tar -xf in/macos-app.tar -C work
+          if [ "$a" = universal ]; then
+            mkdir -p work/universal
+            ditto work/Kumo.app work/universal/Kumo.app
+          else
+            cpu="arm64"; [ "$a" = x64 ] && cpu="x86_64"
+            bash tools/thin_macos_app.sh work/Kumo.app "work/$a/Kumo.app" "$cpu"
+          fi
+          # the disk image is the installer: the app and a shortcut to Applications
+          stage="work/dmg-$a"
+          mkdir -p "$stage"
+          ditto "work/$a/Kumo.app" "$stage/Kumo.app"
+          ln -s /Applications "$stage/Applications"
+          for try in 1 2 3; do
+            hdiutil create -volname "Kumo" -srcfolder "$stage" -ov -format UDZO "dist/kumo-macos-$a.dmg" && break
+            sleep 5
+          done
+          test -f "dist/kumo-macos-$a.dmg"
+          # the portable zip: the app with a marker beside it
+          portable="work/portable-$a/Kumo-portable"
+          mkdir -p "$portable"
+          ditto "work/$a/Kumo.app" "$portable/Kumo.app"
+          : > "$portable/portable"
+          ditto -c -k --sequesterRsrc --keepParent "$portable" "dist/kumo-macos-$a-portable.zip"
           ls -l dist
 
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/kumo-macos-universal.dmg
+          path: dist/kumo-macos-${{ matrix.arch }}.dmg
           archive: false
 
       - uses: actions/upload-artifact@v7
         with:
-          path: dist/kumo-macos-universal-portable.zip
+          path: dist/kumo-macos-${{ matrix.arch }}-portable.zip
           archive: false
-
-      - uses: actions/upload-artifact@v7
-        with:
-          path: dist/kumo-macos-arm64.dmg
-          archive: false
-
-      - uses: actions/upload-artifact@v7
-        with:
-          path: dist/kumo-macos-arm64-portable.zip
-          archive: false
-
-      - uses: actions/upload-artifact@v7
-        with:
-          path: dist/kumo-macos-x64.dmg
-          archive: false
-
-      - uses: actions/upload-artifact@v7
-        with:
-          path: dist/kumo-macos-x64-portable.zip
-          archive: false
-
   # A pushed version tag becomes a release holding the four APKs, the Windows installer and
   # portable zip, and the Linux and macOS packages.
   release:
