@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
     await windowManager.ensureInitialized();
     await windowManager.waitUntilReadyToShow(
       WindowOptions(
-          size: const Size(800, 664),
+          size: const Size(800, 640),
           minimumSize: const Size(420, 520),
           title: 'Kumo',
           // Windows draws its own title bar; Linux and macOS keep the system one.
