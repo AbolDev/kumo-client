@@ -71,19 +71,35 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
                         .bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant)),
                 const SizedBox(height: 20),
-                FilledButton.icon(
+                // "Recommended" sits inside the button it is about, so it cannot be read as
+                // belonging to the other one.
+                FilledButton(
                   autofocus: true,
-                  icon: const Icon(Icons.verified_outlined),
-                  label: Text(tr(sheet, 'updNo')),
                   onPressed: () => Navigator.pop(sheet, false),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.verified_outlined, size: 20),
+                      const SizedBox(width: 8),
+                      Flexible(
+                          child: Text(tr(sheet, 'updNo'),
+                              maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: scheme.onPrimary.withValues(alpha: 0.22),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(tr(sheet, 'updRecommended'),
+                            style: Theme.of(sheet)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: scheme.onPrimary)),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 6),
-                Text(tr(sheet, 'updRecommended'),
-                    textAlign: TextAlign.center,
-                    style: Theme.of(sheet)
-                        .textTheme
-                        .labelSmall
-                        ?.copyWith(color: scheme.primary)),
                 const SizedBox(height: 12),
                 OutlinedButton(
                   onPressed: () => Navigator.pop(sheet, true),
