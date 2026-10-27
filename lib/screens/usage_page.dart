@@ -65,7 +65,8 @@ class _UsagePageState extends State<UsagePage> {
         ],
       ),
       body: ListenableBuilder(
-        listenable: state,
+        // The totals change with every traffic sample (once a second), not only with the app state.
+        listenable: Listenable.merge([state, state.traffic]),
         builder: (context, _) {
           final now = DateTime.now();
           final summary = summarizeUsage(state.dayUsage, _period.days, now);

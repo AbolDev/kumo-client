@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/usage_stats.dart';
 import 'package:kumo/l10n/extra.dart';
@@ -61,6 +61,26 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('every part follows the traffic samples without reopening', (tester) async {
+    final state = AppState();
+    final today = dayKey(DateTime.now());
+    state.dayUsage[today] = [1048576, 0, 60]; // 1.0 MB, 1 min
+    state.serverUsage['Live'] = [1048576, 0, 60, DateTime.now().millisecondsSinceEpoch];
+    await _show(tester, state, const Locale('en'));
+    expect(find.text('1.0 MB'), findsWidgets);
+    expect(find.text('1 min'), findsWidgets);
+
+    // What _onTraffic does once a second: add to the totals, then publish the sample.
+    state.dayUsage[today] = [3 * 1048576, 0, 125];
+    state.serverUsage['Live'] = [3 * 1048576, 0, 125, DateTime.now().millisecondsSinceEpoch];
+    state.traffic.value = const Traffic(0, 5000, 0, 3 * 1048576);
+    await tester.pump();
+    expect(find.text('1.0 MB'), findsNothing);
+    expect(find.text('3.0 MB'), findsWidgets);
+    expect(find.text('2 min'), findsWidgets);
+    expect(find.textContaining('4 KB/s'), findsWidgets);
+  });
 
   testWidgets('empty page shows the hint, not charts', (tester) async {
     await _show(tester, AppState(), const Locale('en'));
