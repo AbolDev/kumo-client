@@ -139,7 +139,7 @@ class HomePage extends StatelessWidget {
                   value: state.reconnectIfConnected,
                   child: _MenuRow(Icons.restart_alt, tr(context, 'menuRestart')),
                 ),
-                if (state.testing)
+                if (state.anyTesting)
                   PopupMenuItem(
                     value: state.cancelAllPings,
                     child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest')),

@@ -1382,7 +1382,7 @@ class AppState extends ChangeNotifier {
   bool _pingAllStopped = false;
 
   /// Whether any list is being tested now.
-  bool get testing => tests.values.any((t) => t.running);
+  bool get anyTesting => tests.values.any((t) => t.running);
 
   /// Stops the test of one list; the results so far stay.
   void cancelPing(ServerGroup g) {
