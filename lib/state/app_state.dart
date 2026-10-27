@@ -11,6 +11,7 @@ import '../core/latency_tester.dart';
 import '../core/net_options.dart';
 import '../core/platform.dart';
 import '../core/proxy_config.dart';
+import '../core/provider_routing.dart';
 import '../core/rule_sets.dart';
 import '../core/stun.dart';
 import '../core/singbox_config.dart';
@@ -24,9 +25,6 @@ import '../l10n/extra.dart' show trFor;
 import '../l10n/strings.dart';
 
 /// How many configs of the downloaded public list are kept.
-
-/// Subscriptions are refreshed on startup when older than this.
-const _startupInterval = Duration(hours: 1);
 
 /// How many of the fastest servers go into the automatic (urltest) group.
 const _autoGroupSize = 6;
@@ -55,6 +53,24 @@ class ServerGroup {
   /// Expiry and data volume the provider reported, if any.
   SubInfo? info;
   int updatedAt = 0; // ms since epoch
+
+  /// Hours between two downloads: what the provider says, what the user set instead (it stays
+  /// through updates until the user takes the provider's value again), or neither (the app's
+  /// default is used).
+  int? providerInterval;
+  int? customInterval;
+  int? get intervalHours => customInterval ?? providerInterval;
+
+  /// The routing rules the provider sends, whether the provider wants them applied, and whether
+  /// the user wants them (on by default).
+  ProviderRouting? routing;
+  bool routingByProvider = true;
+  bool routingOn = true;
+
+  /// Links and a notice the provider adds.
+  String? supportUrl;
+  String? webPage;
+  String? announce;
   final List<ProxyConfig> configs = [];
 }
 
@@ -233,6 +249,9 @@ class AppState extends ChangeNotifier {
   /// Measure the delay through the connection right after connecting and show it on the card.
   bool measurePing = true;
 
+  /// Hours between two downloads of a subscription that sets no interval of its own.
+  int subInterval = 6;
+
   /// Windows: what was already warned about, per subscription (see usage_alert.dart).
   final _alertSeen = <String, String>{};
 
@@ -322,6 +341,7 @@ class AppState extends ChangeNotifier {
 
   /// Groups whose list is being downloaded; [cancelRefresh] stops one of them.
   final refreshing = <String>{};
+  Timer? _dueTimer;
   final _cancels = <String, Completer<void>>{};
 
   int _begin(String key) => _generations[key] = (_generations[key] ?? 0) + 1;
@@ -423,6 +443,10 @@ class AppState extends ChangeNotifier {
     delayTestUrl = delayUrl;
     if (idleNotification) VpnChannel.setIdleNotification(true);
     VpnChannel.scheduleSubUpdates(autoUpdateSubs).catchError((_) {});
+    _dueTimer?.cancel();
+    _dueTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      if (autoUpdateSubs) _updateDueSubscriptions();
+    });
     notifyListeners();
     // Nothing is tested on its own: the user pings when they want to.
     await _applyCachedSubscriptions();
@@ -446,7 +470,16 @@ class AppState extends ChangeNotifier {
             j['body'] as String? ?? '',
             j['profileTitle'] as String?,
             j['disposition'] as String?,
-            j['userinfo'] as String?);
+            j['userinfo'] as String?,
+            meta: ProviderMeta.fromHeaders((name) => switch (name) {
+                  'profile-update-interval' => j['interval'] as String?,
+                  'routing' => j['routing'] as String?,
+                  'routing-enable' => j['routingEnable'] as String?,
+                  'support-url' => j['supportUrl'] as String?,
+                  'profile-web-page-url' => j['webPage'] as String?,
+                  'announce' => j['announce'] as String?,
+                  _ => null,
+                }));
         await _applyFetched(g, fetched, time);
       } catch (_) {
         // a broken cache file is ignored
@@ -456,13 +489,55 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _updateSubscriptionsOnStartup() async {
-    final limit =
-        DateTime.now().subtract(_startupInterval).millisecondsSinceEpoch;
+  /// The subscription the servers all come from, if there is exactly one.
+  ServerGroup? subscriptionOf(List<ProxyConfig> servers) {
+    ServerGroup? found;
+    for (final c in servers) {
+      final g = subscriptions.where((g) => g.configs.contains(c)).firstOrNull;
+      if (g == null || (found != null && found != g)) return null;
+      found = g;
+    }
+    return found;
+  }
+
+  /// The provider's routing rules to apply when connecting with [servers]: only when the
+  /// subscription has them, the provider allows them and the user has not turned them off.
+  ProviderRouting? routingFor(List<ProxyConfig> servers) {
+    final g = subscriptionOf(servers);
+    if (g == null || !g.routingOn || !g.routingByProvider) return null;
+    final r = g.routing;
+    return r == null || r.isEmpty ? null : r;
+  }
+
+  /// Sets the hours between two downloads of [g] (null: take the provider's value again, or the
+  /// app's when the provider sets none). The value stays through updates.
+  void setSubscriptionInterval(ServerGroup g, int? hours) {
+    g.customInterval = hours?.clamp(1, 24 * 30);
+    _writeServers();
+    notifyListeners();
+  }
+
+  void setSubscriptionRouting(ServerGroup g, bool on) {
+    g.routingOn = on;
+    _writeServers();
+    notifyListeners();
+    reconnectIfConnected();
+  }
+
+  /// How long a subscription may go without a download: its own interval, else the app's.
+  Duration intervalOf(ServerGroup g) => Duration(hours: g.intervalHours ?? subInterval);
+
+  bool isDue(ServerGroup g, [DateTime? now]) =>
+      (now ?? DateTime.now()).millisecondsSinceEpoch - g.updatedAt >= intervalOf(g).inMilliseconds;
+
+  /// Downloads the subscriptions whose time has come (each has its own interval).
+  Future<void> _updateDueSubscriptions() async {
     for (final g in List.of(subscriptions)) {
-      if (g.updatedAt < limit) await refreshSubscription(g);
+      if (isDue(g) && !refreshing.contains(g.id)) await refreshSubscription(g);
     }
   }
+
+  Future<void> _updateSubscriptionsOnStartup() => _updateDueSubscriptions();
 
   /// After a list was replaced by new objects the chosen server follows to its new copy; if the
   /// list no longer has it, the choice goes back to automatic.
@@ -490,6 +565,13 @@ class AppState extends ChangeNotifier {
       g.name = title;
     }
     g.info = fetched.info;
+    final meta = fetched.meta;
+    g.providerInterval = meta.intervalHours;
+    g.routing = ProviderRouting.parse(meta.routing);
+    g.routingByProvider = meta.routingEnabled;
+    g.supportUrl = meta.supportUrl;
+    g.webPage = meta.webPage;
+    g.announce = meta.announce;
     checkUsage(g);
     final links = await extractSubscriptionLinksInBackground(fetched.body);
     final parsed = await parseLinksInBackground(links, shuffle: false);
@@ -577,6 +659,8 @@ class AppState extends ChangeNotifier {
       idleNotification = flag('idleNotification', true);
       usageAlerts = flag('usageAlerts', true);
       measurePing = flag('measurePing', true);
+      final si = j['subInterval'];
+      if (si is int && si >= 1 && si <= 24 * 30) subInterval = si;
       final seen = j['alertSeen'];
       if (seen is Map) {
         for (final e in seen.entries) {
@@ -620,6 +704,7 @@ class AppState extends ChangeNotifier {
           'idleNotification': idleNotification,
           'usageAlerts': usageAlerts,
           'measurePing': measurePing,
+          'subInterval': subInterval,
           'alertSeen': _alertSeen,
           'delayUrl': delayUrl,
           'net': net.toJson(),
@@ -716,6 +801,12 @@ class AppState extends ChangeNotifier {
     _saveSettings();
   }
 
+  void setSubInterval(int hours) {
+    subInterval = hours.clamp(1, 24 * 30);
+    _saveSettings();
+    _writeServers(); // the background job reads the intervals from there
+  }
+
   void setLanguage(String? code) {
     languageCode = code;
     _saveSettings();
@@ -739,7 +830,15 @@ class AppState extends ChangeNotifier {
             name: m['name'] as String? ?? '', url: m['url'] as String?)
           ..autoName = m['auto'] == true
           ..info = SubInfo.fromJson(m['info'])
-          ..updatedAt = (m['updatedAt'] as num?)?.toInt() ?? 0;
+          ..updatedAt = (m['updatedAt'] as num?)?.toInt() ?? 0
+          ..providerInterval = (m['providerInterval'] as num?)?.toInt()
+          ..customInterval = (m['customInterval'] as num?)?.toInt()
+          ..routing = m['routing'] is Map ? ProviderRouting.fromJson(m['routing'] as Map) : null
+          ..routingByProvider = m['routingByProvider'] != false
+          ..routingOn = m['routingOn'] != false
+          ..supportUrl = m['supportUrl'] as String?
+          ..webPage = m['webPage'] as String?
+          ..announce = m['announce'] as String?;
         g.configs.addAll(parseLinks((m['links'] as List).cast<String>()));
         subscriptions.add(g);
       }
@@ -869,6 +968,16 @@ class AppState extends ChangeNotifier {
             'auto': g.autoName,
             'info': g.info?.toJson(),
             'updatedAt': g.updatedAt,
+            'providerInterval': g.providerInterval,
+            'customInterval': g.customInterval,
+            // the hours the background job waits between two downloads of this one
+            'interval': g.intervalHours ?? subInterval,
+            'routing': g.routing?.toJson(),
+            'routingByProvider': g.routingByProvider,
+            'routingOn': g.routingOn,
+            'supportUrl': g.supportUrl,
+            'webPage': g.webPage,
+            'announce': g.announce,
             'links': links(g),
           },
       ],
@@ -1268,8 +1377,11 @@ class AppState extends ChangeNotifier {
     _preparing = false;
     _xrayPort = null;
     try {
-      final sets = net.bypass.isNotEmpty || net.blockAds
-          ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds)
+      final routing = routingFor(chosen);
+      final tags = routing?.ruleSetTags ?? const <String>[];
+      final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
+          ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
+              ads: net.blockAds, tags: tags)
           : <String, String>{};
       if (cancelled()) return;
       apiPort = await _freePort();
@@ -1288,7 +1400,8 @@ class AppState extends ChangeNotifier {
           apiSecret: apiSecret,
           windows: isDesktop,
           chain: chain,
-          viaXray: viaXray);
+          viaXray: viaXray,
+          routing: routing);
       final proxyPort =
           isDesktop && !net.tun ? net.proxyPort : null;
       if (viaXray) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'net_options.dart';
 import 'proxy_config.dart';
 import 'routing_rules.dart';
+import 'provider_routing.dart';
 import 'rule_sets.dart' show adsTag;
 
 /// Merges [extra] (a JSON object the user typed) into [target], map by map; lists and values from
@@ -316,6 +317,7 @@ String buildSingBoxConfig(
   bool windows = false,
   ProxyConfig? chain,
   bool viaXray = false,
+  ProviderRouting? routing,
 }) {
   assert(servers.isNotEmpty);
   final o = options ?? NetOptions();
@@ -421,7 +423,15 @@ String buildSingBoxConfig(
     });
   }
 
-  final sets = ruleSets.keys.where((t) => t != adsTag).toList();
+  // The lists of the countries that go direct; the lists of a subscription's routing and the ad
+  // list are kept apart from them.
+  final countryTags = {
+    for (final c in o.bypass) ...['geoip-$c', 'geosite-$c'],
+    'geosite-ir-extra',
+  };
+  final sets = ruleSets.keys.where(countryTags.contains).toList();
+  // What the subscription's provider asks for (only when the user left those rules on).
+  final provider = routing == null ? null : providerRules(routing, ruleSets.keys.toSet());
   final adSet = o.blockAds && ruleSets.containsKey(adsTag) ? adsTag : null;
   final strict = o.strictDns;
   final iran = o.bypass.isNotEmpty;
@@ -444,6 +454,7 @@ String buildSingBoxConfig(
     if (strict) {'port': 853, 'network': 'tcp', 'action': 'reject'},
     ...proxy.rules({'outbound': 'proxy'}),
     ...direct.rules({'outbound': 'direct'}),
+    if (provider != null) ...provider.route,
     {'ip_is_private': true, 'outbound': 'direct'},
   ];
   final processRules = windows && o.tun && apps.isNotEmpty;
@@ -466,6 +477,7 @@ String buildSingBoxConfig(
     if (adSet != null) {'rule_set': [adSet], 'action': 'reject'},
     // names the user sends direct are also looked up locally, not through the VPN
     ...direct.rules({'server': 'dns-local'}, domainsOnly: true),
+    if (provider != null) ...provider.dns,
     if (iran) ...[
       {'domain_suffix': suffixes, 'server': 'dns-local'},
       if (sets.isNotEmpty) {'rule_set': sets, 'server': 'dns-local'},
@@ -509,10 +521,10 @@ String buildSingBoxConfig(
     if (endpoints.isNotEmpty) 'endpoints': endpoints,
     'route': {
       'rules': rules,
-      if ((sets.isNotEmpty && iran) || adSet != null)
+      if ((sets.isNotEmpty && iran) || adSet != null || (provider?.tags.isNotEmpty ?? false))
         'rule_set': [
           for (final e in ruleSets.entries)
-            if (e.key == adSet || (iran && e.key != adsTag))
+            if (e.key == adSet || (iran && sets.contains(e.key)) || (provider?.tags.contains(e.key) ?? false))
             {
               'type': 'local',
               'tag': e.key,
@@ -520,7 +532,10 @@ String buildSingBoxConfig(
               'path': e.value,
             },
         ],
-      'final': processRules && o.appMode == AppMode.only ? 'direct' : 'proxy',
+      // What no rule matches goes through the VPN, unless the provider's rules say otherwise.
+      'final': (processRules && o.appMode == AppMode.only) || routing?.globalProxy == false
+          ? 'direct'
+          : 'proxy',
       'auto_detect_interface': true,
       'default_domain_resolver': strict ? 'dns-boot' : 'dns-local',
       if (processRules) 'find_process': true,

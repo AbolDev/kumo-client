@@ -19,12 +19,13 @@ import javax.net.ssl.X509TrustManager
 
 /**
  * Downloads the saved subscriptions in the background and leaves each answer in
- * files/subcache/<id>.json. The app picks those files up the next time it starts.
+ * files/subcache/<id>.json. The app picks those files up the next time it starts. It wakes up every
+ * hour and downloads only the subscriptions whose own update interval has passed.
  */
 class SubUpdateJob : JobService() {
     companion object {
         private const val JOB_ID = 4711
-        private const val PERIOD_MS = 6 * 60 * 60 * 1000L
+        private const val PERIOD_MS = 60 * 60 * 1000L
 
         fun schedule(context: Context) {
             val scheduler = context.getSystemService(JobScheduler::class.java)
@@ -79,6 +80,11 @@ class SubUpdateJob : JobService() {
             val url = sub.optString("url")
             val id = sub.optString("id")
             if (url.isBlank() || id.isBlank()) continue
+            // Each subscription has its own interval (hours), saved by the app next to it.
+            val hours = sub.optLong("interval", 6L).coerceIn(1L, 24L * 30L)
+            val cache = File(dir, "$id.json")
+            val last = maxOf(sub.optLong("updatedAt", 0L), if (cache.exists()) cache.lastModified() else 0L)
+            if (System.currentTimeMillis() - last < hours * 60 * 60 * 1000L - 60_000L) continue
             try {
                 val answer = download(url, insecure)
                 File(dir, "$id.json").writeText(answer.toString())
@@ -126,6 +132,12 @@ class SubUpdateJob : JobService() {
                 .put("profileTitle", conn.getHeaderField("profile-title"))
                 .put("disposition", conn.getHeaderField("content-disposition"))
                 .put("userinfo", conn.getHeaderField("subscription-userinfo"))
+                .put("interval", conn.getHeaderField("profile-update-interval"))
+                .put("routing", conn.getHeaderField("routing"))
+                .put("routingEnable", conn.getHeaderField("routing-enable"))
+                .put("supportUrl", conn.getHeaderField("support-url"))
+                .put("webPage", conn.getHeaderField("profile-web-page-url"))
+                .put("announce", conn.getHeaderField("announce"))
         } finally {
             conn.disconnect()
         }

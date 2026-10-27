@@ -32,6 +32,7 @@ import 'my_ip_page.dart';
 import 'dns_leak_page.dart';
 import 'troubleshoot_page.dart';
 import 'share_sheet.dart';
+import 'subscription_info_page.dart';
 
 String _bytes(int b) {
   if (b >= 1 << 40) return '${(b / (1 << 40)).toStringAsFixed(2)} TB';
@@ -1293,7 +1294,7 @@ Future<bool?> _askUntested(BuildContext context) {
   );
 }
 
-enum _GroupAction { tcping, realDelay, cancelTest, refresh, cancelRefresh, edit, share, delete }
+enum _GroupAction { tcping, realDelay, cancelTest, refresh, cancelRefresh, info, edit, share, delete }
 
 /// The title row of a dropdown: the collector, a subscription, or configs added by hand.
 class _GroupHeader extends StatelessWidget {
@@ -1338,6 +1339,9 @@ class _GroupHeader extends StatelessWidget {
             : state.refreshSubscription(group);
       case _GroupAction.cancelRefresh:
         state.cancelRefresh(group);
+      case _GroupAction.info:
+        Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => SubscriptionInfoPage(state: state, group: group)));
       case _GroupAction.edit:
         _editSubscription(context, state, group);
       case _GroupAction.share:
@@ -1434,6 +1438,9 @@ class _GroupHeader extends StatelessWidget {
                         value: _GroupAction.refresh,
                         child: _MenuRow(Icons.refresh, t.refreshList)),
               if (isSub) ...[
+                PopupMenuItem(
+                    value: _GroupAction.info,
+                    child: _MenuRow(Icons.info_outline, tr(context, 'subInfo'))),
                 PopupMenuItem(
                     value: _GroupAction.edit,
                     child: _MenuRow(Icons.edit, t.edit)),

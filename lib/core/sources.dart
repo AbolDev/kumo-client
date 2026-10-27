@@ -35,24 +35,84 @@ class AllSourcesFailed implements Exception {
 
 /// A downloaded subscription: its body and the name its provider gave it, if any.
 class Fetched {
-  Fetched(this.body, this.title, [this.info]);
+  Fetched(this.body, this.title, [this.info, this.meta = const ProviderMeta()]);
   final String body;
   final String? title;
   final SubInfo? info;
 
+  /// The other things the provider says in the headers (update interval, routing rules, links).
+  final ProviderMeta meta;
+
   /// Builds the result from the raw response headers (also used for downloads the
   /// background job made).
   factory Fetched.fromHeaders(String body, String? profileTitle,
-          String? disposition, String? userinfo) =>
+          String? disposition, String? userinfo,
+          {ProviderMeta meta = const ProviderMeta()}) =>
       Fetched(body, subscriptionTitle(profileTitle, disposition, body),
-          SubInfo.parse(userinfo));
+          SubInfo.parse(userinfo), meta);
+}
+
+/// What a provider adds to a subscription in the response headers besides the servers.
+class ProviderMeta {
+  const ProviderMeta(
+      {this.intervalHours,
+      this.routing,
+      this.routingEnabled = true,
+      this.supportUrl,
+      this.webPage,
+      this.announce});
+
+  /// profile-update-interval: how many hours between two downloads.
+  final int? intervalHours;
+
+  /// The routing rules the provider sends (outing), as the text of the header.
+  final String? routing;
+
+  /// outing-enable: false when the provider says its rules should not be applied.
+  final bool routingEnabled;
+  final String? supportUrl;
+  final String? webPage;
+  final String? announce;
+
+  /// Reads the headers (a function that gives the value of one header, or null).
+  factory ProviderMeta.fromHeaders(String? Function(String name) header) {
+    final interval = double.tryParse((header('profile-update-interval') ?? '').trim());
+    String? text(String name) {
+      final v = header(name)?.trim();
+      return v == null || v.isEmpty ? null : v;
+    }
+
+    String? decoded(String name) {
+      final v = text(name);
+      if (v == null) return null;
+      if (v.toLowerCase().startsWith('base64:')) {
+        try {
+          return utf8.decode(base64.decode(base64.normalize(v.substring(7))));
+        } catch (_) {}
+      }
+      return v;
+    }
+
+    return ProviderMeta(
+      intervalHours: interval != null && interval >= 1 ? interval.round() : null,
+      routing: text('routing') ?? text('happ-routing'),
+      routingEnabled: (header('routing-enable') ?? 'true').trim().toLowerCase() != 'false',
+      supportUrl: text('support-url'),
+      webPage: text('profile-web-page-url'),
+      announce: decoded('announce'),
+    );
+  }
 }
 
 /// Data volume and expiry that a provider reports in the `subscription-userinfo` header.
 /// A missing or zero [total] / [expire] means unlimited.
 class SubInfo {
-  const SubInfo({this.used = 0, this.total = 0, this.expire = 0});
+  const SubInfo(
+      {this.used = 0, this.total = 0, this.expire = 0, this.upload = 0, this.download = 0});
 
+  /// Upload and download as the provider counts them; [used] is their sum.
+  final int upload;
+  final int download;
   final int used;
   final int total;
 
@@ -76,16 +136,26 @@ class SubInfo {
       used: (values['upload'] ?? 0) + (values['download'] ?? 0),
       total: values['total'] ?? 0,
       expire: values['expire'] ?? 0,
+      upload: values['upload'] ?? 0,
+      download: values['download'] ?? 0,
     );
   }
 
-  Map<String, int> toJson() => {'used': used, 'total': total, 'expire': expire};
+  Map<String, int> toJson() => {
+        'used': used,
+        'total': total,
+        'expire': expire,
+        'upload': upload,
+        'download': download,
+      };
 
   static SubInfo? fromJson(Object? j) => j is Map
       ? SubInfo(
           used: (j['used'] as num?)?.toInt() ?? 0,
           total: (j['total'] as num?)?.toInt() ?? 0,
-          expire: (j['expire'] as num?)?.toInt() ?? 0)
+          expire: (j['expire'] as num?)?.toInt() ?? 0,
+          upload: (j['upload'] as num?)?.toInt() ?? 0,
+          download: (j['download'] as num?)?.toInt() ?? 0)
       : null;
 }
 
@@ -153,7 +223,7 @@ Future<Fetched> fetchSubscription(String url,
   Future<Fetched> named(Fetched f) async {
     if (f.title != null || !lookupName) return f;
     final title = await _fetchPageTitle(url, allowInsecure);
-    return title == null ? f : Fetched(f.body, title, f.info);
+    return title == null ? f : Fetched(f.body, title, f.info, f.meta);
   }
 
   for (final agent in _clients) {
@@ -192,7 +262,7 @@ Future<Fetched?> _followUrlList(Fetched f, Duration timeout, bool allowInsecure)
       if (extractSubscriptionLinks(part.body).isNotEmpty) bodies.add(part.body);
     } catch (_) {}
   }
-  return bodies.isEmpty ? null : Fetched(bodies.join('\n'), f.title, f.info);
+  return bodies.isEmpty ? null : Fetched(bodies.join('\n'), f.title, f.info, f.meta);
 }
 
 /// The name of the subscription's owner from the information page that 3x-ui panels show to a
@@ -260,7 +330,8 @@ Future<Fetched> _fetchOnce(
         body,
         res.headers.value('profile-title'),
         res.headers.value('content-disposition'),
-        res.headers.value('subscription-userinfo'));
+        res.headers.value('subscription-userinfo'),
+        meta: ProviderMeta.fromHeaders((name) => res.headers.value(name)));
   } finally {
     client.close(force: true);
   }

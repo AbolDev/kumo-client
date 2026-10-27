@@ -4,7 +4,14 @@ import 'dart:io';
 /// Rule sets that list the addresses and sites of a country, as sing-box binary (.srs) files.
 /// Each tag has several mirrors because GitHub itself is often unreachable from some countries.
 /// Not every country has a site list; a missing one is simply skipped.
-Map<String, List<String>> _sourcesFor(List<String> countries, bool ads) => {
+Map<String, List<String>> _sourcesFor(List<String> countries, bool ads, List<String> tags) => {
+      // lists a subscription's routing rules ask for: geosite-xxx and geoip-xxx
+      for (final tag in tags)
+        if (RegExp(r'^(geosite|geoip)-[a-z0-9_.!-]+$').hasMatch(tag))
+          tag: [
+            'https://cdn.jsdelivr.net/gh/SagerNet/sing-${tag.split('-').first}@rule-set/$tag.srs',
+            'https://raw.githubusercontent.com/SagerNet/sing-${tag.split('-').first}/rule-set/$tag.srs',
+          ],
       if (ads) adsTag: [
         'https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-category-ads-all.srs',
         'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs',
@@ -59,10 +66,10 @@ Future<bool> _download(List<String> urls, File target) async {
 /// do. Missing files are downloaded; files older than a week are refreshed, but an old file is
 /// still used when the refresh fails. With [wait] false nothing is downloaded.
 Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
-    {bool wait = true, bool ads = false}) async {
+    {bool wait = true, bool ads = false, List<String> tags = const []}) async {
   final found = <String, String>{};
   final jobs = <Future<void>>[];
-  for (final e in _sourcesFor(countries, ads).entries) {
+  for (final e in _sourcesFor(countries, ads, tags).entries) {
     final file = File('$dir/rules/${e.key}.srs');
     Future<void> one() async {
       final exists = await file.exists();

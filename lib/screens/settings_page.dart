@@ -301,6 +301,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   t.autoUpdateSubsDesc),
               _switch('updateOnStartup', state.updateOnStartup,
                   t.updateOnStartup, t.updateOnStartupDesc),
+              ListTile(
+                leading: const Icon(Icons.timer_outlined),
+                title: Text(tr(context, 'defaultInterval')),
+                subtitle: Text(tr(context, 'defaultIntervalDesc')),
+                trailing: Text(tr(context, 'hoursShort').replaceAll('{n}', '${state.subInterval}')),
+                onTap: () async {
+                  final v = await pickOption<int>(
+                      context, tr(context, 'defaultInterval'), state.subInterval, {
+                    for (final h in {1, 2, 3, 6, 12, 24, 48, 72, 168, state.subInterval}.toList()..sort())
+                      h: tr(context, 'hoursShort').replaceAll('{n}', '$h'),
+                  });
+                  if (v != null) state.setSubInterval(v);
+                },
+              ),
               _switch('measurePing', state.measurePing, tr(context, 'measurePing'),
                   tr(context, 'measurePingDesc')),
               _switch('usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
