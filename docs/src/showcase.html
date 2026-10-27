@@ -25,6 +25,8 @@ body { font-family: 'Roboto', 'Segoe UI', sans-serif; overflow: hidden; -webkit-
 .sb { left: 0; top: 0; width: 1080px; height: 96px; background: #ddeede; }
 .sb .time { position: absolute; left: 130px; top: 22px; font: 500 44px 'Roboto'; color: #1c1b1f; }
 .sb svg { position: absolute; top: 24px; }
+.pms { font-weight: 600; color: #3f9d46; margin-right: 12px; }
+.ms { font-weight: 600; color: #2f9a3d; margin-right: 6px; }
 .pchip { display: inline-block; background: rgba(46, 160, 80, .18); color: #17843f; font-weight: 700;
   border-radius: 16px; padding: 0 17px; line-height: 54px; margin-right: 14px; }
 
@@ -51,8 +53,8 @@ body { font-family: 'Roboto', 'Segoe UI', sans-serif; overflow: hidden; -webkit-
 .phone::after { right: -4px; top: 190px; height: 100px; }
 .phone .screen { width: 312px; height: 646px; border-radius: 34px; overflow: hidden; position: relative; background: #fff; }
 .phone .screen .shot { transform: scale(.2889); }
-.phone .screen::after { content: ''; position: absolute; left: 50%; top: 16px; width: 16px; height: 16px;
-  margin-left: -8px; border-radius: 50%; background: #0b0b0e; box-shadow: 0 0 0 3px rgba(255,255,255,.04); }
+.phone .screen::after { content: ''; position: absolute; left: 50%; top: 6px; width: 15px; height: 15px;
+  margin-left: -7px; border-radius: 50%; background: #0b0b0e; box-shadow: 0 0 0 3px rgba(255,255,255,.04); }
 
 .devices { position: relative; width: 1126px; height: 700px; }
 
@@ -99,11 +101,11 @@ body.banner-mode .only-banner { display: block; }
         <div class="cover t" style="left:328px;top:600px;width:230px;height:32px;background:#e3eae7;font:600 26px 'Segoe UI';color:#1c1b1f;padding-left:4px;">380 KB/s</div>
         <div class="cover t" style="left:328px;top:634px;width:230px;height:22px;background:#e3eae7;font:400 18px 'Segoe UI';color:#49454f;padding-left:4px;">This session: 3.2 MB</div>
         <!-- list rows: ping chip + the rest of the line -->
-        <div class="cover t" style="left:646px;top:461px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">148 ms</span><span class="dot">·</span>&nbsp;vless + xhttp&nbsp;<span class="dot">·</span>&nbsp;cdn***.net:443</div>
-        <div class="cover t" style="left:646px;top:559px;width:440px;height:30px;background:#9ff2e2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip" style="background:rgba(20,130,60,.2)">112 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;eu1***.com:443</div>
-        <div class="cover t" style="left:646px;top:656px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">96 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;eu2***.com:443</div>
-        <div class="cover t" style="left:646px;top:753px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">131 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;us1***.com:8880</div>
-        <div class="cover t" style="left:646px;top:851px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><span class="chip">157 ms</span><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;us2***.com:8880</div>
+        <div class="cover t" style="left:646px;top:461px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><b class="ms">148 ms</b><span class="dot">·</span>&nbsp;vless + xhttp&nbsp;<span class="dot">·</span>&nbsp;cdn***.net:443</div>
+        <div class="cover t" style="left:646px;top:559px;width:440px;height:30px;background:#9ff2e2;font:400 21px 'Segoe UI';color:#49454f;"><b class="ms">112 ms</b><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;eu1***.com:443</div>
+        <div class="cover t" style="left:646px;top:656px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><b class="ms">96 ms</b><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;eu2***.com:443</div>
+        <div class="cover t" style="left:646px;top:753px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><b class="ms">131 ms</b><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;us1***.com:8880</div>
+        <div class="cover t" style="left:646px;top:851px;width:440px;height:30px;background:#eff5f2;font:400 21px 'Segoe UI';color:#49454f;"><b class="ms">157 ms</b><span class="dot">·</span>&nbsp;vless&nbsp;<span class="dot">·</span>&nbsp;us2***.com:8880</div>
       </div>
     </div></div>
     <div class="phone">
@@ -112,9 +114,9 @@ body.banner-mode .only-banner { display: block; }
           <img src="../screenshots/phone-connected.png">
           <div class="cover sb">
             <span class="time">9:41</span>
-            <svg style="left:640px" width="64" height="48" viewBox="0 0 24 18"><path fill="#1c1b1f" d="M12 4C8.6 4 5.5 5.3 3.2 7.4L1.5 5.6C4.3 3 8 1.5 12 1.5s7.7 1.5 10.5 4.1l-1.7 1.8C18.5 5.3 15.4 4 12 4zm0 5c-2.1 0-4 .8-5.4 2.1L4.9 9.3C6.8 7.6 9.3 6.5 12 6.5s5.2 1.1 7.1 2.8l-1.7 1.8C16 9.8 14.1 9 12 9zm0 4.5c-1 0-1.9.4-2.6 1L12 17l2.6-2.5c-.7-.6-1.6-1-2.6-1z"/></svg>
-            <svg style="left:722px" width="54" height="48" viewBox="0 0 20 18"><path fill="#1c1b1f" d="M1 15h3v2H1zm5-4h3v6H6zm5-4h3v10h-3zm5-5h3v15h-3z"/></svg>
-            <svg style="left:792px;top:26px" width="76" height="42" viewBox="0 0 38 21"><rect x="1" y="2" width="32" height="17" rx="4.5" fill="none" stroke="#1c1b1f" stroke-width="2"/><rect x="3.6" y="4.6" width="26.8" height="11.8" rx="2.4" fill="#1c1b1f"/><rect x="34.5" y="7.5" width="3" height="6" rx="1.4" fill="#1c1b1f"/></svg>
+            <svg style="left:752px" width="64" height="48" viewBox="0 0 24 18"><path fill="#1c1b1f" d="M12 4C8.6 4 5.5 5.3 3.2 7.4L1.5 5.6C4.3 3 8 1.5 12 1.5s7.7 1.5 10.5 4.1l-1.7 1.8C18.5 5.3 15.4 4 12 4zm0 5c-2.1 0-4 .8-5.4 2.1L4.9 9.3C6.8 7.6 9.3 6.5 12 6.5s5.2 1.1 7.1 2.8l-1.7 1.8C16 9.8 14.1 9 12 9zm0 4.5c-1 0-1.9.4-2.6 1L12 17l2.6-2.5c-.7-.6-1.6-1-2.6-1z"/></svg>
+            <svg style="left:834px" width="54" height="48" viewBox="0 0 20 18"><path fill="#1c1b1f" d="M1 15h3v2H1zm5-4h3v6H6zm5-4h3v10h-3zm5-5h3v15h-3z"/></svg>
+            <svg style="left:904px;top:26px" width="76" height="42" viewBox="0 0 38 21"><rect x="1" y="2" width="32" height="17" rx="4.5" fill="none" stroke="#1c1b1f" stroke-width="2"/><rect x="3.6" y="4.6" width="26.8" height="11.8" rx="2.4" fill="#1c1b1f"/><rect x="34.5" y="7.5" width="3" height="6" rx="1.4" fill="#1c1b1f"/></svg>
           </div>
           <!-- server card: the flag and name, moved left to make room for the ping chip -->
           <div class="cover t" style="left:330px;top:962px;width:420px;height:72px;background:#dee4e2;">
@@ -128,8 +130,8 @@ body.banner-mode .only-banner { display: block; }
           <div class="cover t" style="left:580px;top:1222px;width:400px;height:72px;background:#e4eae8;font:700 46px 'Roboto';color:#1c1b1f;padding-left:11px;">380 KB/s</div>
           <div class="cover t" style="left:580px;top:1302px;width:400px;height:56px;background:#e4eae8;font:400 32px 'Roboto';padding-left:11px;">This session: 3.2 MB</div>
           <!-- list rows with ping chips -->
-          <div class="cover t" style="left:70px;top:1936px;width:850px;height:62px;background:#f0f5f1;font:400 38px 'Roboto';padding-left:6px;"><span class="pchip" style="font-size:36px;">148 ms</span><span class="dot" style="top:-5px">·</span>&nbsp;vless + xhttp&nbsp;<span class="dot" style="top:-5px">·</span>&nbsp;cdn***.net:443</div>
-          <div class="cover t" style="left:70px;top:2138px;width:850px;height:62px;background:#b2f0e1;font:400 38px 'Roboto';padding-left:6px;"><span class="pchip" style="font-size:36px;background:rgba(20,130,60,.22);">112 ms</span><span class="dot" style="top:-5px">·</span>&nbsp;vless&nbsp;<span class="dot" style="top:-5px">·</span>&nbsp;eu1***.com:443</div>
+          <div class="cover t" style="left:70px;top:1936px;width:850px;height:62px;background:#f0f5f1;font:400 38px 'Roboto';padding-left:6px;"><b class="pms">148 ms</b><span class="dot" style="top:-5px">·</span>&nbsp;vless + xhttp&nbsp;<span class="dot" style="top:-5px">·</span>&nbsp;cdn***.net:443</div>
+          <div class="cover t" style="left:70px;top:2138px;width:850px;height:62px;background:#b2f0e1;font:400 38px 'Roboto';padding-left:6px;"><b class="pms">112 ms</b><span class="dot" style="top:-5px">·</span>&nbsp;vless&nbsp;<span class="dot" style="top:-5px">·</span>&nbsp;eu1***.com:443</div>
         </div>
       </div>
     </div>
