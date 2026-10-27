@@ -187,20 +187,39 @@ class HomePage extends StatelessWidget {
                 child: SingleChildScrollView(child: _ConnectCard(state: state)),
               ),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 4, 6, 0),
-                  child: Column(children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-                      child: Row(children: [
-                        Icon(Icons.dns_outlined, size: 20, color: scheme.primary),
-                        const SizedBox(width: 8),
-                        Text('${tr(context, 'servers')} ($count)',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                      ]),
+                // The list sits on a panel of its own, like the connect card: a soft tint that
+                // fades across it and two faint glows in the corners.
+                child: Container(
+                  margin: const EdgeInsets.fromLTRB(6, 4, 12, 12),
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: scheme.outlineVariant),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.alphaBlend(scheme.primary.withValues(alpha: 0.07), scheme.surfaceContainerLow),
+                        scheme.surfaceContainerLow,
+                        Color.alphaBlend(scheme.tertiary.withValues(alpha: 0.06), scheme.surfaceContainerLow),
+                      ],
                     ),
-                    Expanded(child: _ServerList(state: state)),
-                  ]),
+                  ),
+                  child: CustomPaint(
+                    painter: _PanelGlowPainter(primary: scheme.primary, tertiary: scheme.tertiary),
+                    child: Column(children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 14, 18, 4),
+                        child: Row(children: [
+                          Icon(Icons.dns_outlined, size: 20, color: scheme.primary),
+                          const SizedBox(width: 8),
+                          Text('${tr(context, 'servers')} ($count)',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                      Expanded(child: _ServerList(state: state)),
+                    ]),
+                  ),
                 ),
               ),
             ]);
@@ -564,7 +583,7 @@ class _ConnectCard extends StatelessWidget {
               busy: state.transitioning,
               on: status == VpnStatus.started,
               onTap: status == VpnStatus.stopping ? null : state.toggle),
-          const SizedBox(height: 12),
+          const SizedBox(height: 22),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             child: Text(label,
@@ -709,9 +728,36 @@ class _PowerButton extends StatefulWidget {
   State<_PowerButton> createState() => _PowerButtonState();
 }
 
-class _PowerButtonState extends State<_PowerButton> {
+class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderStateMixin {
   bool _down = false;
   bool _focused = false;
+
+  // Drives the slow ripples around the button while connected (it only ticks when the app is
+  // in front).
+  late final AnimationController _ripple =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 4200));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.on) _ripple.repeat();
+  }
+
+  @override
+  void didUpdateWidget(_PowerButton old) {
+    super.didUpdateWidget(old);
+    if (widget.on && !_ripple.isAnimating) {
+      _ripple.repeat();
+    } else if (!widget.on && _ripple.isAnimating) {
+      _ripple.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ripple.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -732,7 +778,30 @@ class _PowerButtonState extends State<_PowerButton> {
         }
         return KeyEventResult.ignored;
       },
-      child: _button(color),
+      // The rings are painted around the button without taking any room.
+      child: SizedBox(
+        width: 128,
+        height: 128,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Positioned(
+              left: -60,
+              top: -60,
+              width: 248,
+              height: 248,
+              child: IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                      painter: _RingsPainter(color: color, on: widget.on, animation: _ripple)),
+                ),
+              ),
+            ),
+            _button(color),
+          ],
+        ),
+      ),
     );
   }
 
@@ -781,6 +850,88 @@ class _PowerButtonState extends State<_PowerButton> {
       ),
     );
   }
+}
+
+/// Two large, very faint glows in opposite corners of the desktop server panel.
+class _PanelGlowPainter extends CustomPainter {
+  const _PanelGlowPainter({required this.primary, required this.tertiary});
+
+  final Color primary;
+  final Color tertiary;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    void glow(Offset center, double radius, Color color, double alpha) {
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader = RadialGradient(colors: [color.withValues(alpha: alpha), color.withValues(alpha: 0)])
+              .createShader(Rect.fromCircle(center: center, radius: radius)),
+      );
+    }
+
+    glow(Offset(size.width * 0.92, size.height * 0.04), size.shortestSide * 0.7, primary, 0.10);
+    glow(Offset(size.width * 0.05, size.height * 0.98), size.shortestSide * 0.6, tertiary, 0.09);
+  }
+
+  @override
+  bool shouldRepaint(_PanelGlowPainter old) => old.primary != primary || old.tertiary != tertiary;
+}
+
+/// Thin, faint rings and a soft halo around the connect button; while connected two ripples
+/// drift outward and fade. Everything is low in opacity so it never competes with the button.
+class _RingsPainter extends CustomPainter {
+  _RingsPainter({required this.color, required this.on, required Animation<double> animation})
+      : _t = animation,
+        super(repaint: animation);
+
+  final Color color;
+  final bool on;
+  final Animation<double> _t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final k = on ? 1.0 : 0.65;
+
+    // a soft halo
+    canvas.drawCircle(
+      c,
+      124,
+      Paint()
+        ..shader = RadialGradient(colors: [
+          color.withValues(alpha: 0.12 * k),
+          color.withValues(alpha: 0),
+        ]).createShader(Rect.fromCircle(center: c, radius: 124)),
+    );
+
+    // still rings
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    const radii = [80.0, 98.0, 118.0];
+    const alphas = [0.20, 0.12, 0.06];
+    for (var i = 0; i < radii.length; i++) {
+      ring.color = color.withValues(alpha: alphas[i] * k);
+      canvas.drawCircle(c, radii[i], ring);
+    }
+
+    // ripples
+    if (on) {
+      for (var i = 0; i < 2; i++) {
+        final p = (_t.value + i * 0.5) % 1;
+        final fade = 1 - p;
+        ring
+          ..strokeWidth = 1.8
+          ..color = color.withValues(alpha: 0.22 * fade * fade);
+        canvas.drawCircle(c, 70 + 54 * p, ring);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingsPainter old) => old.color != color || old.on != on;
 }
 
 class _PingChip extends StatelessWidget {

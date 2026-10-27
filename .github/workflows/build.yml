@@ -279,8 +279,26 @@ jobs:
           "$env:USERPROFILE\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           & "$env:USERPROFILE\flutter\bin\flutter.bat" --version
 
+      # This runner image only has Visual Studio 2026, which Flutter 3.27 does not know ("could not
+      # find any instance of Visual Studio"), so the 2022 build tools with the ARM64 compiler are
+      # installed next to it.
+      - name: Visual Studio 2022 build tools (ARM64)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://aka.ms/vs/17/release/vs_BuildTools.exe -OutFile vs_buildtools.exe
+          $p = Start-Process -Wait -PassThru -FilePath .\vs_buildtools.exe -ArgumentList @(
+            '--quiet', '--wait', '--norestart', '--nocache',
+            '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop', '--includeRecommended',
+            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+            '--add', 'Microsoft.VisualStudio.Component.VC.CMake.Project',
+            '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.22621')
+          Write-Host "installer exit code $($p.ExitCode)"
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw 'Visual Studio build tools failed to install' }
+
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
+      - run: flutter doctor -v
+        continue-on-error: true
 
       - run: ./tools/fetch_windows_core.ps1 -Arch arm64
 

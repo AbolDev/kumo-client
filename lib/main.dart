@@ -190,11 +190,19 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
     if (allow == true) await VpnChannel.requestBatteryExemption();
   }
 
-  ThemeData _theme(Brightness brightness) => ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF0E9F8E),
-        brightness: brightness,
-      );
+  ThemeData _theme(Brightness brightness) {
+    final base = ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: const Color(0xFF0E9F8E),
+      brightness: brightness,
+    );
+    // The header's icons (add, more, settings, back) share one colour: a button and a popup
+    // menu icon otherwise get two different greys.
+    final icons = IconThemeData(color: base.colorScheme.onSurface);
+    return base.copyWith(
+      appBarTheme: base.appBarTheme.copyWith(iconTheme: icons, actionsIconTheme: icons),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
