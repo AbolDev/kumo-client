@@ -226,8 +226,7 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                   children: [
                     Chip(
                       avatar: const Icon(Icons.phone_android, size: 18),
-                      label: Text(tr(sheet, 'updYouHave', {'v': current}),
-                          textDirection: TextDirection.ltr),
+                      label: Text(tr(sheet, 'updYouHave', {'v': ltr(current)})),
                     ),
                     if (size != null)
                       Chip(
@@ -376,10 +375,9 @@ Future<void> _install(BuildContext context, UpdateInfo info,
               const SizedBox(height: 4),
               Text(
                 [
-                  if (p.speed > 0) '${_size(p.speed.round())}/s',
-                  if (left != null) tr(dialog, 'updEta', {'t': _duration(left)}),
+                  if (p.speed > 0) ltr('${_size(p.speed.round())}/s'),
+                  if (left != null) tr(dialog, 'updEta', {'t': ltr(_duration(left))}),
                 ].join('  ·  '),
-                textDirection: TextDirection.ltr,
                 style: Theme.of(dialog).textTheme.bodySmall,
               ),
               const SizedBox(height: 6),

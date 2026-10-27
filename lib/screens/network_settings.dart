@@ -536,15 +536,15 @@ Future<void> _leakCheck(BuildContext context, AppState state) async {
   final text = r == null
       ? tr(context, 'dnsFailed')
       : '${tr(context, 'dnsResult', {
-              'ip': r.ip,
+              'ip': ltr(r.ip),
               'country': r.country,
-              'dns': state.net.dnsAddress,
-            })}\n\n${r.webrtc == null ? tr(context, 'webrtcNone') : r.webrtc == r.ip ? tr(context, 'webrtcSame', {'ip': r.webrtc!}) : tr(context, 'webrtcLeak', {'ip': r.webrtc!})}';
+              'dns': ltr(state.net.dnsAddress),
+            })}\n\n${r.webrtc == null ? tr(context, 'webrtcNone') : r.webrtc == r.ip ? tr(context, 'webrtcSame', {'ip': ltr(r.webrtc!)}) : tr(context, 'webrtcLeak', {'ip': ltr(r.webrtc!)})}';
   await showDialog<void>(
     context: context,
     builder: (dialog) => AlertDialog(
       title: Text(tr(dialog, 'dnsCheck')),
-      content: SelectableText(text, textDirection: TextDirection.ltr),
+      content: SelectableText(text),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(dialog), child: const Text('OK')),

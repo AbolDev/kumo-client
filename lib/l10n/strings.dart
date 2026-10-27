@@ -638,10 +638,10 @@ class SFa implements S {
   @override
   String get tcping => 'TCPing';
   @override
-  String get realDelay => 'ریل دیلی';
+  String get realDelay => 'Real delay';
   @override
   String get realDelayNeedsDisconnect =>
-      'ریل دیلی فقط در حالت قطع اتصال قابل اندازه‌گیری است.';
+      'Real delay فقط در حالت قطع اتصال قابل اندازه‌گیری است.';
   @override
   String get advanced => 'پیشرفته';
   @override
@@ -704,7 +704,7 @@ class SFa implements S {
   String get showSpeedDesc =>
       'سرعت لحظه‌ای و حجم مصرف‌شده در اعلان نمایش داده شود';
   @override
-  String get delayUrlTitle => 'آدرس تست ریل دیلی (http/https)';
+  String get delayUrlTitle => 'آدرس تست Real delay (http/https)';
   @override
   String get resetDefault => 'بازگشت به پیش‌فرض';
   @override
@@ -747,7 +747,7 @@ class SFa implements S {
   @override
   String get copyLogs => 'کپی همه';
   @override
-  String get removeDeadTitle => 'تست ریل دیلی';
+  String get removeDeadTitle => 'تست Real delay';
   @override
   String get removeDeadOption => 'کانفیگ‌هایی که پاسخ نمی‌دهند حذف شوند';
   @override

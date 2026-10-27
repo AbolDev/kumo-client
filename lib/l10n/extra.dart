@@ -12,6 +12,10 @@ String tr(BuildContext context, String key, [Map<String, Object>? args]) => trFo
     key,
     args);
 
+/// Keeps [s] (a number with its unit, an address, a version) in one left-to-right piece inside a
+/// sentence in a right-to-left language, so it does not get torn apart.
+String ltr(String s) => '\u2066$s\u2069';
+
 /// Same for a language code, when there is no context (the tray menu).
 String trFor(String lang, String key, [Map<String, Object>? args]) {
   final table = _extra[lang] ?? const {};
@@ -174,13 +178,13 @@ const _extra = <String, Map<String, String>>{
     'notifName': 'نام کانفیگ در نوتیفیکیشن',
     'notifNameDesc': 'نشان می‌دهد کدام سرور در حال استفاده است.',
     'servers': 'سرورها',
-    'tunOnNote': 'کل سیستم از تانل عبور می‌کند.',
+    'tunOnNote': 'کل سیستم از تونل عبور می‌کند.',
     'proxyNote': 'پروکسی (HTTP/SOCKS) روی 127.0.0.1:{port} تنظیم شد.',
     'network': 'شبکه',
-    'tun': 'تانل کل دستگاه (TUN)',
+    'tun': 'تونل کل دستگاه (TUN)',
     'tunDesc':
         'خاموش: Kumo فقط یک پروکسی محلی باز می‌کند و برنامه‌ها باید از آن استفاده کنند. روشن: همه‌ی ترافیک دستگاه از VPN می‌گذرد.',
-    'tunShort': 'تانل کل دستگاه',
+    'tunShort': 'تونل کل دستگاه',
     'proxyPort': 'پورت پروکسی',
     'proxyPortDesc': 'پروکسی محلی HTTP/SOCKS روی 127.0.0.1:{port}',
     'invalidPort': 'پورتی بین ۱۰۲۴ و ۶۵۵۳۵ وارد کن',
@@ -188,7 +192,7 @@ const _extra = <String, Map<String, String>>{
     'appModeAll': 'همه‌ی برنامه‌ها از VPN استفاده کنند',
     'appModeOnly': 'فقط برنامه‌های انتخاب‌شده از VPN استفاده کنند',
     'appModeExcept': 'برنامه‌های انتخاب‌شده از VPN رد نشوند',
-    'appRoutingTun': 'وقتی تانل کل دستگاه روشن باشد کار می‌کند.',
+    'appRoutingTun': 'وقتی تونل کل دستگاه روشن باشد کار می‌کند.',
     'chooseApps': 'انتخاب برنامه‌ها',
     'searchApps': 'جستجوی برنامه',
     'selectedApps': '{n} مورد انتخاب شده',
@@ -197,7 +201,7 @@ const _extra = <String, Map<String, String>>{
     'bypassCountries': 'کشورهای مستقیم',
     'bypassCountriesDesc':
         'IP و سایت‌های کشورهای انتخاب‌شده از VPN رد نمی‌شوند (سریع‌تر و برنامه‌های محلی کار می‌کنند). به‌طور پیش‌فرض هیچ‌کدام.',
-    'killSwitch': 'کیل سوییچ',
+    'killSwitch': 'Kill Switch',
     'killSwitchDesc':
         'اگر اتصال قطع شد، به‌جای لو رفتن آدرس واقعی، اینترنت بسته شود.',
     'vpnSettings': 'باز کردن تنظیمات VPN اندروید (Always-on)',
@@ -255,7 +259,7 @@ const _extra = <String, Map<String, String>>{
     'importQrClipboard': 'QR از تصویر کلیپبورد',
     'qrNotFound': 'کد QR در تصویر پیدا نشد.',
     'failingOver': 'سرور جواب نمی‌دهد، رفتن به سرور دیگر…',
-    'blocked': 'اتصال قطع شد: اینترنت بسته شد (کیل سوییچ)',
+    'blocked': 'اتصال قطع شد: اینترنت بسته شد (Kill Switch)',
     'tileOff': 'قطع',
     'connectToggle': 'وصل / قطع',
   },

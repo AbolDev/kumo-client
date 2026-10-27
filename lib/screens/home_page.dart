@@ -661,8 +661,7 @@ class _ConnectCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     '${selected == null ? '${t.autoFastest} · ' : ''}'
-                    '${shown.label} · ${shown.maskedAddress}',
-                    textDirection: TextDirection.ltr,
+                    '${ltr('${shown.label} · ${shown.maskedAddress}')}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:
@@ -1039,8 +1038,7 @@ class _TrafficBox extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: active ? null : scheme.onSurfaceVariant)),
-          Text('${t.sessionLabel}: $total',
-              textDirection: TextDirection.ltr,
+          Text('${t.sessionLabel}: ${ltr(total)}',
               style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
         ],
       ),
