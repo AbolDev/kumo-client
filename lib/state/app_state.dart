@@ -1141,14 +1141,27 @@ class AppState extends ChangeNotifier {
     // hold the real address and sometimes a name.
     final deep = subscriptionDeepLink(input.split(RegExp(r'\s')).first);
     if (deep != null) input = deep.url;
-    final first = input.split(RegExp(r'\s')).first;
-    if (first.startsWith('http://') || first.startsWith('https://')) {
+    final typed = input.split(RegExp(r'\s')).first;
+    if (typed.startsWith('http://') || typed.startsWith('https://')) {
+      // A #name at the end of the address is the name the user wants for the subscription (and
+      // is not part of the address that is downloaded).
+      final hash = typed.indexOf('#');
+      final first = hash < 0 ? typed : typed.substring(0, hash);
+      String? fragment;
+      if (hash >= 0 && hash + 1 < typed.length) {
+        try {
+          fragment = Uri.decodeComponent(typed.substring(hash + 1)).trim();
+        } catch (_) {
+          fragment = typed.substring(hash + 1).trim();
+        }
+        if (fragment.isEmpty) fragment = null;
+      }
       var g = subscriptions.where((s) => s.url == first).firstOrNull;
       final isNew = g == null;
       if (g == null) {
         g = ServerGroup('sub-${DateTime.now().microsecondsSinceEpoch}',
             GroupKind.subscription,
-            name: deep?.name ?? Uri.tryParse(first)?.host ?? first, url: first)
+            name: fragment ?? deep?.name ?? Uri.tryParse(first)?.host ?? first, url: first)
           ..autoName = false;
         subscriptions.add(g);
       }
