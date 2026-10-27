@@ -600,13 +600,13 @@ class _ConnectCard extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              filter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 400),
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
-                  color: color.withValues(alpha: 0.10),
+                  color: color.withValues(alpha: 0.06),
                   border: Border.all(color: color.withValues(alpha: 0.28)),
                 ),
                 child: AnimatedSwitcher(
