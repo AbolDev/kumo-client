@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'dart:math' show Random, cos, pi, pow, sin;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/services.dart';
 
 import 'package:window_manager/window_manager.dart';
@@ -732,30 +734,34 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
   bool _down = false;
   bool _focused = false;
 
-  // Drives the slow ripples around the button while connected (it only ticks when the app is
-  // in front).
-  late final AnimationController _ripple =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 4200));
+  // The time that moves the rings around the button, in seconds. It only runs while connected
+  // (and only ticks when the app is in front); it carries on from where it stopped.
+  final _time = ValueNotifier<double>(0);
+  late final Ticker _ticker;
+  double _base = 0;
 
   @override
   void initState() {
     super.initState();
-    if (widget.on) _ripple.repeat();
+    _ticker = createTicker((elapsed) => _time.value = _base + elapsed.inMicroseconds / 1e6);
+    if (widget.on) _ticker.start();
   }
 
   @override
   void didUpdateWidget(_PowerButton old) {
     super.didUpdateWidget(old);
-    if (widget.on && !_ripple.isAnimating) {
-      _ripple.repeat();
-    } else if (!widget.on && _ripple.isAnimating) {
-      _ripple.stop();
+    if (widget.on && !_ticker.isActive) {
+      _ticker.start();
+    } else if (!widget.on && _ticker.isActive) {
+      _ticker.stop();
+      _base = _time.value;
     }
   }
 
   @override
   void dispose() {
-    _ripple.dispose();
+    _ticker.dispose();
+    _time.dispose();
     super.dispose();
   }
 
@@ -787,14 +793,14 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
           alignment: Alignment.center,
           children: [
             Positioned(
-              left: -60,
-              top: -60,
-              width: 248,
-              height: 248,
+              left: -136,
+              top: -136,
+              width: 400,
+              height: 400,
               child: IgnorePointer(
                 child: RepaintBoundary(
                   child: CustomPaint(
-                      painter: _RingsPainter(color: color, on: widget.on, animation: _ripple)),
+                      painter: _RingsPainter(color: color, on: widget.on, time: _time)),
                 ),
               ),
             ),
@@ -879,61 +885,81 @@ class _PanelGlowPainter extends CustomPainter {
   bool shouldRepaint(_PanelGlowPainter old) => old.primary != primary || old.tertiary != tertiary;
 }
 
-/// Thin, faint rings and a soft halo around the connect button; while connected two ripples
-/// drift outward and fade. Everything is low in opacity so it never competes with the button.
+/// Thin contour lines around the connect button, like ripples on water: the inner one is nearly
+/// round and crisp, and each one further out is fainter and more wobbly. While connected the shapes
+/// drift very slowly and unevenly (every wave of every line has its own random speed), so they
+/// never repeat and never stand still. Disconnected, they rest, fainter.
 class _RingsPainter extends CustomPainter {
-  _RingsPainter({required this.color, required this.on, required Animation<double> animation})
-      : _t = animation,
-        super(repaint: animation);
+  _RingsPainter({required this.color, required this.on, required ValueListenable<double> time})
+      : _time = time,
+        super(repaint: time);
 
   final Color color;
   final bool on;
-  final Animation<double> _t;
+  final ValueListenable<double> _time;
+
+  static const _rings = 9;
+  static const _waves = 4; // wobbles with 2, 3, 4 and 5 bumps around the circle
+
+  // Random, but the same every time: where each wave starts and how slowly it drifts.
+  static List<List<double>> _table(int seed, double lo, double hi) {
+    final r = Random(seed);
+    return [
+      for (var i = 0; i < _rings; i++) [for (var j = 0; j < _waves; j++) lo + r.nextDouble() * (hi - lo)],
+    ];
+  }
+
+  static final _phase = _table(11, 0, 2 * pi);
+  static final _speed = _table(23, -0.18, 0.18); // radians per second, both directions
 
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
-    final k = on ? 1.0 : 0.65;
+    final t = _time.value;
+    final k = on ? 1.0 : 0.55;
 
-    // a soft halo
+    // a soft halo behind the lines
     canvas.drawCircle(
       c,
-      124,
+      180,
       Paint()
         ..shader = RadialGradient(colors: [
-          color.withValues(alpha: 0.12 * k),
+          color.withValues(alpha: 0.11 * k),
           color.withValues(alpha: 0),
-        ]).createShader(Rect.fromCircle(center: c, radius: 124)),
+        ]).createShader(Rect.fromCircle(center: c, radius: 180)),
     );
 
-    // still rings
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    const radii = [80.0, 98.0, 118.0];
-    const alphas = [0.20, 0.12, 0.06];
-    for (var i = 0; i < radii.length; i++) {
-      ring.color = color.withValues(alpha: alphas[i] * k);
-      canvas.drawCircle(c, radii[i], ring);
-    }
-
-    // ripples
-    if (on) {
-      for (var i = 0; i < 2; i++) {
-        final p = (_t.value + i * 0.5) % 1;
-        final fade = 1 - p;
-        ring
-          ..strokeWidth = 1.8
-          ..color = color.withValues(alpha: 0.22 * fade * fade);
-        canvas.drawCircle(c, 70 + 54 * p, ring);
+    final line = Paint()..style = PaintingStyle.stroke;
+    for (var i = 0; i < _rings; i++) {
+      final f = i / (_rings - 1); // 0 = the line next to the button, 1 = the outermost
+      final base = 76.0 + 12.5 * i;
+      // the further out, the more it wobbles; the wobble itself swells and eases slowly
+      final wobble = (0.012 + 0.095 * pow(f, 1.6)) * (0.8 + 0.2 * sin(t * 0.21 + i * 2.1));
+      final breath = 1 + 0.010 * sin(t * 0.37 + i * 1.3);
+      final path = Path();
+      const steps = 96;
+      for (var s = 0; s <= steps; s++) {
+        final a = 2 * pi * s / steps;
+        var n = 0.0;
+        for (var j = 0; j < _waves; j++) {
+          n += sin((j + 2) * a + _phase[i][j] + _speed[i][j] * t) / (j + 1.5);
+        }
+        final r = base * breath * (1 + wobble * n);
+        final x = c.dx + r * cos(a);
+        final y = c.dy + r * sin(a);
+        s == 0 ? path.moveTo(x, y) : path.lineTo(x, y);
       }
+      path.close();
+      line
+        ..strokeWidth = i == 0 ? 1.6 : 1.0
+        ..color = color.withValues(alpha: (i == 0 ? 0.55 : 0.42 * (1 - 0.85 * f) + 0.05) * k);
+      canvas.drawPath(path, line);
     }
   }
 
   @override
   bool shouldRepaint(_RingsPainter old) => old.color != color || old.on != on;
 }
-
 class _PingChip extends StatelessWidget {
   const _PingChip({required this.ping, required this.t});
 
