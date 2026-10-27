@@ -620,7 +620,7 @@ jobs:
       - name: Send the new version to winget
         if: env.WINGET_TOKEN != ''
         continue-on-error: true
-        uses: vedantmgoyal9/winget-releaser@main
+        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # main, pinned so a change to that repository cannot run here unseen
         with:
           identifier: AbolDev.Kumo
           installers-regex: '-setup\.exe$'
