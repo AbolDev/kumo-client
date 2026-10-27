@@ -585,7 +585,7 @@ class _ConnectCard extends StatelessWidget {
               busy: state.transitioning,
               on: status == VpnStatus.started,
               onTap: status == VpnStatus.stopping ? null : state.toggle),
-          const SizedBox(height: 22),
+          SizedBox(height: isDesktop ? 10 : 22),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             child: Text(label,
