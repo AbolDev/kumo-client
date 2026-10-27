@@ -430,7 +430,11 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         override fun writeStatus(message: StatusMessage) {
             if (!message.trafficAvailable) return
             VpnBridge.serverName = currentName ?: getString(R.string.notif_auto)
-            VpnBridge.traffic(message.uplink, message.downlink, message.uplinkTotal, message.downlinkTotal)
+            VpnBridge.traffic(
+                message.uplink, message.downlink, message.uplinkTotal, message.downlinkTotal,
+                // the same name the app files its statistics under
+                if (serverNames.size == 1) serverNames[0] else "Automatic",
+            )
             if (!showSpeed && !showVolume) return
             val parts = ArrayList<String>()
             if (showSpeed) parts.add("↓ ${formatSpeed(message.downlink)}   ↑ ${formatSpeed(message.uplink)}")
@@ -750,7 +754,8 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     override fun serviceReload() {
-        val path = configPath ?: return
+        // In proxy-only mode the configuration without a tunnel is the one that runs.
+        val path = (if (proxyMode) standbyPath else configPath) ?: return
         commandServer?.startOrReloadService(File(path).readText(), OverrideOptions())
     }
 
@@ -941,7 +946,8 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         keyStore.load(null, null)
         val aliases = keyStore.aliases()
         while (aliases.hasMoreElements()) {
-            val cert = keyStore.getCertificate(aliases.nextElement())
+            // an alias can hold a key and no certificate
+            val cert = keyStore.getCertificate(aliases.nextElement()) ?: continue
             certs.add(
                 "-----BEGIN CERTIFICATE-----\n" +
                     kotlin.io.encoding.Base64.encode(cert.encoded) +

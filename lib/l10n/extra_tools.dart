@@ -2,6 +2,16 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'storeUnreadable': '{file} could not be read. It is kept as {file}.broken and not deleted; the app starts without it.',
+  'proxyNotSet': 'Connected, but the system proxy could not be set, so programs that follow it do not use the VPN. Set the proxy by hand to 127.0.0.1 or use the tunnel.',
+  'subCertError': 'The certificate of "{name}" could not be verified. If you trust this provider, turn on "Allow insecure" in Settings.',
+  'backupNoPasswordWarn': 'Without a password anyone who gets the file can read it, including your servers and the proxy login.',
+  'collSource': 'Downloaded from',
+  'collSecurity': 'Security',
+  'collAllowInsecure': 'Allow servers without a certificate check',
+  'collAllowInsecureDesc': 'Some servers of this list ask for their TLS certificate not to be checked, which lets someone on the way read or change what you send. Off: the certificate is always checked, and those servers may fail to connect. On: they are used as the list gives them.',
+  'collInsecureCount': '{n} of {total} servers ask not to be checked.',
+  'collNotYet': 'Not downloaded yet',
   'usePeriodToday': 'Today',
   'usePeriod7': '7 days',
   'usePeriod30': '30 days',
@@ -114,6 +124,16 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'storeUnreadable': 'فایل {file} خوانده نشد. با نام {file}.broken نگه داشته می‌شود و پاک نمی‌شود؛ برنامه بدون آن شروع می‌کند.',
+  'proxyNotSet': 'وصل شد، اما پروکسی سیستم تنظیم نشد و برنامه‌هایی که از آن پیروی می‌کنند از VPN استفاده نمی‌کنند. پروکسی را دستی روی 127.0.0.1 بگذار یا از تانل استفاده کن.',
+  'subCertError': 'گواهی «{name}» تأیید نشد. اگر به این ارائه‌دهنده اعتماد داری، در تنظیمات «اجازه اتصال ناامن» را روشن کن.',
+  'backupNoPasswordWarn': 'بدون رمز، هر کسی که فایل را به دست بیاورد می‌تواند آن را بخواند، از جمله سرورها و رمز پروکسی تو را.',
+  'collSource': 'دانلود شده از',
+  'collSecurity': 'امنیت',
+  'collAllowInsecure': 'اجازهٔ سرورهای بدون بررسی گواهی',
+  'collAllowInsecureDesc': 'بعضی سرورهای این فهرست می‌خواهند گواهی TLS‌شان بررسی نشود، که به کسی در مسیر اجازه می‌دهد آنچه می‌فرستی را بخواند یا عوض کند. خاموش: گواهی همیشه بررسی می‌شود و آن سرورها ممکن است وصل نشوند. روشن: همان‌طور که فهرست می‌دهد استفاده می‌شوند.',
+  'collInsecureCount': '{n} سرور از {total} سرور می‌خواهند بررسی نشوند.',
+  'collNotYet': 'هنوز دانلود نشده',
   'usePeriodToday': 'امروز',
   'usePeriod7': '۷ روز',
   'usePeriod30': '۳۰ روز',
@@ -226,6 +246,16 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'storeUnreadable': 'Не удалось прочитать {file}. Файл сохранён как {file}.broken и не удалён; приложение запускается без него.',
+  'proxyNotSet': 'Подключено, но системный прокси не удалось задать, поэтому программы, которые ему следуют, не используют VPN. Укажите прокси вручную 127.0.0.1 или используйте туннель.',
+  'subCertError': 'Не удалось проверить сертификат «{name}». Если вы доверяете этому провайдеру, включите «Разрешить небезопасное подключение» в настройках.',
+  'backupNoPasswordWarn': 'Без пароля любой, кто получит файл, сможет его прочитать, включая ваши серверы и логин прокси.',
+  'collSource': 'Загружено с',
+  'collSecurity': 'Безопасность',
+  'collAllowInsecure': 'Разрешить серверы без проверки сертификата',
+  'collAllowInsecureDesc': 'Некоторые серверы списка просят не проверять их TLS-сертификат, и тогда кто-то на пути может читать или менять то, что вы отправляете. Выкл.: сертификат проверяется всегда, и такие серверы могут не подключаться. Вкл.: они используются как в списке.',
+  'collInsecureCount': '{n} из {total} серверов просят не проверять сертификат.',
+  'collNotYet': 'Ещё не загружен',
   'usePeriodToday': 'Сегодня',
   'usePeriod7': '7 дней',
   'usePeriod30': '30 дней',
@@ -338,6 +368,16 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'storeUnreadable': 'Không đọc được {file}. Tệp được giữ lại là {file}.broken và không bị xóa; ứng dụng khởi động mà không có nó.',
+  'proxyNotSet': 'Đã kết nối, nhưng không đặt được proxy hệ thống nên các chương trình dùng nó không đi qua VPN. Hãy đặt proxy thủ công là 127.0.0.1 hoặc dùng đường hầm.',
+  'subCertError': 'Không xác minh được chứng chỉ của "{name}". Nếu tin nhà cung cấp này, hãy bật "Cho phép kết nối không an toàn" trong Cài đặt.',
+  'backupNoPasswordWarn': 'Không có mật khẩu, ai có tệp cũng đọc được, kể cả máy chủ và đăng nhập proxy của bạn.',
+  'collSource': 'Tải về từ',
+  'collSecurity': 'Bảo mật',
+  'collAllowInsecure': 'Cho phép máy chủ không kiểm tra chứng chỉ',
+  'collAllowInsecureDesc': 'Một số máy chủ trong danh sách yêu cầu không kiểm tra chứng chỉ TLS của chúng, nên người ở giữa đường có thể đọc hoặc sửa dữ liệu bạn gửi. Tắt: chứng chỉ luôn được kiểm tra và các máy chủ đó có thể không kết nối được. Bật: dùng như danh sách đưa ra.',
+  'collInsecureCount': '{n} trong {total} máy chủ yêu cầu không kiểm tra.',
+  'collNotYet': 'Chưa tải về',
   'usePeriodToday': 'Hôm nay',
   'usePeriod7': '7 ngày',
   'usePeriod30': '30 ngày',
@@ -450,6 +490,16 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'storeUnreadable': '无法读取 {file}。它被保留为 {file}.broken，没有被删除；应用将不带它启动。',
+  'proxyNotSet': '已连接，但无法设置系统代理，遵循系统代理的程序不会使用 VPN。请手动把代理设为 127.0.0.1，或使用隧道。',
+  'subCertError': '无法验证“{name}”的证书。如果你信任该提供商，请在设置中开启“允许不安全连接”。',
+  'backupNoPasswordWarn': '没有密码时，任何拿到文件的人都能读取，包括你的服务器和代理登录信息。',
+  'collSource': '下载自',
+  'collSecurity': '安全',
+  'collAllowInsecure': '允许不检查证书的服务器',
+  'collAllowInsecureDesc': '此列表中的一些服务器要求不检查其 TLS 证书，这会让路径上的人读取或修改你发送的内容。关：始终检查证书，这些服务器可能无法连接。开：按列表给出的方式使用。',
+  'collInsecureCount': '{total} 个服务器中有 {n} 个要求不检查。',
+  'collNotYet': '尚未下载',
   'usePeriodToday': '今天',
   'usePeriod7': '7 天',
   'usePeriod30': '30 天',
@@ -562,6 +612,16 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'storeUnreadable': 'تعذّرت قراءة {file}. تم الاحتفاظ به باسم {file}.broken ولم يُحذف؛ يبدأ التطبيق بدونه.',
+  'proxyNotSet': 'تم الاتصال، لكن تعذّر ضبط وكيل النظام، فلا تستخدم البرامج التي تتبعه الـVPN. اضبط الوكيل يدويًا على 127.0.0.1 أو استخدم النفق.',
+  'subCertError': 'تعذّر التحقق من شهادة «{name}». إذا كنت تثق بهذا المزوّد فشغّل «السماح بالاتصال غير الآمن» في الإعدادات.',
+  'backupNoPasswordWarn': 'بدون كلمة مرور يستطيع أي شخص يحصل على الملف قراءته، بما في ذلك خوادمك وتسجيل دخول الوكيل.',
+  'collSource': 'تم التنزيل من',
+  'collSecurity': 'الأمان',
+  'collAllowInsecure': 'السماح بالخوادم دون فحص الشهادة',
+  'collAllowInsecureDesc': 'بعض خوادم هذه القائمة تطلب عدم فحص شهادة TLS الخاصة بها، مما يتيح لمن في الطريق قراءة ما ترسله أو تغييره. إيقاف: تُفحص الشهادة دائمًا وقد لا تتصل تلك الخوادم. تشغيل: تُستخدم كما تعطيها القائمة.',
+  'collInsecureCount': '{n} من {total} خادمًا تطلب عدم الفحص.',
+  'collNotYet': 'لم يتم التنزيل بعد',
   'usePeriodToday': 'اليوم',
   'usePeriod7': '7 أيام',
   'usePeriod30': '30 يومًا',

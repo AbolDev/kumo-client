@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
+
+import 'package:pointycastle/export.dart' show SHA256Digest;
 
 import 'vpn_channel.dart';
 
@@ -8,7 +12,13 @@ const updateRepo = 'AbolDev/kumo-client';
 
 class UpdateInfo {
   const UpdateInfo(this.version, this.url, this.newer, this.assets,
-      {this.notes = '', this.sizes = const {}, this.history = const []});
+      {this.notes = '',
+      this.sizes = const {},
+      this.digests = const {},
+      this.history = const []});
+
+  /// File name -> SHA-256 (lower-case hex) GitHub computed for the file when it was uploaded.
+  final Map<String, String> digests;
 
   /// The notes of every release newer than the installed one, newest first.
   final List<({String version, String notes})> history;
@@ -40,7 +50,9 @@ bool isNewer(String a, String b) {
     final p = i < x.length ? x[i] : 0, q = i < y.length ? y[i] : 0;
     if (p != q) return p > q;
   }
-  return false;
+  // Same numbers: the release is newer than a test version of it ("1.9.0" over "1.9.0-beta").
+  bool test(String v) => v.split('+').first.contains('-');
+  return test(b) && !test(a);
 }
 
 /// The commit this build was made from (set by the build: `--dart-define=KUMO_COMMIT=<sha>`).
@@ -124,6 +136,11 @@ Future<UpdateInfo> checkForUpdate(String current) async {
         if (a is Map && a['name'] is String && a['size'] is int)
           a['name'] as String: a['size'] as int,
     };
+    final digests = <String, String>{
+      for (final a in (j['assets'] as List? ?? const []))
+        if (a is Map && a['name'] is String && '${a['digest']}'.startsWith('sha256:'))
+          a['name'] as String: '${a['digest']}'.substring(7).toLowerCase(),
+    };
     // The same version number, but the release was rebuilt from other code (the tag was moved):
     // this build knows its commit, so it can tell.
     var newer = isNewer(tag, current);
@@ -136,9 +153,11 @@ Future<UpdateInfo> checkForUpdate(String current) async {
     return UpdateInfo(
         tag,
         '${j['html_url'] ?? 'https://github.com/$updateRepo/releases'}',
-        newer,        assets,
+        newer,
+        assets,
         notes: '${j['body'] ?? ''}',
         sizes: sizes,
+        digests: digests,
         history: history);
   } finally {
     client.close(force: true);
@@ -172,6 +191,18 @@ Future<({String name, String url})?> pickAsset(UpdateInfo info) async {
   return null;
 }
 
+/// The SHA-256 of a file as lower-case hex, worked out in another isolate (an installer is tens
+/// of megabytes).
+Future<String> fileSha256(String path) => Isolate.run(() async {
+      final digest = SHA256Digest();
+      await for (final chunk in File(path).openRead()) {
+        digest.update(Uint8List.fromList(chunk), 0, chunk.length);
+      }
+      final out = Uint8List(digest.digestSize);
+      digest.doFinal(out, 0);
+      return [for (final b in out) b.toRadixString(16).padLeft(2, '0')].join();
+    });
+
 /// Lets the user stop a running download.
 class DownloadCancel {
   bool cancelled = false;
@@ -185,10 +216,11 @@ class DownloadCancel {
 
 /// Downloads [url] into the app's folder, reporting the bytes received and the total (-1 when
 /// unknown). Returns the path. When [cancel] is used the partial file is removed and a
-/// [HttpException] is thrown.
+/// [HttpException] is thrown. With [size] and [sha256] (what the release says the file is) a file
+/// that does not match is removed and an [HttpException] is thrown: it is run next.
 Future<String> downloadUpdate(String url, String name,
     void Function(int received, int total) progress,
-    {DownloadCancel? cancel}) async {
+    {DownloadCancel? cancel, int? size, String? sha256}) async {
   final dir = Directory('${await VpnChannel.dataDir()}${Platform.pathSeparator}updates');
   if (await dir.exists()) await dir.delete(recursive: true);
   await dir.create(recursive: true);
@@ -214,6 +246,12 @@ Future<String> downloadUpdate(String url, String name,
       await sink.close();
     }
     if (cancel?.cancelled ?? false) throw const HttpException('cancelled');
+    if (size != null && await file.length() != size) {
+      throw const HttpException('the file is not the size the release says');
+    }
+    if (sha256 != null && await fileSha256(file.path) != sha256.toLowerCase()) {
+      throw const HttpException('the file does not match its checksum');
+    }
     return file.path;
   } catch (_) {
     try {

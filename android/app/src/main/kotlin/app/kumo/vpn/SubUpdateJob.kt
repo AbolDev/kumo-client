@@ -69,9 +69,11 @@ class SubUpdateJob : JobService() {
             null
         } ?: return
         val insecure = try {
-            JSONObject(File(filesDir, "settings.json").readText()).optBoolean("allowInsecure", true)
+            // "subInsecure": downloads accept a certificate that does not check out (off by default;
+            // the older "allowInsecure" key was on for everybody and is no longer read)
+            JSONObject(File(filesDir, "settings.json").readText()).optBoolean("subInsecure", false)
         } catch (_: Exception) {
-            true
+            false
         }
         val dir = File(filesDir, "subcache").apply { mkdirs() }
         for (i in 0 until subs.length()) {
@@ -87,7 +89,7 @@ class SubUpdateJob : JobService() {
             if (System.currentTimeMillis() - last < hours * 60 * 60 * 1000L - 60_000L) continue
             try {
                 val answer = download(url, insecure)
-                File(dir, "$id.json").writeText(answer.toString())
+                Store.write(filesDir, "subcache/$id.json", answer.toString())
                 // The numbers the provider reported: warn if the data or the time is running out.
                 val values = HashMap<String, Long>()
                 answer.optString("userinfo").split(';').forEach {

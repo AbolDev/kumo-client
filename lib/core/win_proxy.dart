@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
+import 'proxy_watchdog.dart';
 import 'system_proxy.dart';
 
 const _key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
@@ -43,10 +44,11 @@ class WinProxy implements SystemProxy {
   }
 
   int? _port;
+  final _watchdog = ProxyWatchdog();
 
-  /// Points the system proxy at 127.0.0.1:[port].
+  /// Points the system proxy at 127.0.0.1:[port]. False when the setting did not take.
   @override
-  Future<void> enable(int port) async {
+  Future<bool> enable(int port) async {
     _port = port;
     try {
       if (!await _backup.exists()) {
@@ -66,14 +68,19 @@ class WinProxy implements SystemProxy {
       // put back afterwards (restore).
       await _set('AutoConfigURL', 'REG_SZ', null);
       _notify();
-    } catch (_) {}
+      final ok = pointsAtPort(await _query('ProxyServer'), port);
+      // If the app ends without taking the setting away, the helper does it.
+      if (ok) await _watchdog.start(port);
+      return ok;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Switches the proxy off when it still points at [port] (checked, and tried again). A proxy of
   /// another program is left alone.
   Future<void> _clearOurs(int port) async {
-    bool ours(String? server) =>
-        server != null && (server.contains('127.0.0.1:$port') || server.contains('localhost:$port'));
+    bool ours(String? server) => pointsAtPort(server, port);
     for (var attempt = 0; attempt < 3; attempt++) {
       if (!ours(await _query('ProxyServer'))) return;
       await _set('ProxyEnable', 'REG_DWORD', '0');
@@ -88,6 +95,7 @@ class WinProxy implements SystemProxy {
   @override
   Future<void> restore({int? port}) async {
     int? ours = port ?? _port;
+    _watchdog.stop();
     try {
       if (!await _backup.exists()) {
         if (ours != null) await _clearOurs(ours);
@@ -99,7 +107,7 @@ class WinProxy implements SystemProxy {
       var server = j['server'] as String?;
       var on = enable == null ? 0 : (int.tryParse(enable.replaceFirst('0x', ''), radix: 16) ?? 0);
       // A backup that itself holds this app's proxy (an earlier crash left it set) means "off".
-      if (ours != null && server != null && (server.contains('127.0.0.1:$ours') || server.contains('localhost:$ours'))) {
+      if (ours != null && pointsAtPort(server, ours)) {
         on = 0;
         server = null;
       }

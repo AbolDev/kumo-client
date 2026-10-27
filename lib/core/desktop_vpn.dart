@@ -2,10 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 
 import 'latency_tester.dart' show socksWarmDelay;
-import 'platform.dart';
 import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
 import 'win_dpapi.dart';
@@ -67,7 +66,13 @@ class DesktopVpn {
   /// stays in a data folder beside it, so the folder can be moved or put on a USB drive.
   static final bool portable = File('$_portableRoot${_sep}portable').existsSync();
 
+  /// Tests keep their files in a folder of their own instead of the user's.
+  @visibleForTesting
+  static String? dataDirOverride;
+
   String get dataDir {
+    final override = dataDirOverride;
+    if (override != null) return override;
     if (portable) {
       // Windows keeps the name it had from the start; the Linux bundle has its own `data` folder.
       return '$_portableRoot$_sep${Platform.isWindows ? 'data' : 'kumo-data'}';
@@ -90,28 +95,86 @@ class DesktopVpn {
 
   /// Servers, settings (proxy login) and cached subscriptions are kept encrypted for the Windows
   /// user. Not in the portable build, whose folder is meant to move to other computers.
-  static bool _sealed(String name) =>
-      Platform.isWindows &&
-      !portable &&
-      (name == 'servers.json' || name == 'settings.json' || name.startsWith('subcache/'));
+  static bool _sealed(String name) => Platform.isWindows && !portable && _holdsSecret(name);
 
+  /// The files that hold server credentials or the proxy login.
+  static bool _holdsSecret(String name) =>
+      name.startsWith('servers') || name.startsWith('settings') || name.startsWith('subcache/');
+
+  /// The text of a file, null when there is none. Throws when the file is there but cannot be read
+  /// (damaged, or encrypted for another Windows account): that is not the same as "no file", and
+  /// the caller must not write over it as if it were new.
   Future<String?> readFile(String name) async {
     final f = File('$dataDir$_sep$name');
     if (!await f.exists()) return null;
     final text = await f.readAsString();
     // A file written by an older version is plain text; it is encrypted the next time it is saved.
-    if (Platform.isWindows && WinDpapi.isSealed(text)) return WinDpapi.open(text);
+    if (Platform.isWindows && WinDpapi.isSealed(text)) {
+      final plain = WinDpapi.open(text);
+      if (plain == null) throw FileSystemException('cannot decrypt', f.path);
+      return plain;
+    }
     return text;
   }
 
+  /// Saves a file whole or not at all: the new text is written next to it and then moved over it,
+  /// so a power cut or a kill in the middle cannot leave half a file. The last good copy of a
+  /// JSON file stays as `<name>.bak`.
   Future<void> writeFile(String name, String content) async {
     final f = File('$dataDir$_sep$name');
     await f.parent.create(recursive: true);
+    await _lockDown(dataDir, directory: true);
     final text = _sealed(name) ? (WinDpapi.seal(content) ?? content) : content;
-    await f.writeAsString(text, flush: true);
+    final tmp = File('${f.path}.tmp');
+    await tmp.writeAsString(text, flush: true);
+    if (_holdsSecret(name)) await _lockDown(tmp.path);
+    if (name.endsWith('.json') && await f.exists()) {
+      try {
+        jsonDecode(await readFile(name) ?? '');
+        await f.copy('${f.path}.bak');
+      } catch (_) {
+        // the file in place is already damaged: the older .bak is the one worth keeping
+      }
+    }
+    await tmp.rename(f.path);
+  }
+
+  /// Sets a damaged or unreadable file aside (`<name>.broken`) so a fresh one can be written
+  /// without losing it.
+  Future<void> moveAside(String name) async {
+    final f = File('$dataDir$_sep$name');
+    if (!await f.exists()) return;
+    final target = File('${f.path}.broken');
+    if (await target.exists()) await target.delete();
+    await f.rename(target.path);
+  }
+
+  Future<void> deleteFile(String name) async {
+    final f = File('$dataDir$_sep$name');
+    if (await f.exists()) await f.delete();
+  }
+
+  /// Linux and macOS: the folder and the files in it belong to this user alone (they hold server
+  /// credentials and the key of the local control API).
+  static final _lockedDirs = <String>{};
+
+  static Future<void> _lockDown(String path, {bool directory = false}) async {
+    if (Platform.isWindows) return;
+    if (directory && !_lockedDirs.add(path)) return;
+    try {
+      await Process.run('chmod', [directory ? '700' : '600', path]);
+    } catch (_) {}
   }
 
   // ------------------------------------------------------------------ helpers
+
+  /// A core configuration (it holds server credentials and the key of the control API), readable by
+  /// this user alone on Linux and macOS.
+  static Future<void> _writeConfig(String path, String text) async {
+    final f = File(path);
+    await f.writeAsString(text, flush: true);
+    await _lockDown(path);
+  }
 
   void _emit(VpnStatus s, [String? error]) {
     _state = VpnState(s, error);
@@ -199,27 +262,45 @@ class DesktopVpn {
     }
   }
 
-  /// Starts the core as root through a script that stops it again on request. The user is asked
-  /// for the password once (pkexec on Linux, the macOS administrator prompt).
+  /// Runs the VPN core as root for the tunnel (`sh -c`, arguments: the core, its configuration
+  /// text, the stop file, the app's pid, the log file, the data folder). It ends when the app asks
+  /// (the stop file), when the app is gone, or when the core stops by itself.
+  static const _rootScript = r'''
+T=$(mktemp -d) || exit 1
+chmod 700 "$T"
+printf '%s' "$2" > "$T/config.json"
+cd "$6" 2>/dev/null || cd "$T"
+rm -f "$5"
+set -C
+"$1" run -c "$T/config.json" >"$5" 2>&1 &
+P=$!
+while kill -0 "$P" 2>/dev/null && [ ! -e "$3" ] && kill -0 "$4" 2>/dev/null; do sleep 1; done
+kill "$P" 2>/dev/null
+wait "$P" 2>/dev/null
+rm -rf "$T"
+''';
+
+  /// Starts the core as root through that script, which stops it again on request. The user is
+  /// asked for the password once (pkexec on Linux, the macOS administrator prompt).
   Future<Process?> _spawnElevated(String cfgFile, StringBuffer output) async {
-    final script = File('$dataDir${_sep}run_core.sh');
-    await script.writeAsString('''#!/bin/sh
-# Runs the VPN core as root for the tunnel. It ends when the app asks (the stop file), when the
-# app is gone, or when the core stops by itself.
-CORE="\$1"; CFG="\$2"; STOP="\$3"; APP="\$4"; LOG="\$5"
-cd "\$(dirname "\$CFG")"
-"\$CORE" run -c "\$CFG" >"\$LOG" 2>&1 &
-P=\$!
-while kill -0 "\$P" 2>/dev/null && [ ! -e "\$STOP" ] && kill -0 "\$APP" 2>/dev/null; do sleep 1; done
-kill "\$P" 2>/dev/null
-wait "\$P" 2>/dev/null
-''', flush: true);
     await _deleteQuietly(_stopFile);
     await _deleteQuietly(_coreLog);
-    final args = [script.path, _exePath('kumo-core'), cfgFile, _stopFile, '$pid', _coreLog];
+    // What root runs is given in the command itself (the script and the configuration), not read
+    // from files in this user's folder: another program of this user could change such a file while
+    // the password prompt is open. The root side keeps its own copy in a folder only root can enter.
+    final args = [
+      _rootScript,
+      'kumo',
+      _exePath('kumo-core'),
+      await File(cfgFile).readAsString(),
+      _stopFile,
+      '$pid',
+      _coreLog,
+      dataDir,
+    ];
     if (Platform.isMacOS) {
       String q(String s) => "'${s.replaceAll("'", "'\\''")}'";
-      final command = 'sh ${args.map(q).join(' ')} >/dev/null 2>&1 &';
+      final command = 'sh -c ${args.map(q).join(' ')} >/dev/null 2>&1 &';
       final apple = 'do shell script "${command.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}" '
           'with administrator privileges';
       final r = await Process.run('osascript', ['-e', apple]);
@@ -230,7 +311,7 @@ wait "\$P" 2>/dev/null
       _elevated = true;
       return null; // no handle: the beat below watches the core
     }
-    final p = await Process.start('pkexec', ['sh', ...args], workingDirectory: dataDir);
+    final p = await Process.start('pkexec', ['sh', '-c', ...args], workingDirectory: dataDir);
     p.stdout.listen((_) {}, onError: (_) {});
     p.stderr.listen((d) {
       if (output.length < 4000) output.write(utf8.decode(d, allowMalformed: true));
@@ -274,7 +355,7 @@ wait "\$P" 2>/dev/null
       if (stale()) return;
       if (xrayConfig != null && xrayPort != null) {
         final file = '$dataDir${_sep}xray_config.json';
-        await File(file).writeAsString(xrayConfig);
+        await _writeConfig(file, xrayConfig);
         final xray = _xray = await _spawn('kumo-xray', ['run', '-c', file], output);
         var exited = false;
         xray.exitCode.then((_) => exited = true);
@@ -319,7 +400,7 @@ wait "\$P" 2>/dev/null
         route['find_process'] = true;
       }
       final file = '$dataDir${_sep}active_config.json';
-      await File(file).writeAsString(jsonEncode(cfg));
+      await _writeConfig(file, jsonEncode(cfg));
 
       _elevated = false;
       Process? core;
@@ -357,7 +438,7 @@ wait "\$P" 2>/dev/null
       }
       if (systemProxyPort != null) {
         _sysPort = systemProxyPort;
-        await _proxy.enable(systemProxyPort);
+        proxyIssue.value = !await _proxy.enable(systemProxyPort);
       }
       if (stale()) return;
       _emit(VpnStatus.started);
@@ -413,6 +494,10 @@ wait "\$P" 2>/dev/null
   /// True while the standby proxy is up.
   final standby = ValueNotifier<bool>(false);
 
+  /// True when the connection is up but the desktop's proxy setting could not be made, so programs
+  /// that follow it do not go through the proxy (the user is told).
+  final proxyIssue = ValueNotifier<bool>(false);
+
   Future<bool> _portOpen(int port) async {
     try {
       (await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 300)))
@@ -436,7 +521,7 @@ wait "\$P" 2>/dev/null
       await Directory(dataDir).create(recursive: true);
       if (xrayConfig != null && xrayPort != null) {
         final file = '$dataDir${_sep}standby_xray.json';
-        await File(file).writeAsString(xrayConfig);
+        await _writeConfig(file, xrayConfig);
         final xray = _sbXray = await _spawn('kumo-xray', ['run', '-c', file], output);
         var exited = false;
         xray.exitCode.then((_) => exited = true);
@@ -450,7 +535,7 @@ wait "\$P" 2>/dev/null
         if (!listening) throw StateError('xray failed to start: ${output.toString().trim()}');
       }
       final file = '$dataDir${_sep}standby_config.json';
-      await File(file).writeAsString(configJson);
+      await _writeConfig(file, configJson);
       final core = _sbCore = await _spawn('kumo-core', ['run', '-c', file], output);
       var exited = false;
       core.exitCode.then((_) {
@@ -495,8 +580,10 @@ wait "\$P" 2>/dev/null
     _emit(VpnStatus.starting);
     try {
       _sysPort = systemProxyPort;
-      await _proxy.enable(systemProxyPort);
-    } catch (_) {}
+      proxyIssue.value = !await _proxy.enable(systemProxyPort);
+    } catch (_) {
+      proxyIssue.value = true;
+    }
     if (gen != _gen || _sbCore == null) return false;
     _adopted = true;
     _secret = _sbSecret;
@@ -524,6 +611,7 @@ wait "\$P" 2>/dev/null
   /// Takes this app's system proxy away. It is tried again when the check afterwards shows the
   /// setting is still there, so that disconnecting always leaves the system without our proxy.
   Future<void> _releaseProxy() async {
+    proxyIssue.value = false;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         await _proxy.restore(port: _sysPort);
@@ -535,6 +623,7 @@ wait "\$P" 2>/dev/null
 
   Future<void> _blockProxy() async {
     _sysPort = 1;
+    proxyIssue.value = false;
     await _proxy.enable(1);
   }
 
@@ -599,27 +688,37 @@ wait "\$P" 2>/dev/null
 
   /// Speed and totals from the core's local API, one line a second.
   Future<void> _watchTraffic(int port, int gen) async {
-    final client = HttpClient();
-    _stats = client;
     var upTotal = 0, downTotal = 0;
-    try {
-      final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/traffic'));
-      if (_secret != null) req.headers.set('Authorization', 'Bearer $_secret');
-      final res = await req.close();
-      await for (final line
-          in res.transform(utf8.decoder).transform(const LineSplitter())) {
-        if (gen != _gen) break;
-        if (line.trim().isEmpty) continue;
-        final j = jsonDecode(line) as Map<String, dynamic>;
-        final up = (j['up'] as num).toInt(), down = (j['down'] as num).toInt();
-        upTotal += up;
-        downTotal += down;
-        _traffic.add(Traffic(up, down, upTotal, downTotal));
+    var failures = 0;
+    // The stream is asked for again when it drops while the connection is still up (a hiccup of the
+    // core's API), so the speed and the usage do not stop silently.
+    while (gen == _gen && failures < 5) {
+      final client = HttpClient();
+      _stats = client;
+      var got = false;
+      try {
+        final req = await client.getUrl(Uri.parse('http://127.0.0.1:$port/traffic'));
+        if (_secret != null) req.headers.set('Authorization', 'Bearer $_secret');
+        final res = await req.close();
+        await for (final line
+            in res.transform(utf8.decoder).transform(const LineSplitter())) {
+          if (gen != _gen) break;
+          if (line.trim().isEmpty) continue;
+          final j = jsonDecode(line) as Map<String, dynamic>;
+          final up = (j['up'] as num).toInt(), down = (j['down'] as num).toInt();
+          upTotal += up;
+          downTotal += down;
+          got = true;
+          _traffic.add(Traffic(up, down, upTotal, downTotal));
+        }
+      } catch (_) {
+        // the connection was closed
+      } finally {
+        client.close(force: true);
       }
-    } catch (_) {
-      // the connection was closed
-    } finally {
-      client.close(force: true);
+      if (gen != _gen) return;
+      failures = got ? 0 : failures + 1;
+      await Future<void>.delayed(const Duration(seconds: 1));
     }
   }
 

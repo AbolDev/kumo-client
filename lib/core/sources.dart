@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data' show BytesBuilder;
 
 import 'proxy_config.dart';
 import 'sub_formats.dart';
@@ -254,7 +255,9 @@ Future<Fetched?> _followUrlList(Fetched f, Duration timeout, bool allowInsecure)
       .where((l) => l.isNotEmpty && !l.startsWith('#'))
       .toList();
   if (lines.isEmpty || lines.length > 10) return null;
-  if (!lines.every((l) => l.startsWith('http://') || l.startsWith('https://'))) return null;
+  if (!lines.every((l) => (l.startsWith('http://') || l.startsWith('https://')) && isPublicUrl(l))) {
+    return null;
+  }
   final bodies = <String>[];
   for (final url in lines) {
     try {
@@ -313,6 +316,41 @@ Future<String?> _fetchPageTitle(String url, bool allowInsecure) async {
   }
 }
 
+/// The most a subscription answer may hold; a list of thousands of servers is a few megabytes.
+const _maxBody = 20 * 1024 * 1024;
+
+/// Reads the body as text, giving up on one that is far bigger than any list.
+Future<String> _readCapped(HttpClientResponse res, Duration timeout) async {
+  final bytes = BytesBuilder(copy: false);
+  await for (final chunk in res.timeout(timeout)) {
+    bytes.add(chunk);
+    if (bytes.length > _maxBody) throw HttpException('The answer is too large');
+  }
+  return utf8.decode(bytes.takeBytes(), allowMalformed: true);
+}
+
+/// Whether [url] points somewhere on the internet: not at this computer or the local network
+/// (a provider's answer must not make the app ask for addresses there).
+bool isPublicUrl(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.host.isEmpty) return false;
+  final host = uri.host.toLowerCase();
+  if (host == 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return false;
+  final ip = InternetAddress.tryParse(host);
+  if (ip == null) return true;
+  if (ip.isLoopback || ip.isLinkLocal || ip.isMulticast) return false;
+  if (ip.type == InternetAddressType.IPv4) {
+    final b = ip.rawAddress;
+    if (b[0] == 0 || b[0] == 10) return false;
+    if (b[0] == 172 && b[1] >= 16 && b[1] <= 31) return false;
+    if (b[0] == 192 && b[1] == 168) return false;
+    if (b[0] == 100 && b[1] >= 64 && b[1] <= 127) return false;
+  } else if ((ip.rawAddress[0] & 0xFE) == 0xFC) {
+    return false; // unique local addresses
+  }
+  return true;
+}
+
 Future<Fetched> _fetchOnce(
     String url, String agent, Duration timeout, bool allowInsecure) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
@@ -325,7 +363,7 @@ Future<Fetched> _fetchOnce(
     final res = await req.close().timeout(timeout);
     if (res.statusCode != 200)
       throw HttpException('HTTP ${res.statusCode}', uri: Uri.parse(url));
-    final body = await res.transform(utf8.decoder).join().timeout(timeout * 2);
+    final body = await _readCapped(res, timeout * 2);
     return Fetched.fromHeaders(
         body,
         res.headers.value('profile-title'),

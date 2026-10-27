@@ -414,7 +414,10 @@ Future<void> _install(BuildContext context, UpdateInfo info,
         lastBytes = got;
       }
       progress.value = _Progress(got, total, speed);
-    }, cancel: cancel);
+    },
+        cancel: cancel,
+        size: info.sizes[asset.name],
+        sha256: info.digests[asset.name]);
   } catch (_) {}
   if (!context.mounted) return;
   Navigator.of(context, rootNavigator: true).pop();

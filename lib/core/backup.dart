@@ -7,16 +7,19 @@ import 'package:pointycastle/export.dart';
 
 /// Backup files are JSON. With a password the payload is encrypted with AES-256-GCM, the key
 /// coming from PBKDF2-HMAC-SHA256 of the password.
-const _iterations = 60000;
+const _iterations = 150000;
+
+/// Backups made before the count was written into the file used this many.
+const _legacyIterations = 60000;
 
 Uint8List _randomBytes(int n) {
   final r = Random.secure();
   return Uint8List.fromList(List.generate(n, (_) => r.nextInt(256)));
 }
 
-Uint8List _deriveKey(String password, Uint8List salt) {
+Uint8List _deriveKey(String password, Uint8List salt, int iterations) {
   final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-    ..init(Pbkdf2Parameters(salt, _iterations, 32));
+    ..init(Pbkdf2Parameters(salt, iterations, 32));
   return pbkdf2.process(Uint8List.fromList(utf8.encode(password)));
 }
 
@@ -33,10 +36,11 @@ Future<String> sealBackup(String payload, String password) {
   }
   return Isolate.run(() {
     final salt = _randomBytes(16), nonce = _randomBytes(12);
-    final sealed = _gcm(true, _deriveKey(password, salt), nonce,
+    final sealed = _gcm(true, _deriveKey(password, salt, _iterations), nonce,
         Uint8List.fromList(utf8.encode(payload)));
     return jsonEncode({
       'kumo-backup': 1,
+      'iter': _iterations,
       'salt': base64.encode(salt),
       'nonce': base64.encode(nonce),
       'data': base64.encode(sealed),
@@ -65,8 +69,10 @@ Future<String?> openBackup(String text, String password) async {
     final salt = base64.decode(j['salt'] as String);
     final nonce = base64.decode(j['nonce'] as String);
     final data = base64.decode(j['data'] as String);
+    // A crafted file must not make the key derivation run for minutes.
+    final iterations = ((j['iter'] as num?)?.toInt() ?? _legacyIterations).clamp(1000, 600000);
     return await Isolate.run(() => utf8.decode(
-        _gcm(false, _deriveKey(password, Uint8List.fromList(salt)),
+        _gcm(false, _deriveKey(password, Uint8List.fromList(salt), iterations),
             Uint8List.fromList(nonce), Uint8List.fromList(data))));
   } catch (_) {
     return null;

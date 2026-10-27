@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HttpClient, InternetAddress, Platform, ServerSocket;
+import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket;
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 
 import '../core/backup.dart';
@@ -211,7 +212,26 @@ class AppState extends ChangeNotifier {
   bool autoUpdateSubs = true;
   bool updateOnStartup = true;
   bool updatePrerelease = false;
-  bool allowInsecure = true;
+
+  /// Subscription downloads accept a certificate that does not check out. Off by default: with it
+  /// on, anyone on the path can hand out servers of their own.
+  bool allowInsecure = false;
+
+  /// Servers of the public list may ask not to have their TLS certificate checked (the "allow
+  /// insecure" option in their link). Off by default: the certificate is always checked.
+  bool collectorAllowInsecure = false;
+
+  /// The address the public list was last downloaded from.
+  String? collectorSource;
+
+  // The stored files could not be read. They are set aside (not written over) before anything new
+  // is saved.
+  bool _storeLocked = false;
+  bool _settingsLocked = false;
+
+  /// When each subscription was last tried (not only when it last worked), so a list that comes
+  /// back empty is not asked for again every few minutes.
+  final _lastAttempt = <String, int>{};
 
   // App settings
   bool autoConnect = false;
@@ -263,6 +283,14 @@ class AppState extends ChangeNotifier {
   void dismissAlert() {
     alertText = null;
     notifyListeners();
+  }
+
+  /// Shows a banner at the top of the home screen (the text is a key of the extra strings) and
+  /// writes it to the log.
+  void _notice(String key, [Map<String, Object> args = const {}]) {
+    final lang = languageCode ?? WidgetsBinding.instance.platformDispatcher.locale.languageCode;
+    alertText = trFor(lang, key, args);
+    log('Notice: ${trFor('en', key, args)}');
   }
 
   /// Warns about [g] if its data or time is running out and the user was not told yet.
@@ -387,7 +415,6 @@ class AppState extends ChangeNotifier {
       vpn.status == VpnStatus.starting || vpn.status == VpnStatus.stopping;
 
   Future<void> init() async {
-    _listenTraffic();
     _sub = VpnChannel.states.listen((s) {
       final changed = s.status != vpn.status;
       final before = vpn.status;
@@ -403,6 +430,8 @@ class AppState extends ChangeNotifier {
       if (s.status != VpnStatus.started) {
         traffic.value = Traffic.zero;
         _lastDown = _lastUp = 0;
+        _lastTick = null;
+        _baselined = false;
         downHistory.clear();
         upHistory.clear();
         if (_usageTimer != null) {
@@ -442,11 +471,21 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     await _loadLogs();
     await _loadUsage();
+    // Only now: samples that came in earlier would be overwritten by the saved numbers.
+    _listenTraffic();
     await _loadServers();
     delayTestUrl = delayUrl;
     if (idleNotification) VpnChannel.setIdleNotification(true);
     VpnChannel.scheduleSubUpdates(autoUpdateSubs).catchError((_) {});
-    if (isDesktop) DesktopVpn.instance.standby.addListener(notifyListeners);
+    if (isDesktop) {
+      DesktopVpn.instance.standby.addListener(notifyListeners);
+      // The connection is up but the desktop's proxy setting could not be made: say so, since
+      // programs that follow that setting would not go through the proxy.
+      DesktopVpn.instance.proxyIssue.addListener(() {
+        if (DesktopVpn.instance.proxyIssue.value) _notice('proxyNotSet');
+        notifyListeners();
+      });
+    }
     _syncStandby(const Duration(seconds: 1));
     _dueTimer?.cancel();
     _dueTimer = Timer.periodic(const Duration(minutes: 10), (_) {
@@ -538,7 +577,12 @@ class AppState extends ChangeNotifier {
   /// Downloads the subscriptions whose time has come (each has its own interval).
   Future<void> _updateDueSubscriptions() async {
     for (final g in List.of(subscriptions)) {
-      if (isDue(g) && !refreshing.contains(g.id)) await refreshSubscription(g);
+      // A list that failed or came back empty is not asked for again for an hour.
+      final tried = _lastAttempt[g.id] ?? 0;
+      final waited = DateTime.now().millisecondsSinceEpoch - tried;
+      if (isDue(g) && !refreshing.contains(g.id) && waited > const Duration(hours: 1).inMilliseconds) {
+        await refreshSubscription(g);
+      }
     }
   }
 
@@ -569,6 +613,10 @@ class AppState extends ChangeNotifier {
     if (naming && title != null && g.name == Uri.tryParse(g.url ?? '')?.host) {
       g.name = title;
     }
+    final links = await extractSubscriptionLinksInBackground(fetched.body);
+    final parsed = await parseLinksInBackground(links, shuffle: false);
+    // An answer without servers (an error page, an empty list) changes nothing.
+    if (parsed.isEmpty) return 0;
     g.info = fetched.info;
     final meta = fetched.meta;
     g.providerInterval = meta.intervalHours;
@@ -578,9 +626,6 @@ class AppState extends ChangeNotifier {
     g.webPage = meta.webPage;
     g.announce = meta.announce;
     checkUsage(g);
-    final links = await extractSubscriptionLinksInBackground(fetched.body);
-    final parsed = await parseLinksInBackground(links, shuffle: false);
-    if (parsed.isEmpty) return 0;
     // Configs that were already there keep their ping.
     final known = {for (final c in g.configs) c.key: c.latencyMs};
     for (final c in parsed) {
@@ -629,16 +674,53 @@ class AppState extends ChangeNotifier {
         DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
+    // Not stopped after all: connecting now would tap a connection that is still going down.
+    if (!_idle) {
+      log('The connection did not stop in time; it was not restarted');
+      return;
+    }
     await toggle();
   }
 
   // ---------------------------------------------------------------- settings
 
-  Future<void> _loadSettings() async {
+  /// Reads a saved JSON file, or its last good copy when the file itself is damaged. [broken] is
+  /// true when the file is there but neither it nor its copy can be read: such a file must not be
+  /// written over as if it were new. A file that is not there gives no data and is not broken.
+  Future<({Map<String, dynamic>? data, bool broken})> _readJson(String name) async {
+    Future<Map<String, dynamic>?> read(String n) async {
+      final raw = await VpnChannel.readFile(n);
+      if (raw == null) return null;
+      final j = jsonDecode(raw);
+      if (j is! Map<String, dynamic>) throw const FormatException('not an object');
+      return j;
+    }
+
     try {
-      final raw = await VpnChannel.readFile(_settingsFile);
-      if (raw == null) return;
-      final j = jsonDecode(raw) as Map<String, dynamic>;
+      return (data: await read(name), broken: false);
+    } catch (e) {
+      log('$name could not be read: $e');
+      try {
+        final copy = await read('$name.bak');
+        if (copy != null) {
+          log('$name was restored from its last good copy');
+          return (data: copy, broken: false);
+        }
+      } catch (_) {}
+      return (data: null, broken: true);
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    final read = await _readJson(_settingsFile);
+    if (read.broken) {
+      _settingsLocked = true;
+      _notice('storeUnreadable', {'file': _settingsFile});
+      return;
+    }
+    final j = read.data;
+    if (j == null) return;
+    try {
       themeMode = ThemeMode.values.firstWhere((m) => m.name == j['theme'],
           orElse: () => ThemeMode.system);
       final lang = j['language'] as String?;
@@ -649,7 +731,11 @@ class AppState extends ChangeNotifier {
       updatePrerelease = flag('updatePrerelease', false);
       // Test versions are asked about at each manual check, not kept as a setting.
       includePrerelease = false;
-      allowInsecure = flag('allowInsecure', true);
+      // A new key: the old "allowInsecure" was on for everybody and is not carried over.
+      allowInsecure = flag('subInsecure', false);
+      collectorAllowInsecure = flag('collectorInsecure', false);
+      collectorSource = j['collectorSource'] is String ? j['collectorSource'] as String : null;
+      collector.updatedAt = (j['collectorUpdated'] as num?)?.toInt() ?? 0;
       autoConnect = flag('autoConnect', false);
       restartOnChange = flag('restartOnChange', true);
       confirmDelete = flag('confirmDelete', true);
@@ -686,8 +772,21 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Writes a stored file; a file that could not be read is set aside first (kept as
+  /// `<name>.broken`) so that it is not lost.
+  Future<void> _store(String name, String data, {required bool locked}) async {
+    if (locked) {
+      try {
+        await VpnChannel.moveAside(name);
+      } catch (_) {}
+    }
+    await VpnChannel.writeFile(name, data);
+  }
+
   void _saveSettings() {
-    VpnChannel.writeFile(
+    final locked = _settingsLocked;
+    _settingsLocked = false;
+    _store(
         _settingsFile,
         jsonEncode({
           'theme': themeMode.name,
@@ -695,7 +794,10 @@ class AppState extends ChangeNotifier {
           'autoUpdateSubs': autoUpdateSubs,
           'updateOnStartup': updateOnStartup,
           'updatePrerelease': updatePrerelease,
-          'allowInsecure': allowInsecure,
+          'subInsecure': allowInsecure,
+          'collectorInsecure': collectorAllowInsecure,
+          'collectorSource': collectorSource,
+          'collectorUpdated': collector.updatedAt,
           'autoConnect': autoConnect,
           'restartOnChange': restartOnChange,
           'confirmDelete': confirmDelete,
@@ -714,7 +816,9 @@ class AppState extends ChangeNotifier {
           'alertSeen': _alertSeen,
           'delayUrl': delayUrl,
           'net': net.toJson(),
-        })).catchError((_) {});
+        }),
+        locked: locked)
+        .catchError((_) {});
     notifyListeners();
   }
 
@@ -822,33 +926,56 @@ class AppState extends ChangeNotifier {
   // ---------------------------------------------------------------- storage
 
   Future<void> _loadServers() async {
+    final read = await _readJson(_storeFile);
+    if (read.broken) {
+      _storeLocked = true;
+      _notice('storeUnreadable', {'file': _storeFile});
+      return;
+    }
+    final j = read.data;
+    if (j == null) return;
+    // One damaged entry must not take the others down with it (the next save would drop them).
     try {
-      final raw = await VpnChannel.readFile(_storeFile);
-      if (raw == null) return;
-      final j = jsonDecode(raw) as Map<String, dynamic>;
       // Older versions kept one flat list: that was the collector's.
       collector.configs.addAll(parseLinks(
-          ((j['collector'] ?? j['links'] ?? const []) as List).cast<String>()));
+          ((j['collector'] ?? j['links'] ?? const []) as List).cast<String>(),
+          secure: !collectorAllowInsecure));
+    } catch (e) {
+      log('The saved public list was skipped: $e');
+    }
+    try {
       manual.configs.addAll(
           parseLinks(((j['manual'] ?? const []) as List).cast<String>()));
+    } catch (e) {
+      log('The saved manual configs were skipped: $e');
+    }
+    try {
       for (final s in (j['subs'] ?? const []) as List) {
-        final m = s as Map<String, dynamic>;
-        final g = ServerGroup(m['id'] as String, GroupKind.subscription,
-            name: m['name'] as String? ?? '', url: m['url'] as String?)
-          ..autoName = m['auto'] == true
-          ..info = SubInfo.fromJson(m['info'])
-          ..updatedAt = (m['updatedAt'] as num?)?.toInt() ?? 0
-          ..providerInterval = (m['providerInterval'] as num?)?.toInt()
-          ..customInterval = (m['customInterval'] as num?)?.toInt()
-          ..routing = m['routing'] is Map ? ProviderRouting.fromJson(m['routing'] as Map) : null
-          ..routingByProvider = m['routingByProvider'] != false
-          ..routingOn = m['routingOn'] != false
-          ..supportUrl = m['supportUrl'] as String?
-          ..webPage = m['webPage'] as String?
-          ..announce = m['announce'] as String?;
-        g.configs.addAll(parseLinks((m['links'] as List).cast<String>()));
-        subscriptions.add(g);
+        try {
+          final m = s as Map<String, dynamic>;
+          final g = ServerGroup(m['id'] as String, GroupKind.subscription,
+              name: m['name'] as String? ?? '', url: m['url'] as String?)
+            ..autoName = m['auto'] == true
+            ..info = SubInfo.fromJson(m['info'])
+            ..updatedAt = (m['updatedAt'] as num?)?.toInt() ?? 0
+            ..providerInterval = (m['providerInterval'] as num?)?.toInt()
+            ..customInterval = (m['customInterval'] as num?)?.toInt()
+            ..routing = m['routing'] is Map ? ProviderRouting.fromJson(m['routing'] as Map) : null
+            ..routingByProvider = m['routingByProvider'] != false
+            ..routingOn = m['routingOn'] != false
+            ..supportUrl = m['supportUrl'] as String?
+            ..webPage = m['webPage'] as String?
+            ..announce = m['announce'] as String?;
+          g.configs.addAll(parseLinks((m['links'] as List).cast<String>()));
+          subscriptions.add(g);
+        } catch (e) {
+          log('A saved subscription was skipped: $e');
+        }
       }
+    } catch (e) {
+      log('The saved subscriptions were skipped: $e');
+    }
+    try {
       final pings = (j['pings'] as Map?) ?? const {};
       for (final c in all) {
         final ms = pings[c.link];
@@ -869,6 +996,16 @@ class AppState extends ChangeNotifier {
       // missing or corrupt store: start fresh
     }
   }
+
+  /// Reads the saved settings and servers, as the start of the app does.
+  @visibleForTesting
+  Future<void> loadStoredForTest() async {
+    await _loadSettings();
+    await _loadServers();
+  }
+
+  @visibleForTesting
+  bool get storeLockedForTest => _storeLocked;
 
   CoreApi? get api => apiPort == null || apiSecret == null
       ? null
@@ -898,6 +1035,15 @@ class AppState extends ChangeNotifier {
   static String _dayKey(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// On the phone the VPN service counts the usage by itself while the app's screen is closed (and
+  /// the app adds that when it opens), so the first sample after the app starts listening only sets
+  /// the starting point: the totals it carries were counted already.
+  var _baselined = false;
+  var _usageDirty = false;
+
+  /// The most servers whose usage is kept; the ones used longest ago go first.
+  static const _maxServers = 300;
+
   void _onTraffic(Traffic t) {
     traffic.value = t;
     var dd = t.downTotal - _lastDown, du = t.upTotal - _lastUp;
@@ -905,6 +1051,11 @@ class AppState extends ChangeNotifier {
       dd = t.downTotal;
       du = t.upTotal;
     }
+    if (!_baselined && Platform.isAndroid) {
+      dd = 0;
+      du = 0;
+    }
+    _baselined = true;
     _lastDown = t.downTotal;
     _lastUp = t.upTotal;
     downHistory.add(t.down);
@@ -929,21 +1080,88 @@ class AppState extends ChangeNotifier {
     s[1] += du;
     s[2] += gap;
     s[3] = now.millisecondsSinceEpoch;
+    if (serverUsage.length > _maxServers) _pruneServers();
+    _usageDirty = true;
     _usageTimer ??= Timer(const Duration(seconds: 30), _writeUsage);
   }
 
-  void _writeUsage() {
+  void _pruneServers() {
+    final byLastUse = serverUsage.entries.toList()
+      ..sort((a, b) => a.value[3].compareTo(b.value[3]));
+    for (final e in byLastUse.take(serverUsage.length - _maxServers)) {
+      serverUsage.remove(e.key);
+    }
+  }
+
+  Future<void> _writeUsage() {
+    _usageTimer?.cancel();
     _usageTimer = null;
-    VpnChannel.writeFile(
-        _usageFile, jsonEncode({'days': dayUsage, 'servers': serverUsage}))
+    _usageDirty = false;
+    return VpnChannel.writeFile(
+            _usageFile,
+            jsonEncode({
+              'days': dayUsage,
+              'servers': serverUsage,
+              'peak': [peakDown, peakUp],
+            }))
         .catchError((_) {});
   }
 
-  Future<void> _loadUsage() async {
+  /// Saves the usage now (the app is being left or closed), not at the next half minute.
+  Future<void> flushUsage() => _usageDirty ? _writeUsage() : Future.value();
+
+  /// Adds what the phone's VPN service counted while the app's screen was closed.
+  Future<void> _mergePendingUsage() async {
+    if (!Platform.isAndroid) return;
     try {
-      final raw = await VpnChannel.readFile(_usageFile);
+      final raw = await VpnChannel.takeUsage();
       if (raw == null) return;
       final j = jsonDecode(raw) as Map<String, dynamic>;
+      List<int> numbers(Object? v, int length) => [
+            for (var i = 0; i < length; i++) (v is List && i < v.length) ? (v[i] as num).toInt() : 0,
+          ];
+      (j['days'] as Map?)?.forEach((k, v) {
+        final add = numbers(v, 3);
+        final day = dayUsage.putIfAbsent('$k', () => [0, 0, 0]);
+        for (var i = 0; i < 3; i++) {
+          day[i] += add[i];
+        }
+      });
+      (j['servers'] as Map?)?.forEach((k, v) {
+        final add = numbers(v, 4);
+        final s = serverUsage.putIfAbsent('$k', () => [0, 0, 0, 0]);
+        for (var i = 0; i < 3; i++) {
+          s[i] += add[i];
+        }
+        if (add[3] > s[3]) s[3] = add[3];
+      });
+      _usageDirty = true;
+      await _writeUsage();
+    } catch (_) {
+      // nothing to add
+    }
+  }
+
+  Future<void> _loadUsage() async {
+    final read = await _readJson(_usageFile);
+    final j = read.data;
+    if (j != null) {
+      try {
+        final peak = j['peak'];
+        if (peak is List && peak.length == 2) {
+          peakDown = (peak[0] as num).toInt();
+          peakUp = (peak[1] as num).toInt();
+        }
+        _readUsage(j);
+      } catch (_) {
+        // no statistics yet
+      }
+    }
+    await _mergePendingUsage();
+  }
+
+  void _readUsage(Map<String, dynamic> j) {
+    try {
       (j['days'] as Map?)?.forEach((k, v) {
         final l = (v as List).map((e) => (e as num).toInt()).toList();
         if (l.length >= 2) dayUsage['$k'] = [l[0], l[1], l.length > 2 ? l[2] : 0];
@@ -1025,7 +1243,9 @@ class AppState extends ChangeNotifier {
           .firstOrNull
           ?.id,
     });
-    VpnChannel.writeFile(_storeFile, data).catchError((_) {});
+    final locked = _storeLocked;
+    _storeLocked = false;
+    _store(_storeFile, data, locked: locked).catchError((_) {});
   }
 
   // ---------------------------------------------------------------- helpers
@@ -1178,12 +1398,16 @@ class AppState extends ChangeNotifier {
           cancel.future.then((_) => null),
         ]);
         if (result == null || _stale(key, gen)) return;
-        final parsed = await parseLinksInBackground(result.links);
+        final parsed =
+            await parseLinksInBackground(result.links, secure: !collectorAllowInsecure);
         if (_stale(key, gen)) return;
         final fresh = parsed.toList();
         collector.configs
           ..clear()
           ..addAll(fresh);
+        collectorSource = result.source;
+        collector.updatedAt = DateTime.now().millisecondsSinceEpoch;
+        _saveSettings();
         _keepSelected();
         message = (t) => t.listLoaded(fresh.length);
       } on AllSourcesFailed {
@@ -1199,10 +1423,40 @@ class AppState extends ChangeNotifier {
     tests.remove(collector.id);
     notifyListeners();
   }
+  /// Whether servers of the public list may skip the check of their TLS certificate. Off by
+  /// default; changing it parses the saved list again (the pings stay).
+  Future<void> setCollectorInsecure(bool allow) async {
+    if (collectorAllowInsecure == allow) return;
+    collectorAllowInsecure = allow;
+    final pings = {for (final c in collector.configs) c.link: c.latencyMs};
+    final chosen = selected?.link;
+    final wasSelected = collector.configs.any((c) => identical(c, selected));
+    final again = await parseLinksInBackground(
+        [for (final c in collector.configs) c.link],
+        shuffle: false, secure: !allow);
+    for (final c in again) {
+      c.latencyMs = pings[c.link];
+    }
+    collector.configs
+      ..clear()
+      ..addAll(again);
+    if (wasSelected) selected = again.where((c) => c.link == chosen).firstOrNull;
+    _saveSettings();
+    _save();
+    notifyListeners();
+    if (connected && wasSelected) await _reconnect();
+    _syncStandby();
+  }
+
+  /// How many servers of the public list ask for their certificate not to be checked.
+  int get collectorInsecureCount =>
+      collector.configs.where((c) => asksInsecure(c.link)).length;
+
   // ---------------------------------------------------------------- subscriptions
 
   Future<void> refreshSubscription(ServerGroup g, {bool naming = false}) async {
     if (g.url == null) return;
+    _lastAttempt[g.id] = DateTime.now().millisecondsSinceEpoch;
     final key = 'sub-${g.id}';
     final gen = _begin(key);
     working.add(g.id);
@@ -1221,6 +1475,8 @@ class AppState extends ChangeNotifier {
             n == 0 ? (t) => t.noValidConfig : (t) => t.subscriptionUpdated(n);
       } catch (e) {
         message = (t) => t.fetchFailed(e);
+        // The certificate did not check out: say where the switch for such servers is.
+        if (e is HandshakeException && !allowInsecure) _notice('subCertError', {'name': g.name});
       }
     });
     if (!_stale(key, gen)) {
@@ -1252,6 +1508,13 @@ class AppState extends ChangeNotifier {
   }
 
   void removeSubscription(ServerGroup g) {
+    // A download that is still going must not bring the list back, and the copy the background job
+    // left for it goes too.
+    cancelRefresh(g);
+    _lastAttempt.remove(g.id);
+    for (final name in ['subcache/${g.id}.json', 'subcache/${g.id}.json.bak']) {
+      VpnChannel.deleteFile(name).catchError((_) {});
+    }
     subscriptions.remove(g);
     if (selected != null && !all.contains(selected)) selected = null;
     _save();
@@ -1804,19 +2067,35 @@ class AppState extends ChangeNotifier {
     if (payload == null) return false;
     try {
       final j = jsonDecode(payload) as Map<String, dynamic>;
-      await VpnChannel.writeFile(_storeFile, j['servers'] as String);
-      await VpnChannel.writeFile(_settingsFile, j['settings'] as String);
-      if (j['usage'] is String) {
-        await VpnChannel.writeFile(_usageFile, j['usage'] as String);
+      final servers = j['servers'] as String;
+      final settings = j['settings'] as String;
+      final usage = j['usage'];
+      // Look before writing anything: each part must be what this app saves, or the files in
+      // place stay as they are.
+      if (jsonDecode(servers) is! Map || jsonDecode(settings) is! Map) return false;
+      if (usage is String && jsonDecode(usage) is! Map) return false;
+      await _store(_storeFile, servers, locked: _storeLocked);
+      await _store(_settingsFile, settings, locked: _settingsLocked);
+      _storeLocked = _settingsLocked = false;
+      if (usage is String) {
+        await VpnChannel.writeFile(_usageFile, usage);
       }
       collector.configs.clear();
       manual.configs.clear();
       subscriptions.clear();
       selected = null;
+      // The restored numbers replace the current ones, they are not added to them.
+      dayUsage.clear();
+      serverUsage.clear();
+      peakDown = peakUp = 0;
       await _loadSettings();
       await _loadServers();
       await _loadUsage();
       delayTestUrl = delayUrl;
+      // What the settings drive outside this object.
+      VpnChannel.scheduleSubUpdates(autoUpdateSubs).catchError((_) {});
+      VpnChannel.setIdleNotification(idleNotification);
+      _syncStandby();
       notifyListeners();
       return true;
     } catch (_) {

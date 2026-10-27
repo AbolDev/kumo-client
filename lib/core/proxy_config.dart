@@ -55,6 +55,19 @@ class ProxyConfig {
   /// True when Xray can carry this server.
   bool get canXray => xrayOutbound != null;
 
+  /// The same server under another link text (the one it was saved with).
+  ProxyConfig withLink(String original) => ProxyConfig(
+        link: original,
+        protocol: protocol,
+        name: name,
+        host: host,
+        port: port,
+        outbound: outbound,
+        xrayOutbound: xrayOutbound,
+        inner: inner,
+        xrayNote: xrayNote,
+      )..latencyMs = latencyMs;
+
   /// Short text for lists, e.g. "vless" or "vless + xhttp".
   String get label => needsXray ? '$protocol + $xrayNote' : protocol;
 
@@ -135,22 +148,69 @@ final _schemeStart = RegExp(
 /// Kept as a top-level function on purpose: a closure created inside a class method would
 /// capture `this`, and objects like the AppState (with its streams) cannot be sent to an isolate.
 Future<List<ProxyConfig>> parseLinksInBackground(List<String> links,
-        {bool shuffle = true}) =>
+        {bool shuffle = true, bool secure = false}) =>
     Isolate.run(() {
-      final parsed = parseLinks(links);
+      final parsed = parseLinks(links, secure: secure);
       return shuffle ? (parsed..shuffle()) : parsed;
     });
 
-/// Parses all links, dropping unsupported/broken ones and duplicates.
-List<ProxyConfig> parseLinks(List<String> links) {
+/// Parses all links, dropping unsupported/broken ones and duplicates. With [secure] the part of a
+/// link that asks for its TLS certificate not to be checked is ignored (the link itself is kept as
+/// it was).
+List<ProxyConfig> parseLinks(List<String> links, {bool secure = false}) {
   final seen = <String>{};
   final out = <ProxyConfig>[];
   for (final l in links) {
-    final c = parseLink(l);
+    var c = parseLink(secure ? secureLink(l) : l);
+    if (c != null && c.link != l) c = c.withLink(l);
     if (c != null && seen.add(c.key)) out.add(c);
   }
   return out;
 }
+
+const _insecureKeys = {
+  'allowinsecure',
+  'insecure',
+  'allow_insecure',
+  'skip-cert-verify',
+  'skipcertverify',
+};
+
+/// [link] without the part that asks for its TLS certificate not to be checked
+/// (`allowInsecure=1`, `insecure=1` ...). A certificate pin (`pcs`, `pinSHA256`) stays: it is a
+/// check of its own.
+String secureLink(String link) {
+  try {
+    if (link.startsWith('vmess://')) {
+      final hashAt = link.indexOf('#');
+      final body = hashAt < 0 ? link.substring(8) : link.substring(8, hashAt);
+      final j = jsonDecode(utf8.decode(_b64(body), allowMalformed: true));
+      if (j is! Map<String, dynamic>) return link;
+      final drop = j.keys.where((k) => _insecureKeys.contains(k.toLowerCase())).toList();
+      if (drop.isEmpty) return link;
+      drop.forEach(j.remove);
+      return 'vmess://${base64.encode(utf8.encode(jsonEncode(j)))}${hashAt < 0 ? '' : link.substring(hashAt)}';
+    }
+    final hashAt = link.indexOf('#');
+    final head = hashAt < 0 ? link : link.substring(0, hashAt);
+    final tail = hashAt < 0 ? '' : link.substring(hashAt);
+    final q = head.indexOf('?');
+    if (q < 0) return link;
+    final parts = head.substring(q + 1).split('&');
+    final kept = [
+      for (final p in parts)
+        if (!_insecureKeys.contains(p.split('=').first.toLowerCase())) p,
+    ];
+    if (kept.length == parts.length) return link;
+    final base = head.substring(0, q);
+    return kept.isEmpty ? '$base$tail' : '$base?${kept.join('&')}$tail';
+  } catch (_) {
+    return link;
+  }
+}
+
+/// Whether [link] asks for its TLS certificate not to be checked.
+bool asksInsecure(String link) => secureLink(link) != link;
 
 ProxyConfig? parseLink(String link) {
   try {

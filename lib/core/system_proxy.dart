@@ -1,13 +1,21 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'proxy_watchdog.dart';
 import 'win_proxy.dart';
+
+/// Whether a proxy setting ("127.0.0.1:1080", "http=127.0.0.1:1080;https=...") points at this
+/// app's proxy at 127.0.0.1:[port]. Port 1080 is not 10800.
+bool pointsAtPort(String? server, int port) =>
+    server != null &&
+    RegExp('(^|[=;\\s])(127\\.0\\.0\\.1|localhost):$port(;|\$)').hasMatch(server);
 
 /// The proxy setting of the desktop that browsers and most programs follow. [enable] points it at
 /// 127.0.0.1:[port] and writes the previous setting to a file first; [restore] puts that back (it
 /// is also used at startup, after a crash).
 abstract class SystemProxy {
-  Future<void> enable(int port);
+  /// False when the setting could not be made (or did not take), so the caller can tell the user.
+  Future<bool> enable(int port);
   /// Puts the previous setting back and then makes sure nothing is left that points at this app's own
   /// proxy at 127.0.0.1:[port] (the port the proxy was set to; when null, the one remembered). The
   /// setting that was found before is never touched when it is somebody else's proxy.
@@ -96,11 +104,14 @@ class LinuxProxy implements SystemProxy {
       ]);
 
   int? _port;
+  final _watchdog = ProxyWatchdog();
 
   @override
-  Future<void> enable(int port) async {
+  Future<bool> enable(int port) async {
     _port = port;
     try {
+      // Without the tool that holds the setting nothing can be set; the caller tells the user.
+      if (_kde ? await _kdeWriter() == null : !await _exists('gsettings')) return false;
       if (!await _backup.exists()) {
         await _backup.parent.create(recursive: true);
         if (_kde) {
@@ -121,8 +132,7 @@ class LinuxProxy implements SystemProxy {
         }
       }
       if (_kde) {
-        final write = await _kdeWriter();
-        if (write == null) return;
+        final write = (await _kdeWriter())!;
         Future<void> set(String key, String value) => _run(write,
             ['--file', 'kioslaverc', '--group', 'Proxy Settings', '--key', key, value]);
         await set('ProxyType', '1');
@@ -144,7 +154,23 @@ class LinuxProxy implements SystemProxy {
         await set('org.gnome.system.proxy', 'ignore-hosts', "[${_bypass.map((e) => "'$e'").join(', ')}]");
         await set('org.gnome.system.proxy', 'mode', 'manual');
       }
-    } catch (_) {}
+      final ok = await _isSet(port);
+      if (ok) await _watchdog.start(port);
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether the desktop's setting now points at [port].
+  Future<bool> _isSet(int port) async {
+    if (_kde) {
+      final http = await _kdeRead('httpProxy');
+      return await _kdeRead('ProxyType') == '1' && http.contains('127.0.0.1') && http.contains('$port');
+    }
+    final mode = await _run('gsettings', ['get', 'org.gnome.system.proxy', 'mode']);
+    final p = await _run('gsettings', ['get', 'org.gnome.system.proxy.http', 'port']);
+    return mode.contains('manual') && p.trim() == '$port';
   }
 
   /// Switches off a proxy that still points at [port] (checked, and tried again).
@@ -177,6 +203,7 @@ class LinuxProxy implements SystemProxy {
   @override
   Future<void> restore({int? port}) async {
     int? ours = port ?? _port;
+    _watchdog.stop();
     try {
       if (!await _backup.exists()) {
         if (ours != null) await _clearOurs(ours);
@@ -243,12 +270,14 @@ class MacProxy implements SystemProxy {
   }
 
   int? _port;
+  final _watchdog = ProxyWatchdog();
 
   @override
-  Future<void> enable(int port) async {
+  Future<bool> enable(int port) async {
     _port = port;
     try {
       final services = await _services();
+      if (services.isEmpty) return false;
       if (!await _backup.exists()) {
         await _backup.parent.create(recursive: true);
         final saved = <String, dynamic>{};
@@ -271,7 +300,13 @@ class MacProxy implements SystemProxy {
         await _run('networksetup', ['-setsocksfirewallproxy', s, '127.0.0.1', '$port']);
         await _run('networksetup', ['-setproxybypassdomains', s, ..._bypass]);
       }
-    } catch (_) {}
+      final first = await _state('-getwebproxy', services.first);
+      final ok = first.on && first.server == '127.0.0.1' && first.port == '$port';
+      if (ok) await _watchdog.start(port);
+      return ok;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Switches off every proxy of every service that still points at [port] (checked, and tried again).
@@ -299,6 +334,7 @@ class MacProxy implements SystemProxy {
   @override
   Future<void> restore({int? port}) async {
     int? ours = port ?? _port;
+    _watchdog.stop();
     try {
       if (!await _backup.exists()) {
         if (ours != null) await _clearOurs(ours);

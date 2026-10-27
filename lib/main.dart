@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, exit;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -6,7 +6,9 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/build_flavor.dart';
+import 'core/desktop_vpn.dart';
 import 'core/platform.dart';
+import 'core/single_instance.dart';
 import 'core/vpn_channel.dart';
 import 'l10n/extra.dart';
 import 'l10n/strings.dart';
@@ -19,6 +21,9 @@ import 'state/app_state.dart';
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (isDesktop) {
+    // A second copy would stop the first one's cores and fight over the proxy; it shows the first
+    // copy's window and ends.
+    if (!await SingleInstance.acquire(DesktopVpn.instance.dataDir)) exit(0);
     await windowManager.ensureInitialized();
     await windowManager.waitUntilReadyToShow(
       WindowOptions(
@@ -49,13 +54,24 @@ class KumoApp extends StatefulWidget {
   State<KumoApp> createState() => _KumoAppState();
 }
 
-class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
+class _KumoAppState extends State<KumoApp>
+    with WindowListener, TrayListener, WidgetsBindingObserver {
   final _state = AppState();
   final _navigator = GlobalKey<NavigatorState>();
+
+  /// Whether the tray icon was set up (without it a hidden window could not be brought back).
+  var _trayOk = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
+    // The usage numbers are saved every half minute; leaving the app saves them at once.
+    if (lifecycle != AppLifecycleState.resumed) _state.flushUsage();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _state.init().then((_) {
       _askBatteryOnce();
       // A newer stable release is offered when the app opens (not in the F-Droid build).
@@ -80,6 +96,7 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (isDesktop) {
       windowManager.removeListener(this);
       trayManager.removeListener(this);
@@ -100,8 +117,13 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
       await trayManager.setIcon(
           Platform.isWindows ? 'assets/tray_icon.ico' : 'assets/tray_icon.png');
       await trayManager.setToolTip('Kumo');
+      // GNOME shows no tray icons unless an extension is installed, and the icon call still
+      // succeeds there: the window is then only minimized, never hidden.
+      _trayOk = !(Platform.isLinux &&
+          (Platform.environment['XDG_CURRENT_DESKTOP'] ?? '').toUpperCase().contains('GNOME'));
     } catch (_) {
       // without a tray icon the window just stays on the taskbar
+      _trayOk = false;
     }
     _refreshTrayMenu();
   }
@@ -125,19 +147,25 @@ class _KumoAppState extends State<KumoApp> with WindowListener, TrayListener {
   }
 
   Future<void> _quit() async {
-    // The system proxy and the VPN processes must be put away before the app goes.
-    await VpnChannel.stop();
-    await VpnChannel.stopStandby();
-    try {
-      await trayManager.destroy();
-    } catch (_) {}
+    // The system proxy and the VPN processes must be put away before the app goes; whatever goes
+    // wrong in there, the window still closes.
+    for (final step in <Future<void> Function()>[
+      _state.flushUsage,
+      VpnChannel.stop,
+      VpnChannel.stopStandby,
+      trayManager.destroy,
+    ]) {
+      try {
+        await step();
+      } catch (_) {}
+    }
     await windowManager.destroy();
   }
 
   @override
   void onWindowClose() {
     if (_state.net.minimizeToTray) {
-      windowManager.hide();
+      _trayOk ? windowManager.hide() : windowManager.minimize();
     } else {
       _quit();
     }

@@ -218,6 +218,21 @@ class VpnChannel {
       ? DesktopVpn.instance.writeFile(name, content)
       : _control.invokeMethod('writeFile', {'name': name, 'content': content});
 
+  /// Renames a damaged or unreadable file to `<name>.broken`, so a fresh one can be written
+  /// without losing it.
+  static Future<void> moveAside(String name) => _win
+      ? DesktopVpn.instance.moveAside(name)
+      : _control.invokeMethod('moveAside', {'name': name});
+
+  /// Android: the usage the VPN service counted while the app's screen was closed (JSON), handed
+  /// over once. Null when there is none.
+  static Future<String?> takeUsage() =>
+      _win ? Future.value(null) : _control.invokeMethod<String>('takeUsage');
+
+  static Future<void> deleteFile(String name) => _win
+      ? DesktopVpn.instance.deleteFile(name)
+      : _control.invokeMethod('deleteFile', {'name': name});
+
   /// Android: opens the system VPN settings, where Always-on VPN and blocking can be set.
   static Future<void> openVpnSettings() async {
     if (!_win) await _control.invokeMethod('vpnSettings');

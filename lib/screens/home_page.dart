@@ -33,6 +33,7 @@ import 'my_ip_page.dart';
 import 'dns_leak_page.dart';
 import 'troubleshoot_page.dart';
 import 'share_sheet.dart';
+import 'collector_info_page.dart';
 import 'subscription_info_page.dart';
 
 String _bytes(int b) {
@@ -1365,7 +1366,9 @@ class _GroupHeader extends StatelessWidget {
         state.cancelRefresh(group);
       case _GroupAction.info:
         Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => SubscriptionInfoPage(state: state, group: group)));
+            builder: (_) => group.kind == GroupKind.collector
+                ? CollectorInfoPage(state: state)
+                : SubscriptionInfoPage(state: state, group: group)));
       case _GroupAction.edit:
         _editSubscription(context, state, group);
       case _GroupAction.share:
@@ -1461,10 +1464,11 @@ class _GroupHeader extends StatelessWidget {
                     : PopupMenuItem(
                         value: _GroupAction.refresh,
                         child: _MenuRow(Icons.refresh, t.refreshList)),
-              if (isSub) ...[
+              if (isSub || group.kind == GroupKind.collector)
                 PopupMenuItem(
                     value: _GroupAction.info,
                     child: _MenuRow(Icons.info_outline, tr(context, 'subInfo'))),
+              if (isSub) ...[
                 PopupMenuItem(
                     value: _GroupAction.edit,
                     child: _MenuRow(Icons.edit, t.edit)),

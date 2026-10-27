@@ -300,13 +300,21 @@ class MainActivity : FlutterActivity() {
                 "status" -> result.success(mapOf("status" to VpnBridge.status, "error" to VpnBridge.lastError, "standby" to VpnBridge.standby))
                 // Tiny key/value store (a file per key in the app's private dir).
                 "readFile" -> {
-                    val f = File(filesDir, call.argument<String>("name")!!)
-                    result.success(if (f.exists()) f.readText() else null)
+                    result.success(Store.read(filesDir, call.argument<String>("name")!!))
                 }
                 "writeFile" -> {
-                    File(filesDir, call.argument<String>("name")!!).writeText(call.argument<String>("content") ?: "")
+                    Store.write(filesDir, call.argument<String>("name")!!, call.argument<String>("content") ?: "")
                     result.success(null)
                 }
+                "moveAside" -> {
+                    Store.moveAside(filesDir, call.argument<String>("name")!!)
+                    result.success(null)
+                }
+                "deleteFile" -> {
+                    Store.delete(filesDir, call.argument<String>("name")!!)
+                    result.success(null)
+                }
+                "takeUsage" -> result.success(PendingUsage.take())
                 else -> result.notImplemented()
             }
         }
@@ -317,6 +325,8 @@ class MainActivity : FlutterActivity() {
                     VpnBridge.trafficListener = { up, down, upTotal, downTotal ->
                         events.success(listOf(up, down, upTotal, downTotal))
                     }
+                    // What was counted while the screen was closed is saved for the app to read.
+                    Thread { PendingUsage.flush() }.start()
                 }
 
                 override fun onCancel(arguments: Any?) {

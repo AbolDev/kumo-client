@@ -44,9 +44,14 @@ object VpnBridge {
     @Volatile
     var serverName: String? = null
 
-    fun traffic(up: Long, down: Long, upTotal: Long, downTotal: Long) {
+    fun traffic(up: Long, down: Long, upTotal: Long, downTotal: Long, usageName: String) {
         WidgetFeed.onTraffic(up, down, upTotal, downTotal)
-        if (trafficListener == null) return // the app is in the background
+        if (trafficListener == null) {
+            // The app's screen is closed: nobody counts the usage but us.
+            PendingUsage.add(upTotal, downTotal, usageName)
+            return
+        }
+        PendingUsage.baseline(upTotal, downTotal)
         main.post { trafficListener?.invoke(up, down, upTotal, downTotal) }
     }
 
@@ -81,6 +86,7 @@ object VpnBridge {
         status = newStatus
         lastError = error
         if (newStatus == STOPPED || newStatus == ERROR) {
+            PendingUsage.reset()
             WidgetFeed.reset()
             serverName = null
         }

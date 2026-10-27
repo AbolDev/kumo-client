@@ -36,9 +36,41 @@ const _maxAge = Duration(days: 7);
 /// The ad lists change every day.
 const _adsMaxAge = Duration(days: 2);
 
+/// The most a rule-set download may hold; the biggest list is a few megabytes.
+const _maxDownload = 64 * 1024 * 1024;
+
+/// Downloads running now, by target file: two asks for the same file (the tunnel and the standby
+/// proxy start together) share one download instead of writing to the same file at once.
+final _inFlight = <String, Future<bool>>{};
+
+/// sing-box binary rule sets start with the bytes "SRS". A portal's web page or a cut-off download
+/// does not, and sing-box would refuse to start with such a file.
+bool _isSrs(List<int> head) =>
+    head.length >= 4 && head[0] == 0x53 && head[1] == 0x52 && head[2] == 0x53;
+
+Future<bool> _validFile(File file, {required bool text}) async {
+  try {
+    final f = await file.open();
+    try {
+      final head = await f.read(4);
+      return text ? head.isNotEmpty && head[0] == 0x7B : _isSrs(head); // "{" for a source list
+    } finally {
+      await f.close();
+    }
+  } catch (_) {
+    return false;
+  }
+}
+
 /// Downloads the first address that answers. With [convert] the body is read as text and turned into
 /// the file to keep (null: the body is not what it should be, so the next address is tried).
-Future<bool> _download(List<String> urls, File target, {String? Function(String)? convert}) async {
+Future<bool> _download(List<String> urls, File target, {String? Function(String)? convert}) =>
+    _inFlight.putIfAbsent(
+        target.path,
+        () => _downloadOnce(urls, target, convert: convert)
+            .whenComplete(() => _inFlight.remove(target.path)));
+
+Future<bool> _downloadOnce(List<String> urls, File target, {String? Function(String)? convert}) async {
   for (final url in urls) {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
     try {
@@ -48,17 +80,20 @@ Future<bool> _download(List<String> urls, File target, {String? Function(String)
       final bytes = <int>[];
       await for (final chunk in res.timeout(const Duration(seconds: 20))) {
         bytes.addAll(chunk);
+        if (bytes.length > _maxDownload) throw const HttpException('too large');
       }
       if (bytes.length < 16) continue;
       await target.parent.create(recursive: true);
+      final tmp = File('${target.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
       if (convert != null) {
         final text = convert(utf8.decode(bytes, allowMalformed: true));
         if (text == null) continue;
-        await File('${target.path}.tmp').writeAsString(text, flush: true);
+        await tmp.writeAsString(text, flush: true);
       } else {
-        await File('${target.path}.tmp').writeAsBytes(bytes, flush: true);
+        if (!_isSrs(bytes)) continue;
+        await tmp.writeAsBytes(bytes, flush: true);
       }
-      await File('${target.path}.tmp').rename(target.path);
+      await tmp.rename(target.path);
       return true;
     } catch (_) {
       // try the next mirror
@@ -84,7 +119,14 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
   Future<void> fetch(String tag, List<String> urls, {bool text = false, Duration maxAge = _maxAge}) async {
     final file = File('$dir/rules/$tag.${text ? 'json' : 'srs'}');
     Future<void> one() async {
-      final exists = await file.exists();
+      var exists = await file.exists();
+      // A file from before the checks, or a damaged one, is replaced rather than trusted.
+      if (exists && !await _validFile(file, text: text)) {
+        try {
+          await file.delete();
+        } catch (_) {}
+        exists = false;
+      }
       final old = exists && DateTime.now().difference(await file.lastModified()) > maxAge;
       if (!exists || old) {
         if (wait || exists) {
