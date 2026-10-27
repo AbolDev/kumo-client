@@ -636,12 +636,12 @@ class SFa implements S {
   @override
   String get ok => 'تأیید';
   @override
-  String get tcping => 'TCPing';
+  String get tcping => 'تست TCP';
   @override
-  String get realDelay => 'Real delay';
+  String get realDelay => 'تأخیر واقعی';
   @override
   String get realDelayNeedsDisconnect =>
-      'Real delay فقط در حالت قطع اتصال قابل اندازه‌گیری است.';
+      'تأخیر واقعی فقط در حالت قطع اتصال قابل اندازه‌گیری است.';
   @override
   String get advanced => 'پیشرفته';
   @override
@@ -704,7 +704,7 @@ class SFa implements S {
   String get showSpeedDesc =>
       'سرعت لحظه‌ای و حجم مصرف‌شده در اعلان نمایش داده شود';
   @override
-  String get delayUrlTitle => 'آدرس تست Real delay (http/https)';
+  String get delayUrlTitle => 'آدرس تست تأخیر واقعی (http/https)';
   @override
   String get resetDefault => 'بازگشت به پیش‌فرض';
   @override
@@ -747,7 +747,7 @@ class SFa implements S {
   @override
   String get copyLogs => 'کپی همه';
   @override
-  String get removeDeadTitle => 'تست Real delay';
+  String get removeDeadTitle => 'تست تأخیر واقعی';
   @override
   String get removeDeadOption => 'کانفیگ‌هایی که پاسخ نمی‌دهند حذف شوند';
   @override
