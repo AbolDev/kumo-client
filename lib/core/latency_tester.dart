@@ -286,8 +286,8 @@ Future<void> testReal(
 }
 
 // Every test starts its own core; more of them at once only slow each other down and inflate the
-// numbers.
-const _realWorkers = 6;
+// numbers. A phone has far less CPU to share between their TLS handshakes than a computer.
+final _realWorkers = Platform.isAndroid ? 4 : 6;
 
 /// TCP connect time to the server in ms, or -1 if it can't be reached. The lookup of the server's
 /// name comes first and is not counted: with it, every server with a name showed the time of a
