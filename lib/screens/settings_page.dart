@@ -213,27 +213,29 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   /// Rows of one kind in a single rounded card, with thin lines between them.
-  Widget _group(List<Widget> children) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      child: Column(children: [
-        for (final (i, c) in children.indexed) ...[
-          if (i > 0)
-            Divider(
-                height: 1, indent: 16, endIndent: 16, color: scheme.outlineVariant),
-          c,
-        ],
-      ]),
-    );
-  }
+  // The colours are read inside a Builder so the card follows a theme change (the theme fades
+  // over a few frames, and the State's own context would keep the first of them).
+  Widget _group(List<Widget> children) => Builder(builder: (context) {
+        final scheme = Theme.of(context).colorScheme;
+        return Card(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          clipBehavior: Clip.antiAlias,
+          color: scheme.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: scheme.outlineVariant),
+          ),
+          child: Column(children: [
+            for (final (i, c) in children.indexed) ...[
+              if (i > 0)
+                Divider(
+                    height: 1, indent: 16, endIndent: 16, color: scheme.outlineVariant),
+              c,
+            ],
+          ]),
+        );
+      });
 
   /// Keeps the lists a comfortable width on a wide desktop window.
   Widget _page(List<Widget> children) => Align(
@@ -247,44 +249,45 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       );
 
-  Widget _tile(List<int> path, _Section s) {
-    final scheme = Theme.of(context).colorScheme;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      leading: CircleAvatar(
-        radius: 20,
-        backgroundColor: scheme.primaryContainer,
-        child: Icon(s.icon, size: 22, color: scheme.onPrimaryContainer),
-      ),
-      title: Text(s.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      trailing: Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: Text(s.title)),
-            // The section is built again on every change, so switches and radios follow the state.
-            body: ListenableBuilder(
-              listenable: Listenable.merge([state, _refresh]),
-              builder: (context, _) {
-                final cur = _resolve(context, path);
-                return _page([
-                  if (cur.children.isNotEmpty) _group(cur.children),
-                  if (cur.children.isNotEmpty && cur.subs.isNotEmpty)
-                    const SizedBox(height: 12),
-                  if (cur.subs.isNotEmpty)
-                    _group([
-                      for (final (i, sub) in cur.subs.indexed)
-                        _tile([...path, i], sub),
+  Widget _tile(List<int> path, _Section s) => Builder(builder: (tileContext) {
+        final scheme = Theme.of(tileContext).colorScheme;
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          leading: CircleAvatar(
+            radius: 20,
+            backgroundColor: scheme.primaryContainer,
+            child: Icon(s.icon, size: 22, color: scheme.onPrimaryContainer),
+          ),
+          title: Text(s.title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          trailing: Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+          onTap: () => Navigator.push(
+            tileContext,
+            MaterialPageRoute<void>(
+              // The page is built again on every change (state, theme, language), so the title,
+              // the switches and the colours all follow it.
+              builder: (_) => ListenableBuilder(
+                listenable: Listenable.merge([state, _refresh]),
+                builder: (context, _) {
+                  final cur = _resolve(context, path);
+                  return Scaffold(
+                    appBar: AppBar(title: Text(cur.title)),
+                    body: _page([
+                      if (cur.children.isNotEmpty) _group(cur.children),
+                      if (cur.children.isNotEmpty && cur.subs.isNotEmpty)
+                        const SizedBox(height: 12),
+                      if (cur.subs.isNotEmpty)
+                        _group([
+                          for (final (i, sub) in cur.subs.indexed)
+                            _tile([...path, i], sub),
+                        ]),
                     ]),
-                ]);
-              },
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      ),
-    );
-  }
+        );
+      });
   List<_Section> _sections(BuildContext context) {
     final t = S.of(context);
     final modes = {

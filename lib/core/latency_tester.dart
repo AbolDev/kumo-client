@@ -147,14 +147,17 @@ Future<int> tunnelDelay(
         await Socket.connect('127.0.0.1', socksPort, timeout: timeout);
     try {
       final reader = StreamIterator<List<int>>(socket);
+      // Exactly [n] bytes; what arrives beyond them waits for the next call.
+      final buffer = <int>[];
       Future<List<int>> take(int n) async {
-        final out = <int>[];
-        while (out.length < n) {
+        while (buffer.length < n) {
           if (!await reader.moveNext().timeout(timeout)) {
             throw const SocketException('closed');
           }
-          out.addAll(reader.current);
+          buffer.addAll(reader.current);
         }
+        final out = buffer.sublist(0, n);
+        buffer.removeRange(0, n);
         return out;
       }
 
@@ -164,7 +167,22 @@ Future<int> tunnelDelay(
       final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
       socket.add([5, 1, 0, 3, host.length, ...host, port >> 8, port & 255]);
       if ((await take(2))[1] != 0) return -1;
-      // The proxy reached the server: that is the delay through Xray.
+      // Xray answers the SOCKS request at once, before its own connection to the server is up,
+      // so that time says nothing (3 or 4 ms). The delay is the time until the page answers:
+      // a plain HTTP request is sent through the connection and the first reply byte awaited.
+      // (An https address is asked over http: only the round trip matters here.)
+      // the rest of the SOCKS reply: reserved byte, address type, the address and the port
+      final kind = (await take(2))[1];
+      if (kind == 3) {
+        await take((await take(1))[0] + 2);
+      } else {
+        await take((kind == 4 ? 16 : 4) + 2);
+      }
+      final path = uri.path.isEmpty ? '/' : uri.path;
+      final query = uri.hasQuery ? '?${uri.query}' : '';
+      socket.add(utf8.encode('GET $path$query HTTP/1.1\r\n'
+          'Host: ${uri.host}\r\nUser-Agent: Kumo\r\nConnection: close\r\n\r\n'));
+      await take(1);
       return sw.elapsedMilliseconds;
     } finally {
       socket.destroy();
