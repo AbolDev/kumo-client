@@ -12,7 +12,7 @@ import 'core/single_instance.dart';
 import 'core/vpn_channel.dart';
 import 'l10n/extra.dart';
 import 'l10n/strings.dart';
-import 'screens/home_page.dart' show HomePage, HomeTitleActions;
+import 'screens/home_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/update_dialog.dart';
 import 'widgets/title_bar.dart';
@@ -58,7 +58,6 @@ class _KumoAppState extends State<KumoApp>
     with WindowListener, TrayListener, WidgetsBindingObserver {
   final _state = AppState();
   final _navigator = GlobalKey<NavigatorState>();
-  final _routes = _PageDepth();
 
   /// Whether the tray icon was set up (without it a hidden window could not be brought back).
   var _trayOk = false;
@@ -248,25 +247,12 @@ class _KumoAppState extends State<KumoApp>
       builder: (context, _) => MaterialApp(
         title: 'Kumo',
         navigatorKey: _navigator,
-        navigatorObservers: [_routes],
         // A very wide desktop window keeps its content in the middle, on the same background.
         builder: (context, child) => isDesktop
             ? ColoredBox(
                 color: Theme.of(context).colorScheme.surface,
                 child: Column(children: [
-                  // The buttons of the home screen share the row of the window buttons; any other
-                  // screen has its own bar below this one.
-                  if (Platform.isWindows)
-                    ListenableBuilder(
-                      listenable: Listenable.merge([_state, _routes.onHome]),
-                      builder: (context, _) {
-                        final home = _routes.onHome.value && _state.settingsLoaded && _state.onboarded;
-                        return AppTitleBar(
-                          leading: home ? const TitleBrand() : null,
-                          actions: home ? HomeTitleActions(state: _state, navigator: _navigator) : null,
-                        );
-                      },
-                    ),
+                  if (Platform.isWindows) const AppTitleBar(),
                   Expanded(
                     child: Center(
                         child: ConstrainedBox(
@@ -298,27 +284,4 @@ class _KumoAppState extends State<KumoApp>
       ),
     );
   }
-}
-
-/// Tells whether the screen on top is the first one (the home screen), not a page opened from it:
-/// the title bar shows the buttons of the home screen only then. Menus and dialogs do not count.
-class _PageDepth extends NavigatorObserver {
-  final onHome = ValueNotifier<bool>(true);
-  var _above = 0;
-
-  void _change(int by, Route<dynamic> route, Route<dynamic>? previous) {
-    // The first route has nothing below it; only pages (not popup menus or dialogs) count.
-    if (route is! PageRoute || previous == null) return;
-    _above += by;
-    onHome.value = _above <= 0;
-  }
-
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _change(1, route, previousRoute);
-
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _change(-1, route, previousRoute);
-
-  @override
-  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => _change(-1, route, previousRoute);
 }
