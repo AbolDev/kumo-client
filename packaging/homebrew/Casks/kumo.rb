@@ -1,6 +1,6 @@
 cask "kumo" do
-  version "1.9.0"
-  sha256 "d465fa1951a7c12344c47152312081f61e572c01f9d873089f91a2d24b003ec9"
+  version "1.10.0"
+  sha256 "65545f5910b91ba035a9a0e12e3118072df0a7fceaba228ebff6be9d5dd3eee9"
 
   url "https://github.com/AbolDev/kumo-client/releases/download/v#{version}/kumo-macos-universal.dmg"
   name "Kumo"
