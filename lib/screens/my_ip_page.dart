@@ -70,6 +70,7 @@ class _MyIpPageState extends State<MyIpPage> {
               ?.copyWith(fontWeight: FontWeight.w600)),
       trailing: copy && value != null && value.isNotEmpty
           ? IconButton(
+              tooltip: MaterialLocalizations.of(context).copyButtonLabel,
               icon: const Icon(Icons.copy),
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: value));

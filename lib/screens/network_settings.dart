@@ -232,6 +232,7 @@ List<Widget> networkSections(
         trailing: o.chain.isEmpty
             ? null
             : IconButton(
+                tooltip: MaterialLocalizations.of(context).clearButtonTooltip,
                 icon: const Icon(Icons.close),
                 onPressed: () => state.updateNet((o) => o.chain = ''),
               ),
@@ -475,6 +476,7 @@ class _LanPasswordState extends State<_LanPassword> {
       onTap: widget.onCopy,
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         IconButton(
+          tooltip: tr(context, _show ? 'a11yHidePassword' : 'a11yShowPassword'),
           icon: Icon(_show ? Icons.visibility_off : Icons.visibility),
           onPressed: () => setState(() => _show = !_show),
         ),
@@ -633,6 +635,7 @@ Future<void> _editProxyLogin(BuildContext context, AppState state) async {
                 labelText: tr(dialog, 'proxyPass'),
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
+                  tooltip: tr(dialog, show ? 'a11yHidePassword' : 'a11yShowPassword'),
                   icon: Icon(show ? Icons.visibility_off : Icons.visibility),
                   onPressed: () => setState(() => show = !show),
                 ),

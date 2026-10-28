@@ -84,21 +84,24 @@ class _UsagePageState extends State<UsagePage> {
             children: [
               _speedCard(context),
               const SizedBox(height: 16),
-              SegmentedButton<_Period>(
-                showSelectedIcon: false,
-                segments: [
-                  for (final p in _Period.values)
-                    ButtonSegment(
-                        value: p,
-                        label: Text(tr(context, p.key),
-                            maxLines: 1, overflow: TextOverflow.ellipsis)),
-                ],
-                selected: {_period},
-                onSelectionChanged: (s) => setState(() {
-                  _period = s.first;
-                  _picked = null;
-                }),
-              ),
+              Semantics(
+                  container: true,
+                  label: tr(context, 'a11yPeriod'),
+                  child: SegmentedButton<_Period>(
+                    showSelectedIcon: false,
+                    segments: [
+                      for (final p in _Period.values)
+                        ButtonSegment(
+                            value: p,
+                            label: Text(tr(context, p.key),
+                                maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                    selected: {_period},
+                    onSelectionChanged: (s) => setState(() {
+                      _period = s.first;
+                      _picked = null;
+                    }),
+                  )),
               const SizedBox(height: 12),
               if (empty)
                 _emptyCard(context)
@@ -131,7 +134,9 @@ class _UsagePageState extends State<UsagePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Text(tr(context, 'speed'), style: style.titleSmall),
+                Semantics(
+                    header: true,
+                    child: Text(tr(context, 'speed'), style: style.titleSmall)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Align(
@@ -139,23 +144,38 @@ class _UsagePageState extends State<UsagePage> {
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        _arrowText('↓', '${formatBytes(t.down)}/s', _downColor, style.titleMedium),
+                        _arrowText('↓', '${formatBytes(t.down)}/s', _downColor,
+                            style.titleMedium),
                         const SizedBox(width: 14),
-                        _arrowText('↑', '${formatBytes(t.up)}/s', _upColor, style.titleMedium),
+                        _arrowText('↑', '${formatBytes(t.up)}/s', _upColor,
+                            style.titleMedium),
                       ]),
                     ),
                   ),
                 ),
               ]),
               const SizedBox(height: 10),
-              SizedBox(
-                height: 110,
-                child: CustomPaint(
-                  size: Size.infinite,
-                  painter: _SpeedChart(List.of(state.downHistory), List.of(state.upHistory),
-                      _downColor, _upColor, scheme.outlineVariant, scheme.onSurfaceVariant),
-                ),
-              ),
+              Semantics(
+                  label: tr(context, 'a11yChart', {
+                    'down': '${formatBytes(t.down)}/s',
+                    'up': '${formatBytes(t.up)}/s',
+                    'peak':
+                        '${formatBytes(state.peakDown > state.peakUp ? state.peakDown : state.peakUp)}/s',
+                  }),
+                  excludeSemantics: true,
+                  child: SizedBox(
+                    height: 110,
+                    child: CustomPaint(
+                      size: Size.infinite,
+                      painter: _SpeedChart(
+                          List.of(state.downHistory),
+                          List.of(state.upHistory),
+                          _downColor,
+                          _upColor,
+                          scheme.outlineVariant,
+                          scheme.onSurfaceVariant),
+                    ),
+                  )),
               const SizedBox(height: 10),
               Wrap(spacing: 18, runSpacing: 4, children: [
                 _fact(context, tr(context, 'usePeak'),
@@ -175,7 +195,8 @@ class _UsagePageState extends State<UsagePage> {
     return Text.rich(
       TextSpan(children: [
         TextSpan(text: '$label  ', style: TextStyle(color: muted)),
-        TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        TextSpan(
+            text: value, style: const TextStyle(fontWeight: FontWeight.w600)),
       ]),
       style: const TextStyle(fontSize: 12),
     );
@@ -184,7 +205,9 @@ class _UsagePageState extends State<UsagePage> {
   Widget _arrowText(String arrow, String text, Color color, TextStyle? style) {
     return Text.rich(
       TextSpan(children: [
-        TextSpan(text: '$arrow ', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+        TextSpan(
+            text: '$arrow ',
+            style: TextStyle(color: color, fontWeight: FontWeight.bold)),
         TextSpan(text: text),
       ]),
       style: style,
@@ -203,7 +226,8 @@ class _UsagePageState extends State<UsagePage> {
         child: Column(children: [
           Icon(Icons.bar_chart_rounded, size: 48, color: scheme.outline),
           const SizedBox(height: 12),
-          Text(tr(context, 'useNoData'), style: Theme.of(context).textTheme.titleMedium),
+          Text(tr(context, 'useNoData'),
+              style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 6),
           Text(tr(context, 'useNoDataDesc'),
               textAlign: TextAlign.center,
@@ -225,11 +249,13 @@ class _UsagePageState extends State<UsagePage> {
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(tr(context, 'useTotal'),
-              style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+              style:
+                  text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
           const SizedBox(height: 2),
           Text(formatBytes(s.total),
               textDirection: TextDirection.ltr,
-              style: text.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+              style:
+                  text.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           // The share of download and upload as one bar.
           Directionality(
@@ -240,13 +266,20 @@ class _UsagePageState extends State<UsagePage> {
                 height: 10,
                 child: Row(children: [
                   Expanded(
-                      flex: (s.downShare * 1000).round().clamp(s.total == 0 ? 500 : 1, 999),
-                      child: Container(color: s.total == 0 ? scheme.outlineVariant : _downColor)),
+                      flex: (s.downShare * 1000)
+                          .round()
+                          .clamp(s.total == 0 ? 500 : 1, 999),
+                      child: Container(
+                          color: s.total == 0
+                              ? scheme.outlineVariant
+                              : _downColor)),
                   Expanded(
                       flex: ((1 - s.downShare) * 1000)
                           .round()
                           .clamp(s.total == 0 ? 500 : 1, 999),
-                      child: Container(color: s.total == 0 ? scheme.outlineVariant : _upColor)),
+                      child: Container(
+                          color:
+                              s.total == 0 ? scheme.outlineVariant : _upColor)),
                 ]),
               ),
             ),
@@ -254,11 +287,17 @@ class _UsagePageState extends State<UsagePage> {
           const SizedBox(height: 8),
           Row(children: [
             Expanded(
-                child: _arrowText('↓', '${tr(context, 'useDownloaded')}  ${formatBytes(s.down)}',
-                    _downColor, text.bodySmall)),
+                child: _arrowText(
+                    '↓',
+                    '${tr(context, 'useDownloaded')}  ${formatBytes(s.down)}',
+                    _downColor,
+                    text.bodySmall)),
             Expanded(
-                child: _arrowText('↑', '${tr(context, 'useUploaded')}  ${formatBytes(s.up)}',
-                    _upColor, text.bodySmall)),
+                child: _arrowText(
+                    '↑',
+                    '${tr(context, 'useUploaded')}  ${formatBytes(s.up)}',
+                    _upColor,
+                    text.bodySmall)),
           ]),
           const Divider(height: 28),
           LayoutBuilder(builder: (context, c) {
@@ -269,17 +308,22 @@ class _UsagePageState extends State<UsagePage> {
                     Icon(icon, size: 20, color: scheme.primary),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-                        Text(value,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textDirection: TextDirection.ltr,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                      ]),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.onSurfaceVariant)),
+                            Text(value,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textDirection: TextDirection.ltr,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                          ]),
                     ),
                   ]),
                 );
@@ -290,7 +334,9 @@ class _UsagePageState extends State<UsagePage> {
                   '${s.activeDays}'),
               tile(Icons.speed_outlined, tr(context, 'useAvgDay'),
                   s.activeDays == 0 ? '—' : formatBytes(s.averagePerDay)),
-              tile(Icons.local_fire_department_outlined, tr(context, 'useBusiest'),
+              tile(
+                  Icons.local_fire_department_outlined,
+                  tr(context, 'useBusiest'),
                   s.busiestDay == null
                       ? '—'
                       : '${s.busiestDay!.substring(5)}  ${formatBytes(s.busiestBytes)}'),
@@ -307,7 +353,8 @@ class _UsagePageState extends State<UsagePage> {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final peak = bars.fold<int>(1, (m, b) => b.total > m ? b.total : m);
-    final shown = bars.firstWhere((b) => b.key == _picked, orElse: () => bars.last);
+    final shown =
+        bars.firstWhere((b) => b.key == _picked, orElse: () => bars.last);
     final isToday = shown.key == bars.last.key;
     final sparse = bars.length > 14;
     const chartHeight = 120.0;
@@ -317,10 +364,13 @@ class _UsagePageState extends State<UsagePage> {
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Text(tr(context, 'perDay'), style: text.titleSmall),
+            Semantics(
+                header: true,
+                child: Text(tr(context, 'perDay'), style: text.titleSmall)),
             const Spacer(),
             Text(isToday ? tr(context, 'today') : shown.key.substring(5),
-                style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                style:
+                    text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
           ]),
           const SizedBox(height: 4),
           Row(children: [
@@ -329,9 +379,11 @@ class _UsagePageState extends State<UsagePage> {
                 style: text.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(width: 12),
             Expanded(
-              child: Text('↓ ${formatBytes(shown.down)}   ↑ ${formatBytes(shown.up)}',
+              child: Text(
+                  '↓ ${formatBytes(shown.down)}   ↑ ${formatBytes(shown.up)}',
                   textDirection: TextDirection.ltr,
-                  style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                  style:
+                      text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
             ),
           ]),
           const SizedBox(height: 12),
@@ -340,15 +392,32 @@ class _UsagePageState extends State<UsagePage> {
             child: Column(children: [
               SizedBox(
                 height: chartHeight,
-                child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                child:
+                    Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   for (final b in bars)
                     Expanded(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
+                      child: Semantics(
+                        button: true,
+                        selected: b.key == shown.key,
+                        excludeSemantics: true,
+                        label: b.total == 0
+                            ? tr(context, 'a11yDayNone', {'date': b.key})
+                            : tr(context, 'a11yDayBar', {
+                                'date': b.key,
+                                'total': formatBytes(b.total),
+                                'down': formatBytes(b.down),
+                                'up': formatBytes(b.up),
+                              }),
                         onTap: () => setState(() => _picked = b.key),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: sparse ? 1 : 4),
-                          child: _bar(b, peak, chartHeight, b.key == shown.key, scheme),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _picked = b.key),
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: sparse ? 1 : 4),
+                            child: _bar(b, peak, chartHeight,
+                                b.key == shown.key, scheme),
+                          ),
                         ),
                       ),
                     ),
@@ -360,14 +429,17 @@ class _UsagePageState extends State<UsagePage> {
                   Expanded(
                     child: Text(
                       // With 30 bars only every fifth day, counted back from today, has a number.
-                      sparse && (bars.length - 1 - i) % 5 != 0 ? '' : '${bars[i].date.day}',
+                      sparse && (bars.length - 1 - i) % 5 != 0
+                          ? ''
+                          : '${bars[i].date.day}',
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       softWrap: false,
                       overflow: TextOverflow.visible,
                       style: TextStyle(
                           fontSize: 10,
-                          fontWeight: bars[i].key == shown.key ? FontWeight.bold : null,
+                          fontWeight:
+                              bars[i].key == shown.key ? FontWeight.bold : null,
                           color: bars[i].key == shown.key
                               ? scheme.onSurface
                               : scheme.onSurfaceVariant),
@@ -381,7 +453,8 @@ class _UsagePageState extends State<UsagePage> {
     );
   }
 
-  Widget _bar(DayBar b, int peak, double height, bool selected, ColorScheme scheme) {
+  Widget _bar(
+      DayBar b, int peak, double height, bool selected, ColorScheme scheme) {
     if (b.total == 0) {
       return Align(
         alignment: Alignment.bottomCenter,
@@ -403,23 +476,30 @@ class _UsagePageState extends State<UsagePage> {
         child: SizedBox(
           height: h,
           child: Column(children: [
-            if (upH > 0) Expanded(flex: upH.round().clamp(1, 1 << 20), child: _fill(_upColor, opacity)),
+            if (upH > 0)
+              Expanded(
+                  flex: upH.round().clamp(1, 1 << 20),
+                  child: _fill(_upColor, opacity)),
             Expanded(
-                flex: (h - upH).round().clamp(1, 1 << 20), child: _fill(_downColor, opacity)),
+                flex: (h - upH).round().clamp(1, 1 << 20),
+                child: _fill(_downColor, opacity)),
           ]),
         ),
       ),
     );
   }
 
-  Widget _fill(Color c, double opacity) => ColoredBox(color: c.withValues(alpha: opacity));
+  Widget _fill(Color c, double opacity) =>
+      ColoredBox(color: c.withValues(alpha: opacity));
 
   // ---------------------------------------------------------------- servers
 
-  Widget _serversCard(BuildContext context, List<MapEntry<String, List<int>>> servers) {
+  Widget _serversCard(
+      BuildContext context, List<MapEntry<String, List<int>>> servers) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final sum = servers.fold<int>(0, (m, e) => m + AppState.serverTotal(e.value));
+    final sum =
+        servers.fold<int>(0, (m, e) => m + AppState.serverTotal(e.value));
     final top = AppState.serverTotal(servers.first.value);
     final unitH = tr(context, 'useUnitH'),
         unitM = tr(context, 'useUnitM'),
@@ -442,44 +522,54 @@ class _UsagePageState extends State<UsagePage> {
                 final total = AppState.serverTotal(v);
                 final pct = sum == 0 ? 0 : (total * 100 / sum).round();
                 final parts = <String>[
-                  if (v[0] + v[1] > 0) '↓ ${formatBytes(v[0])}  ↑ ${formatBytes(v[1])}',
-                  if (v[2] > 0) formatDuration(v[2], h: unitH, m: unitM, s: unitS),
+                  if (v[0] + v[1] > 0)
+                    '↓ ${formatBytes(v[0])}  ↑ ${formatBytes(v[1])}',
+                  if (v[2] > 0)
+                    formatDuration(v[2], h: unitH, m: unitM, s: unitS),
                   if (v[3] > 0) _lastUsed(context, v[3]),
                 ];
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Expanded(
-                        child: Text(e.key,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(formatBytes(total), textDirection: TextDirection.ltr),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 38,
-                        child: Text('$pct%',
-                            textAlign: TextAlign.end,
-                            textDirection: TextDirection.ltr,
-                            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-                      ),
-                    ]),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: LinearProgressIndicator(
-                          value: top == 0 ? 0 : total / top, minHeight: 6),
-                    ),
-                    if (parts.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(parts.join('  ·  '),
-                          textDirection: TextDirection.ltr,
-                          style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
-                    ],
-                  ]),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Expanded(
+                            child: Text(e.key,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(formatBytes(total),
+                              textDirection: TextDirection.ltr),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 38,
+                            child: Text('$pct%',
+                                textAlign: TextAlign.end,
+                                textDirection: TextDirection.ltr,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.onSurfaceVariant)),
+                          ),
+                        ]),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                              value: top == 0 ? 0 : total / top, minHeight: 6),
+                        ),
+                        if (parts.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(parts.join('  ·  '),
+                              textDirection: TextDirection.ltr,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: scheme.onSurfaceVariant)),
+                        ],
+                      ]),
                 );
               }),
             ],
@@ -503,14 +593,16 @@ class _UsagePageState extends State<UsagePage> {
 
 /// The last two minutes of speed: the newest sample sits at the right edge.
 class _SpeedChart extends CustomPainter {
-  _SpeedChart(this.down, this.up, this.downColor, this.upColor, this.grid, this.label);
+  _SpeedChart(
+      this.down, this.up, this.downColor, this.upColor, this.grid, this.label);
 
   final List<int> down, up;
   final Color downColor, upColor, grid, label;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final peak = [...down, ...up, 10 * 1024].reduce((a, b) => a > b ? a : b).toDouble();
+    final peak =
+        [...down, ...up, 10 * 1024].reduce((a, b) => a > b ? a : b).toDouble();
     final gridPaint = Paint()
       ..color = grid
       ..strokeWidth = 1;
@@ -541,7 +633,10 @@ class _SpeedChart extends CustomPainter {
               ..shader = LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [color.withValues(alpha: 0.28), color.withValues(alpha: 0.02)],
+                colors: [
+                  color.withValues(alpha: 0.28),
+                  color.withValues(alpha: 0.02)
+                ],
               ).createShader(Offset.zero & size));
       }
       canvas.drawPath(

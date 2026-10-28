@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart';
 
 import 'package:window_manager/window_manager.dart';
@@ -621,14 +622,21 @@ class _ConnectCard extends StatelessWidget {
                   color: color.withValues(alpha: 0.06),
                   border: Border.all(color: color.withValues(alpha: 0.28)),
                 ),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: Text(label,
-                      key: ValueKey(label),
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(color: color, fontWeight: FontWeight.w600)),
+                // A screen reader says it again whenever the state changes (connecting, connected ...).
+                child: Semantics(
+                  container: true,
+                  liveRegion: true,
+                  label: tr(context, 'a11yStatusLine', {'status': label}),
+                  excludeSemantics: true,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: Text(label,
+                        key: ValueKey(label),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(color: color, fontWeight: FontWeight.w600)),
+                  ),
                 ),
               ),
             ),
@@ -643,21 +651,28 @@ class _ConnectCard extends StatelessWidget {
           // Windows: a warning about a subscription that is running out (the phone uses a
           // notification instead).
           if (state.alertText != null)
-            Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              color: scheme.tertiaryContainer,
-              child: ListTile(
-                dense: true,
-                leading: const Icon(Icons.warning_amber),
-                title: Text(state.alertText!),
-                trailing: IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: state.dismissAlert,
+            Semantics(
+              liveRegion: true,
+              child: Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                color: scheme.tertiaryContainer,
+                child: ListTile(
+                  dense: true,
+                  leading: const ExcludeSemantics(child: Icon(Icons.warning_amber)),
+                  title: Text(state.alertText!),
+                  trailing: IconButton(
+                    tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                    icon: const Icon(Icons.close),
+                    onPressed: state.dismissAlert,
+                  ),
                 ),
               ),
             ),
           const SizedBox(height: 8),
-          GestureDetector(
+          Semantics(
+            button: shown != null,
+            hint: shown == null ? null : tr(context, 'a11yLocate'),
+            child: GestureDetector(
             onTap: shown == null ? null : () => state.locate(shown),
             child: MouseRegion(
             cursor: shown == null ? MouseCursor.defer : SystemMouseCursors.click,
@@ -706,7 +721,7 @@ class _ConnectCard extends StatelessWidget {
                   ),
                 ),
             ]),
-          ))),
+          )))),
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: ValueListenableBuilder<Traffic>(
@@ -792,15 +807,28 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
       final t = _base + elapsed.inMicroseconds / 1e6;
       if (t - _time.value >= 1 / 31) _time.value = t;
     });
-    if (widget.on) _ticker.start();
+  }
+
+  /// The system setting "remove animations" (also used by people who get dizzy from motion).
+  bool get _still => MediaQuery.disableAnimationsOf(context);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
   }
 
   @override
   void didUpdateWidget(_PowerButton old) {
     super.didUpdateWidget(old);
-    if (widget.on && !_ticker.isActive) {
+    _sync();
+  }
+
+  void _sync() {
+    final move = widget.on && !_still;
+    if (move && !_ticker.isActive) {
       _ticker.start();
-    } else if (!widget.on && _ticker.isActive) {
+    } else if (!move && _ticker.isActive) {
       _ticker.stop();
       _base = _time.value;
     }
@@ -1069,7 +1097,11 @@ class _TrafficBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final t = S.of(context);
-    return Container(
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: tr(context, 'a11yTraffic', {'label': label, 'speed': speed, 'total': total}),
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
@@ -1095,7 +1127,7 @@ class _TrafficBox extends StatelessWidget {
               style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 11)),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -1245,8 +1277,16 @@ class _ServerListState extends State<_ServerList> {
         final header = row.config == null && !row.empty;
         final Widget child;
         if (header) {
+          final at = groups.indexOf(g);
           child = _GroupHeader(
-              state: state, group: g, open: open, onToggle: () => _toggle(g));
+              state: state,
+              group: g,
+              open: open,
+              onToggle: () => _toggle(g),
+              onMoveUp: at > 0 ? () => state.moveGroup(g, groups[at - 1], after: false) : null,
+              onMoveDown: at < groups.length - 1
+                  ? () => state.moveGroup(g, groups[at + 1], after: true)
+                  : null);
         } else {
           child = Column(mainAxisSize: MainAxisSize.min, children: [
             Divider(height: 1, color: scheme.outlineVariant),
@@ -1375,12 +1415,24 @@ class _GroupHeader extends StatelessWidget {
       {required this.state,
       required this.group,
       required this.open,
-      required this.onToggle});
+      required this.onToggle,
+      this.onMoveUp,
+      this.onMoveDown});
 
   final AppState state;
   final ServerGroup group;
   final bool open;
   final VoidCallback onToggle;
+
+  /// Moves the group one place up or down (null: it is first or last). Dragging is not possible with
+  /// a screen reader, so these are offered as actions of the row.
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+
+  Map<CustomSemanticsAction, VoidCallback> _moveActions(BuildContext context) => {
+        if (onMoveUp != null) CustomSemanticsAction(label: tr(context, 'a11yMoveUp')): onMoveUp!,
+        if (onMoveDown != null) CustomSemanticsAction(label: tr(context, 'a11yMoveDown')): onMoveDown!,
+      };
 
   String _title(S t) => switch (group.kind) {
         GroupKind.collector => t.collectorGroup,
@@ -1452,7 +1504,10 @@ class _GroupHeader extends StatelessWidget {
     final t = S.of(context);
     final scheme = Theme.of(context).colorScheme;
     final isSub = group.kind == GroupKind.subscription;
-    return ListTile(
+    return Semantics(
+      expanded: open,
+      customSemanticsActions: _moveActions(context),
+      child: ListTile(
       onTap: onToggle,
       contentPadding: const EdgeInsetsDirectional.only(start: 16, end: 4),
       leading: Stack(
@@ -1545,7 +1600,7 @@ class _GroupHeader extends StatelessWidget {
           const SizedBox(width: 8),
         ],
       ),
-    );
+    ));
   }
 }
 
@@ -1620,7 +1675,16 @@ class _SubscriptionInfoState extends State<_SubscriptionInfo> {
                 ? Colors.orange.shade700
                 : Colors.red.shade600;
 
-    return Row(
+    // The time and the usage are drawn as a chip and a bar (the bar twice, for the two backgrounds):
+    // a screen reader gets one plain sentence instead.
+    final usageText = unlimited
+        ? tr(context, 'a11yUsageUnlimited', {'used': _bytes(info.used)})
+        : tr(context, 'a11yUsage', {'used': _bytes(info.used), 'total': _bytes(info.total)});
+    return Semantics(
+      container: true,
+      excludeSemantics: true,
+      label: '$text, $usageText',
+      child: Row(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -1647,7 +1711,7 @@ class _SubscriptionInfoState extends State<_SubscriptionInfo> {
           ),
         ),
       ],
-    );
+    ));
   }
 }
 
@@ -1675,15 +1739,20 @@ class _UsageBar extends StatelessWidget {
   Widget _label(Color color) {
     final style =
         TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text('$used / ', style: style),
-        if (total != null)
-          Text(total!, style: style)
-        else
-          Icon(Icons.all_inclusive, size: 14, color: color),
-      ],
+    // Shrinks to fit when the bar is narrow (a small window or a large text size) instead of
+    // running over its edge.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('$used / ', style: style),
+          if (total != null)
+            Text(total!, style: style)
+          else
+            Icon(Icons.all_inclusive, size: 14, color: color),
+        ],
+      ),
     );
   }
 
@@ -1698,7 +1767,8 @@ class _UsageBar extends StatelessWidget {
         builder: (context, f, _) => ClipRRect(
           borderRadius: BorderRadius.circular(8),
           child: SizedBox(
-            height: 22,
+            // taller when the user has chosen larger text
+            height: MediaQuery.textScalerOf(context).scale(22),
             child: Stack(
               fit: StackFit.expand,
               children: [

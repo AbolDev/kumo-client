@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/routing_rules.dart';
 import '../l10n/extra.dart';
+import '../l10n/strings.dart' show S;
 import '../state/app_state.dart';
 
 /// The user's own routing rules: domains and addresses that always go direct, or always through
@@ -111,7 +112,8 @@ class _RuleListState extends State<_RuleList> {
             hintText: tr(context, 'ruleHint'),
             errorText: _error,
             border: const OutlineInputBorder(),
-            suffixIcon: IconButton(icon: const Icon(Icons.add), onPressed: _add),
+            suffixIcon: IconButton(
+                tooltip: S.of(context).add, icon: const Icon(Icons.add), onPressed: _add),
           ),
         ),
         const SizedBox(height: 8),
@@ -133,6 +135,7 @@ class _RuleListState extends State<_RuleList> {
             }),
             title: Text(rule, textDirection: TextDirection.ltr),
             trailing: IconButton(
+              tooltip: MaterialLocalizations.of(context).deleteButtonTooltip,
               icon: const Icon(Icons.close),
               onPressed: () =>
                   widget.onChange([...widget.rules.where((r) => r != rule)]),

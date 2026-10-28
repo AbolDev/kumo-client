@@ -106,6 +106,7 @@ class _ConnectionsPageState extends State<ConnectionsPage> {
                     textDirection: TextDirection.ltr,
                   ),
                   trailing: IconButton(
+                    tooltip: tr(context, 'a11yCloseConnection'),
                     icon: const Icon(Icons.close, size: 18),
                     onPressed: () async {
                       await _api?.delete('/connections/${c.id}');

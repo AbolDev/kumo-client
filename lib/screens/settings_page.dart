@@ -627,6 +627,7 @@ class _SettingsPageState extends State<SettingsPage> {
               trailing: [
                 if (_query.isNotEmpty)
                   IconButton(
+                    tooltip: MaterialLocalizations.of(context).clearButtonTooltip,
                     icon: const Icon(Icons.close),
                     onPressed: () => setState(() {
                       _query = '';
