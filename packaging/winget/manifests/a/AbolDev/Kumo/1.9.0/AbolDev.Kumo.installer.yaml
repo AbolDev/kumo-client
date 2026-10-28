@@ -12,15 +12,15 @@ InstallerSwitches:
   Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
   SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NORESTART
 UpgradeBehavior: install
-ReleaseDate: 2026-10-27
+ReleaseDate: 2026-10-28
 Installers:
 - Architecture: x64
   InstallerUrl: https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-windows-x64-setup.exe
-  InstallerSha256: 061F5889A59AA71F069046648D4BD768DBB1E5A043D6C9AE76008F01A5FC2C39
+  InstallerSha256: 36FAC696182713FAB409A5D7449641C944538979F102B7A89D98949A09C775E7
   ProductCode: '{7D2C5E0A-4B1F-4C7A-9E3B-5A6F0D8C1B24}_is1'
 - Architecture: arm64
   InstallerUrl: https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-windows-arm64-setup.exe
-  InstallerSha256: 0C10E7FD255F521D94C8C89ECD265D13BE51D3C288830F9E7453FD79796812E7
+  InstallerSha256: 522454B021621B2AE0C491597617001C2C309DFCC284DA2BE2935071D4B460D5
   ProductCode: '{7D2C5E0A-4B1F-4C7A-9E3B-5A6F0D8C1B24}_is1'
 ManifestType: installer
 ManifestVersion: 1.6.0

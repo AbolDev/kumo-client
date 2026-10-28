@@ -15,8 +15,8 @@ pkgbase = kumo-bin
 	options = !strip
 	options = !debug
 	source_x86_64 = kumo-1.9.0-x86_64.tar.gz::https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-linux-x64-portable.tar.gz
-	sha256sums_x86_64 = cb79a32b5302583ac639e5218d8f40d354401aa965797cc4e3def1bd72295807
+	sha256sums_x86_64 = 339bcdab7063c41554814542f3da0c0bd92effd282ab5fe0cfb7d448a87e38e9
 	source_aarch64 = kumo-1.9.0-aarch64.tar.gz::https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-linux-arm64-portable.tar.gz
-	sha256sums_aarch64 = 4396fd2556fa0e588940689b7ad47bdabd025e4aa45d5e7c0458e51e8aedd292
+	sha256sums_aarch64 = dc216c34c1951a30b8077626b4f24931304ee664736a6513e6dc01548864f360
 
 pkgname = kumo-bin

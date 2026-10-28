@@ -7,11 +7,11 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-windows-x64-portable.zip",
-            "hash": "d6af43f0160d3b5d45cb5955107132dbea0974dea3b396e422948426e662ab95"
+            "hash": "df31625f0af351db33c389dc0d4def2ccc215b0ce9e6564c65fabdde1c28d2ca"
         },
         "arm64": {
             "url": "https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-windows-arm64-portable.zip",
-            "hash": "cd38e7de7e8d901a684b7c01ade2279485d8004ab4acd3741f3d2c641e460a66"
+            "hash": "3dcfec1a29c3286c70e5668e88ad26d41b65e70d7ad9fc53df6be0464e349f1c"
         }
     },
     "shortcuts": [

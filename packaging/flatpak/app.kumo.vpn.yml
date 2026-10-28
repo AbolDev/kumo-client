@@ -27,11 +27,11 @@ modules:
     sources:
       - type: archive
         url: https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-linux-x64-portable.tar.gz
-        sha256: cb79a32b5302583ac639e5218d8f40d354401aa965797cc4e3def1bd72295807
+        sha256: 339bcdab7063c41554814542f3da0c0bd92effd282ab5fe0cfb7d448a87e38e9
         only-arches: [x86_64]
       - type: archive
         url: https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/kumo-linux-arm64-portable.tar.gz
-        sha256: 4396fd2556fa0e588940689b7ad47bdabd025e4aa45d5e7c0458e51e8aedd292
+        sha256: dc216c34c1951a30b8077626b4f24931304ee664736a6513e6dc01548864f360
         only-arches: [aarch64]
       - type: file
         path: app.kumo.vpn.desktop
