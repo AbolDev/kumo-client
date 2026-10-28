@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>kumo</id>
-    <version>1.9.0</version>
+    <version>1.10.0</version>
     <title>Kumo</title>
     <authors>AbolDev</authors>
     <owners>AbolDev</owners>
@@ -15,7 +15,7 @@
     <tags>vpn proxy sing-box xray v2ray</tags>
     <summary>Free VPN client powered by sing-box and Xray</summary>
     <description>Kumo connects to the servers and subscriptions you choose. It can run as a local proxy (also set as the system proxy) or tunnel the whole computer, and it supports many protocols, subscriptions, routing rules, ad blocking and more.</description>
-    <releaseNotes>https://github.com/AbolDev/kumo-client/releases/tag/v1.9.0</releaseNotes>
+    <releaseNotes>https://github.com/AbolDev/kumo-client/releases/tag/v1.10.0</releaseNotes>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />

@@ -1,6 +1,6 @@
 name: kumo
 base: core24
-version: '1.9.0'
+version: '1.10.0'
 summary: Free VPN client powered by sing-box and Xray
 description: |
   Kumo connects to the servers and subscriptions you choose. It can run as a local proxy (also set as the system proxy) or tunnel the whole computer, and it supports many protocols, subscriptions, routing rules, ad blocking and more.
@@ -24,10 +24,10 @@ parts:
     build-packages: [curl]
     override-build: |
       case "$CRAFT_ARCH_BUILD_FOR" in
-        amd64) file=kumo-linux-x64-portable.tar.gz; sum=339bcdab7063c41554814542f3da0c0bd92effd282ab5fe0cfb7d448a87e38e9 ;;
-        arm64) file=kumo-linux-arm64-portable.tar.gz; sum=dc216c34c1951a30b8077626b4f24931304ee664736a6513e6dc01548864f360 ;;
+        amd64) file=kumo-linux-x64-portable.tar.gz; sum=a6af412966fbdf174b03abd24a145fecebf4f78dfe1f6013aea7ca9232a8371b ;;
+        arm64) file=kumo-linux-arm64-portable.tar.gz; sum=5729c444e6d5cf38ecdf301da924205fcddf3a37b09bde8c953af91b78d514c0 ;;
       esac
-      curl -fsSL -o /tmp/kumo.tgz "https://github.com/AbolDev/kumo-client/releases/download/v1.9.0/$file"
+      curl -fsSL -o /tmp/kumo.tgz "https://github.com/AbolDev/kumo-client/releases/download/v1.10.0/$file"
       echo "$sum  /tmp/kumo.tgz" | sha256sum -c -
       mkdir -p "$CRAFT_PART_INSTALL/opt"
       tar -xzf /tmp/kumo.tgz -C "$CRAFT_PART_INSTALL/opt"
