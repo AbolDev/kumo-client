@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/extra.dart';
 import '../l10n/strings.dart';
+import '../core/usage_stats.dart' show formatBytes;
 import '../state/app_state.dart';
 
 String _two(int n) => n.toString().padLeft(2, '0');
@@ -49,7 +50,7 @@ class CollectorInfoPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = S.of(context);
     return ListenableBuilder(
-      listenable: state,
+      listenable: Listenable.merge([state, state.traffic]),
       builder: (context, _) {
         final group = state.collector;
         final source = state.collectorSource;
@@ -78,6 +79,13 @@ class CollectorInfoPage extends StatelessWidget {
                     ),
                   ),
                 ),
+              ]),
+              _card(context, tr(context, 'pubUsage'), [
+                _row(Icons.arrow_downward, tr(context, 'pubDown'),
+                    formatBytes(state.publicUsage[0])),
+                _row(Icons.arrow_upward, tr(context, 'pubUp'), formatBytes(state.publicUsage[1])),
+                _row(Icons.swap_vert, tr(context, 'pubTotal'),
+                    formatBytes(state.publicUsage[0] + state.publicUsage[1])),
               ]),
               _card(context, tr(context, 'collSecurity'), [
                 SwitchListTile(

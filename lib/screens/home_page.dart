@@ -1499,6 +1499,41 @@ class _GroupHeader extends StatelessWidget {
     ]));
   }
 
+  /// The test result and, once anything went through the free servers, how much (like the usage a
+  /// subscription shows, but without a limit).
+  Widget? _collectorSubtitle(BuildContext context, S t, ColorScheme scheme) {
+    final test = state.tests[group.id];
+    return ListenableBuilder(
+      listenable: Listenable.merge([state, state.traffic]),
+      builder: (context, _) {
+        final used = state.publicUsage[0] + state.publicUsage[1];
+        if (test == null && used == 0) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (test != null) _testStat(t.testStat(test.alive, test.percent), scheme),
+            if (used > 0)
+              Padding(
+                padding: EdgeInsetsDirectional.only(top: test == null ? 4 : 6, end: 8),
+                child: Semantics(
+                  container: true,
+                  excludeSemantics: true,
+                  label: tr(context, 'a11yPubUsage', {'used': _bytes(used)}),
+                  child: _UsageBar(
+                    fraction: 1,
+                    fill: Colors.purple.shade400,
+                    track: scheme.surfaceContainerHighest,
+                    used: _bytes(used),
+                    total: null,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = S.of(context);
@@ -1537,12 +1572,7 @@ class _GroupHeader extends StatelessWidget {
                   padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
                   child: _SubscriptionInfo(info: group.info!),
                 ))
-          : (group.kind == GroupKind.collector && state.tests[group.id] != null
-              ? _testStat(
-                  t.testStat(state.tests[group.id]!.alive,
-                      state.tests[group.id]!.percent),
-                  scheme)
-              : null),
+          : (group.kind == GroupKind.collector ? _collectorSubtitle(context, t, scheme) : null),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

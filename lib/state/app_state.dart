@@ -1035,6 +1035,20 @@ class AppState extends ChangeNotifier {
   final dayUsage = <String, List<int>>{};
   final serverUsage = <String, List<int>>{};
 
+  /// What went through the free public servers since the start, [down, up]. It is kept apart from the
+  /// per-server numbers, which are pruned and renamed with the list.
+  final publicUsage = <int>[0, 0];
+
+  /// Whether the server that carried the traffic is from the public list: the one the user picked, or
+  /// (in automatic mode) a server whose name is in that list and in no other.
+  bool _isPublic(String name) {
+    final pick = selected;
+    if (pick != null) return collector.configs.any((c) => identical(c, pick));
+    return collector.configs.any((c) => c.name == name) &&
+        !manual.configs.any((c) => c.name == name) &&
+        !subscriptions.any((g) => g.configs.any((c) => c.name == name));
+  }
+
   /// What a server used in total.
   static int serverTotal(List<int> l) => l[0] + l[1] + (l.length > 4 ? l[4] : 0);
 
@@ -1060,6 +1074,9 @@ class AppState extends ChangeNotifier {
 
   /// The most servers whose usage is kept; the ones used longest ago go first.
   static const _maxServers = 300;
+
+  @visibleForTesting
+  void onTrafficForTest(Traffic t) => _onTraffic(t);
 
   void _onTraffic(Traffic t) {
     traffic.value = t;
@@ -1097,6 +1114,10 @@ class AppState extends ChangeNotifier {
     s[1] += du;
     s[2] += gap;
     s[3] = now.millisecondsSinceEpoch;
+    if ((dd > 0 || du > 0) && _isPublic(name)) {
+      publicUsage[0] += dd;
+      publicUsage[1] += du;
+    }
     if (serverUsage.length > _maxServers) _pruneServers();
     _usageDirty = true;
     _usageTimer ??= Timer(const Duration(seconds: 30), _writeUsage);
@@ -1119,6 +1140,7 @@ class AppState extends ChangeNotifier {
             jsonEncode({
               'days': dayUsage,
               'servers': serverUsage,
+              'public': publicUsage,
               'peak': [peakDown, peakUp],
             }))
         .catchError((_) {});
@@ -1151,6 +1173,10 @@ class AppState extends ChangeNotifier {
           s[i] += add[i];
         }
         if (add[3] > s[3]) s[3] = add[3];
+        if (_isPublic('$k')) {
+          publicUsage[0] += add[0];
+          publicUsage[1] += add[1];
+        }
       });
       _usageDirty = true;
       await _writeUsage();
@@ -1179,6 +1205,11 @@ class AppState extends ChangeNotifier {
 
   void _readUsage(Map<String, dynamic> j) {
     try {
+      final pub = j['public'];
+      if (pub is List && pub.length == 2) {
+        publicUsage[0] = (pub[0] as num).toInt();
+        publicUsage[1] = (pub[1] as num).toInt();
+      }
       (j['days'] as Map?)?.forEach((k, v) {
         final l = (v as List).map((e) => (e as num).toInt()).toList();
         if (l.length >= 2) dayUsage['$k'] = [l[0], l[1], l.length > 2 ? l[2] : 0];
@@ -1206,6 +1237,7 @@ class AppState extends ChangeNotifier {
   void resetUsage() {
     dayUsage.clear();
     serverUsage.clear();
+    publicUsage[0] = publicUsage[1] = 0;
     peakDown = peakUp = 0;
     _writeUsage();
     notifyListeners();
@@ -2174,6 +2206,7 @@ class AppState extends ChangeNotifier {
       // The restored numbers replace the current ones, they are not added to them.
       dayUsage.clear();
       serverUsage.clear();
+      publicUsage[0] = publicUsage[1] = 0;
       peakDown = peakUp = 0;
       await _loadSettings();
       await _loadServers();
