@@ -165,18 +165,6 @@ class VpnChannel {
   static Future<void> scheduleSubUpdates(bool enabled) async =>
       _win ? null : _control.invokeMethod('scheduleSubUpdates', {'enabled': enabled});
 
-  /// Android: whether the Wi-Fi network's name can be read (it needs the location permission,
-  /// which is asked for when [request] is true), and the name of the network the phone is on.
-  static Future<({bool granted, String? name})> wifiAccess({bool request = false}) async {
-    if (_win) return (granted: false, name: null);
-    try {
-      final m = await _control.invokeMapMethod<String, dynamic>('wifiAccess', {'request': request});
-      return (granted: m?['granted'] == true, name: m?['name'] as String?);
-    } catch (_) {
-      return (granted: false, name: null);
-    }
-  }
-
   /// Android: lets the phone warn about a subscription that is nearly out of data or time.
   static Future<void> checkUsage(
       String id, String name, int used, int total, int expire) async {

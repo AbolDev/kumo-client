@@ -77,10 +77,9 @@ class ProxyConfig {
   /// Same connection settings (server, credentials, transport, TLS) => same key; used to drop
   /// duplicates. The name is not part of it, and two entries that differ in e.g. the websocket
   /// path or SNI are different servers.
-  String get key {
-    if (outbound.isEmpty) return 'xray|${link.split('#').first}';
-    return '$protocol|${jsonEncode([outbound, inner])}';
-  }
+  late final String key = outbound.isEmpty
+      ? 'xray|${link.split('#').first}'
+      : '$protocol|${jsonEncode([outbound, inner])}';
 }
 
 /// Hides most of an address, keeping its start and its last part:
@@ -218,8 +217,9 @@ ProxyConfig? parseLink(String link) {
     if (link.startsWith('vless://')) return _vless(link);
     if (link.startsWith('trojan://')) return _trojan(link);
     if (link.startsWith('ss://')) return _shadowsocks(link);
-    if (link.startsWith('hysteria2://') || link.startsWith('hy2://'))
+    if (link.startsWith('hysteria2://') || link.startsWith('hy2://')) {
       return _hysteria2(link);
+    }
     if (link.startsWith('tuic://')) return _tuic(link);
     if (link.startsWith('anytls://')) return _anytls(link);
     if (link.startsWith('hysteria://')) return _hysteria1(link);

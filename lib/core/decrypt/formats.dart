@@ -252,8 +252,9 @@ String _crypt5Body(Uint8List body, RSAPrivateKey key, bool salted) {
 String _decryptCrypt5(String payload, Map<String, String> keys) {
   final shuffled =
       _happSwapBlockHalves(Uint8List.fromList(utf8.encode(payload)));
-  if (shuffled.length < 8)
+  if (shuffled.length < 8) {
     throw ConfigDecryptError('crypt5 payload is too short');
+  }
   final marker = _latin1(shuffled.sublist(0, 4)) +
       _latin1(shuffled.sublist(shuffled.length - 4));
   final der = keys[marker];
@@ -652,8 +653,9 @@ Map _parseZsxOuter(Uint8List data) {
   if (data.length < 4 + 1 + 12 + 16) {
     throw ConfigDecryptError('file is too short to be a .zsx vault');
   }
-  if (_latin1(data.sublist(0, 4)) != 'ZSX1')
+  if (_latin1(data.sublist(0, 4)) != 'ZSX1') {
     throw ConfigDecryptError('bad magic');
+  }
   final ver = data[4];
   if (ver == 1) {
     throw ConfigDecryptError(
@@ -688,14 +690,17 @@ int? _zsxMode(Uint8List data) {
 String _openZsxPayload(Map inner, String password) {
   var key = _zsxOpenKey;
   if (inner['mode'] == 1) {
-    if (password.isEmpty)
+    if (password.isEmpty) {
       throw ConfigDecryptError('this vault is password protected');
+    }
     final kdf = inner['kdf'];
-    if (kdf is! Map)
+    if (kdf is! Map) {
       throw ConfigDecryptError('password vault has no KDF parameters');
+    }
     final salt = _zsxB64(_str(kdf['salt']));
-    if (salt.length < 8)
+    if (salt.length < 8) {
       throw ConfigDecryptError('kdf salt is only ${salt.length} bytes');
+    }
     key = _argon2id(utf8.encode(password), salt, 3, 65536, 1, 32);
   }
   final nonce = _zsxB64(_str(inner['cfgNonce']));
@@ -780,8 +785,9 @@ String _formatZsxVault(Map inner, String payload) {
   final expiresAt = inner['expiresAt'];
   if (expiresAt is num && expiresAt > 0) {
     var expires = _utcStamp(expiresAt);
-    if (expiresAt < DateTime.now().millisecondsSinceEpoch)
+    if (expiresAt < DateTime.now().millisecondsSinceEpoch) {
       expires += ' (expired)';
+    }
     sb.add(_zsxComment('expires', expires));
   } else {
     sb.add(_zsxComment('expires', 'not set'));
@@ -889,8 +895,9 @@ class _BpfReader {
     var value = 0;
     for (var i = 0; i < 10; i++) {
       final x = readByte();
-      if (i == 9 && x > 1)
+      if (i == 9 && x > 1) {
         throw ConfigDecryptError('uvarint overflows 64 bits');
+      }
       value |= (x & 0x7F) << (7 * i);
       if (x & 0x80 == 0) return value;
     }
@@ -899,8 +906,9 @@ class _BpfReader {
 
   String readString() {
     final n = readUvarint();
-    if (n > 1 << 20)
+    if (n > 1 << 20) {
       throw ConfigDecryptError('field length $n exceeds the limit');
+    }
     return _utf8(take(n));
   }
 
@@ -910,21 +918,24 @@ class _BpfReader {
 }
 
 String decryptBpf(Uint8List raw, String fileName) {
-  if (raw.length < 2)
+  if (raw.length < 2) {
     throw ConfigDecryptError('file is too small to be a .bpf profile');
+  }
   if (raw[0] != 0x03) throw ConfigDecryptError('unexpected message type');
   final version = raw[1];
-  if (version > 1)
+  if (version > 1) {
     throw ConfigDecryptError(
         'container version $version is newer than supported');
+  }
   final Uint8List body;
   try {
     body = Uint8List.fromList(gzip.decode(raw.sublist(2)));
   } catch (e) {
     throw ConfigDecryptError('payload is not a gzip stream');
   }
-  if (body.length > 4 << 20)
+  if (body.length > 4 << 20) {
     throw ConfigDecryptError('inflated payload is too large');
+  }
   final r = _BpfReader(body);
   final name = r.readString();
   final kind = r.readInt32();
@@ -932,8 +943,9 @@ String decryptBpf(Uint8List raw, String fileName) {
     throw ConfigDecryptError(
         '$name is an iCloud profile, recover it from iCloud');
   }
-  if (kind != 0 && kind != 2)
+  if (kind != 0 && kind != 2) {
     throw ConfigDecryptError('unknown profile type $kind');
+  }
   final config = r.readString();
   final sb = <String>[
     '// ---- sing-box profile ----',
@@ -1060,8 +1072,9 @@ String _ehiXorLayer(String ciphertext, String key) {
   }
   if (out.isNotEmpty) {
     final bad = out.where((c) => c < 32 && c != 9 && c != 10 && c != 13).length;
-    if (bad / out.length > 0.5)
+    if (bad / out.length > 0.5) {
       throw ConfigDecryptError('entropy check failed');
+    }
   }
   return _utf8(out);
 }
@@ -1320,8 +1333,9 @@ const _slipnetKeyHex =
     '214F052025B2F949605A5429EC3D5FA80C2022C168AD946E68852D447214DBD3';
 
 String _slipnetProfile(String decrypted) {
-  if (decrypted.endsWith('|'))
+  if (decrypted.endsWith('|')) {
     decrypted = decrypted.substring(0, decrypted.length - 1);
+  }
   final parts = decrypted.split('|');
   if (parts.isEmpty || parts[0].isEmpty) return '[!] Empty decrypted text';
   final ver = parts[0];

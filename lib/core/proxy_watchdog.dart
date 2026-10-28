@@ -1,7 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 
-/// A tiny helper process that outlives this app: when the app ends in any way (closed, crashed,
+import 'win_tools.dart';
+
+/// A small helper process that outlives this app: when the app ends in any way (closed, crashed,
 /// killed) it takes this app's proxy away from the system settings, so the internet does not stay
 /// pointed at a dead port until the app is opened again. The full previous setting is still put
 /// back by the app at its next start (see the backup file of the system proxy classes).
@@ -13,15 +14,25 @@ class ProxyWatchdog {
     stop();
     try {
       if (Platform.isWindows) {
+        // The script is a file that came with the program (next to kumo.exe), not text built at run
+        // time and handed to PowerShell as an encoded command.
+        final script = File('${File(Platform.resolvedExecutable).parent.path}\\proxy_guard.ps1');
+        if (!await script.exists()) return;
         _helper = await Process.start(
-          'powershell.exe',
+          winTool('powershell'),
           [
             '-NoProfile',
             '-NonInteractive',
             '-WindowStyle',
             'Hidden',
-            '-EncodedCommand',
-            encodePowerShell(windowsWatchdogScript(pid, port)),
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            script.path,
+            '-AppPid',
+            '$pid',
+            '-Port',
+            '$port',
           ],
           mode: ProcessStartMode.detached,
         );
@@ -45,32 +56,6 @@ class ProxyWatchdog {
       } catch (_) {}
     }
   }
-}
-
-/// PowerShell reads `-EncodedCommand` as base64 of UTF-16LE text.
-String encodePowerShell(String script) {
-  final bytes = <int>[];
-  for (final unit in script.codeUnits) {
-    bytes
-      ..add(unit & 0xFF)
-      ..add(unit >> 8);
-  }
-  return base64.encode(bytes);
-}
-
-/// Waits for [appPid] to end, then switches the registry proxy off when it still points at
-/// 127.0.0.1:[port] (a proxy of another program is left alone).
-String windowsWatchdogScript(int appPid, int port,
-    {String key = r'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'}) {
-  return '''
-Wait-Process -Id $appPid -ErrorAction SilentlyContinue
-\$k = '$key'
-\$s = (Get-ItemProperty -Path \$k -ErrorAction SilentlyContinue).ProxyServer
-if (\$s -match '(^|[=;\\s])(127\\.0\\.0\\.1|localhost):$port(;|\$)') {
-  Set-ItemProperty -Path \$k -Name ProxyEnable -Value 0 -Type DWord
-  Remove-ItemProperty -Path \$k -Name ProxyServer -ErrorAction SilentlyContinue
-}
-''';
 }
 
 /// `sh -c` script, arguments: the app's pid and the proxy port.

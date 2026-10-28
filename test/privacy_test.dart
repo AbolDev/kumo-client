@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/ad_lists.dart';
 import 'package:kumo/core/net_options.dart';
 import 'package:kumo/core/proxy_config.dart';
-import 'package:kumo/core/rule_sets.dart';
 import 'package:kumo/core/singbox_config.dart';
 import 'package:kumo/core/stun.dart';
 

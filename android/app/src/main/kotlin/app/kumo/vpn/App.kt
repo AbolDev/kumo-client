@@ -43,7 +43,15 @@ class App : Application() {
         fun ensureLibbox() {
             if (libboxReady) return
             val base = instance.filesDir.also { it.mkdirs() }
-            val working = (instance.getExternalFilesDir(null) ?: instance.filesDir).also { it.mkdirs() }
+            // The core's log and cache hold the names of the sites visited: they stay in the app's own
+            // private folder, not in the shared storage (older versions kept them there).
+            val working = File(instance.filesDir, "core").also { it.mkdirs() }
+            instance.getExternalFilesDir(null)?.let {
+                runCatching {
+                    File(it, "stderr.log").delete()
+                    File(it, "cache.db").delete()
+                }
+            }
             val temp = instance.cacheDir.also { it.mkdirs() }
             Libbox.setLocale(Locale.getDefault().toLanguageTag().replace("-", "_"))
             Libbox.setup(

@@ -89,10 +89,10 @@ class ProviderRouting {
     }
 
     final global = get('GlobalProxy');
-    final order = [
+    final order = {
       for (final p in '${get('RouteOrder') ?? ''}'.toLowerCase().split(RegExp(r'[-_,\s]+')))
         if (const {'block', 'proxy', 'direct'}.contains(p)) p,
-    ].toSet().toList();
+    }.toList();
     for (final p in const ['block', 'proxy', 'direct']) {
       if (!order.contains(p)) order.add(p);
     }

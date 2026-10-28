@@ -140,7 +140,7 @@ class _DnsLeakPageState extends State<DnsLeakPage> {
                             child: Text(tr(context, 'dnsLeakNone')),
                           ),
                         for (final e in r.resolvers)
-                          _entry(e, judged!.kinds[e] ?? DnsEntryKind.safe, scheme),
+                          _entry(e, judged.kinds[e] ?? DnsEntryKind.safe, scheme),
                         const SizedBox(height: 12),
                         Text(
                           tr(context, 'dnsLeakNote'),

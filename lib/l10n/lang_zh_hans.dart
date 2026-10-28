@@ -16,7 +16,7 @@ class SZhHans implements S {
   @override
   String get autoFastest => '自动（最低延迟）';
   @override
-  String activeServers(int n) => '${n} 个可用服务器';
+  String activeServers(int n) => '$n 个可用服务器';
   @override
   String get collectorGroup => '公共服务器';
   @override
@@ -88,7 +88,7 @@ class SZhHans implements S {
   @override
   String get savedToGallery => '已保存到相册';
   @override
-  String saveFailed(Object e) => '保存失败：${e}';
+  String saveFailed(Object e) => '保存失败：$e';
   @override
   String get password => '密码';
   @override
@@ -114,9 +114,9 @@ class SZhHans implements S {
   @override
   String get sessionLabel => '本次连接';
   @override
-  String listLoaded(int n) => '列表已加载：${n} 个配置。';
+  String listLoaded(int n) => '列表已加载：$n 个配置。';
   @override
-  String addedConfigs(int n) => '已添加 ${n} 个配置。';
+  String addedConfigs(int n) => '已添加 $n 个配置。';
   @override
   String get subSettings => '订阅设置';
   @override
@@ -136,7 +136,7 @@ class SZhHans implements S {
   @override
   String get allowInsecure => '允许不安全连接';
   @override
-  String get allowInsecureDesc => '忽略 SSL 证书验证';
+  String get allowInsecureDesc => '即使提供商的证书无法验证也下载订阅。关闭更安全；这不影响你的服务器的检查方式。';
   @override
   String get autoConnect => '开机自动连接';
   @override
@@ -176,11 +176,11 @@ class SZhHans implements S {
   @override
   String get deleteWarning => '此操作无法撤销。';
   @override
-  String daysLeft(int n) => '剩余 ${n} 天';
+  String daysLeft(int n) => '剩余 $n 天';
   @override
-  String hoursLeft(int n) => '剩余 ${n} 小时';
+  String hoursLeft(int n) => '剩余 $n 小时';
   @override
-  String minutesLeft(int n) => '剩余 ${n} 分钟';
+  String minutesLeft(int n) => '剩余 $n 分钟';
   @override
   String get expired => '已过期';
   @override
@@ -204,15 +204,15 @@ class SZhHans implements S {
   @override
   String get start => '开始';
   @override
-  String testStat(int alive, int percent) => '${alive} 个可用 · ${percent}%';
+  String testStat(int alive, int percent) => '$alive 个可用 · $percent%';
   @override
   String get timeWord => '时间';
   @override
   String get unlimitedData => '不限流量';
   @override
-  String usedOf(String used, String total) => '已用 ${used} / ${total}';
+  String usedOf(String used, String total) => '已用 $used / $total';
   @override
-  String usedUnlimited(String used) => '已用 ${used}';
+  String usedUnlimited(String used) => '已用 $used';
   @override
   String get theme => '主题';
   @override
@@ -224,15 +224,15 @@ class SZhHans implements S {
   @override
   String get fetchingList => '正在下载配置列表...';
   @override
-  String testingServers(int n) => '正在测试 ${n} 个服务器...';
+  String testingServers(int n) => '正在测试 $n 个服务器...';
   @override
-  String foundActive(int n) => '已找到 ${n} 个可用服务器...';
+  String foundActive(int n) => '已找到 $n 个可用服务器...';
   @override
   String get testingSaved => '正在测试已保存的服务器...';
   @override
   String get allSourcesFailed => '所有来源都无法访问。请手动添加订阅链接或配置。';
   @override
-  String fetchFailed(Object e) => '无法下载列表：${e}';
+  String fetchFailed(Object e) => '无法下载列表：$e';
   @override
   String get noActiveServer => '未找到可用服务器，请重试。';
   @override
@@ -240,15 +240,15 @@ class SZhHans implements S {
   @override
   String get noValidConfig => '未找到有效配置。';
   @override
-  String importResult(int alive, int total) => '${total} 个配置中有 ${alive} 个可用。';
+  String importResult(int alive, int total) => '$total 个配置中有 $alive 个可用。';
   @override
-  String importFailed(Object e) => '无法添加：${e}';
+  String importFailed(Object e) => '无法添加：$e';
   @override
-  String subscriptionUpdated(int n) => '订阅已更新：${n} 个配置。';
+  String subscriptionUpdated(int n) => '订阅已更新：$n 个配置。';
   @override
   String get vpnPermissionDenied => '未授予 VPN 权限。';
   @override
-  String connectFailed(String reason) => '无法连接：${reason}';
+  String connectFailed(String reason) => '无法连接：$reason';
   @override
   String get nameSubscription => '为这个订阅起个名字';
   @override

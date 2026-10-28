@@ -1,0 +1,21 @@
+# SHA-256 of every program the build downloads and packs into the app (see fetch_unix_core.sh,
+# fetch_windows_core.ps1 and the AppImage step of .github/workflows/build.yml). A download whose
+# hash is not listed here, or does not match, stops the build. To use a newer version, download it
+# once, check it, and add its hashes here in the same commit.
+#
+# <sha256>  <name with its version>
+24f9ef8e7234e13e71e74c3598a4164c5fe07b7b67ccc6e96cf68b54789f72cd  sing-box-1.13.21-linux-amd64.tar.gz
+3e30b876c9a93c19e503e2a2d6249cf05e6a26766553d4b61e1daf48223f304f  sing-box-1.13.21-linux-arm64.tar.gz
+61093d79211a6ae7b707d30f07be35b1167ca8366bf0dbc06ee5fb35c90dc9e8  sing-box-1.13.21-darwin-amd64.tar.gz
+62bca85bf08b9145288729cf010c98ea9877b8086f7369cde9e127012d509424  sing-box-1.13.21-darwin-arm64.tar.gz
+a03291793d3a3c6e266447a58140657ac099ff278abf3b8ff678932356a62ced  sing-box-1.13.21-windows-amd64.zip
+ef752d9bffd6d590dd6886b28819a7ae4efee70b8188f9198757d91570efd554  sing-box-1.13.21-windows-arm64.zip
+0eec3ed4163c273d8c8bf821f7d219e257921cf584aa3fb970715e458e631978  Xray-v26.10.21-linux-64.zip
+d1304946c486d98e6b886e9b931eaaaebb23835b30e217638037b7f2721d4e9c  Xray-v26.10.21-linux-arm64-v8a.zip
+8e5169b429e76ce5f550c8294db465bc259f30c158ba900aa40802b76ad2f66e  Xray-v26.10.21-macos-64.zip
+926cc55fda2a8757dabe4f22dc98772f218ace025f101bd0b68aee232e59d5dc  Xray-v26.10.21-macos-arm64-v8a.zip
+fc58c39ee2f2717b4c54d28d374362389e5319b20ae44aea76ea45a5243ec827  Xray-v26.10.21-windows-64.zip
+bb44af3380c9975f951ce7645c04d56ab600040e68f23974a2806e08e0a3f872  Xray-v26.10.21-windows-arm64-v8a.zip
+07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51  wintun-0.14.1.zip
+ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0  appimagetool-1.9.1-x86_64.AppImage
+f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158  appimagetool-1.9.1-aarch64.AppImage

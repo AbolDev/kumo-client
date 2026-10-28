@@ -2,6 +2,17 @@
 // English is the fallback for any key a language lacks.
 
 const extraToolsEn = <String, String>{
+  'dnsInvalid': 'Not a valid DNS address. Use a name or IP (with an optional port), or https://, h3://, tls://, quic://, tcp:// followed by a name.',
+  'portBusy': 'Another program is using this port. Pick a different one.',
+  'lanPlainWarn': 'The login of the shared connection travels over the network without encryption: share it only on a network you trust.',
+  'subHttp': '"{name}" was added with http://, not https://. Anyone on the way can read or change its list of servers.',
+  'selectBlocked': 'To change the server while connected, turn on "Restart on change" in Settings, or disconnect first.',
+  'a11yConnect': 'Connect',
+  'a11yDisconnect': 'Disconnect',
+  'decryptFailed': 'This file could not be opened. Check the password and the file.',
+  'autostartUnsafe': 'Starting with the system works only in the installed version: the folder of the portable version can be changed by other programs.',
+  'deleteAll': 'Delete all',
+  'deleteAllAsk': 'Delete all {n} configs you added manually? This cannot be undone.',
   'storeUnreadable': '{file} could not be read. It is kept as {file}.broken and not deleted; the app starts without it.',
   'proxyNotSet': 'Connected, but the system proxy could not be set, so programs that follow it do not use the VPN. Set the proxy by hand to 127.0.0.1 or use the tunnel.',
   'subCertError': 'The certificate of "{name}" could not be verified. If you trust this provider, turn on "Allow insecure" in Settings.',
@@ -124,6 +135,17 @@ const extraToolsEn = <String, String>{
 };
 
 const extraToolsFa = <String, String>{
+  'dnsInvalid': 'آدرس DNS معتبر نیست. یک نام یا IP (با پورت اختیاری) بنویس، یا https://‎، h3://‎، tls://‎، quic://‎، tcp://‎ و بعد یک نام.',
+  'portBusy': 'برنامهٔ دیگری از این پورت استفاده می‌کند. پورت دیگری انتخاب کن.',
+  'lanPlainWarn': 'نام کاربری و رمز اتصال اشتراکی بدون رمزگذاری روی شبکه می‌رود: فقط در شبکه‌ای که به آن اعتماد داری به اشتراک بگذار.',
+  'subHttp': '«{name}» با http:// اضافه شد، نه https://. هر کسی در مسیر می‌تواند فهرست سرورهایش را بخواند یا عوض کند.',
+  'selectBlocked': 'برای عوض کردن سرور هنگام اتصال، در تنظیمات «راه‌اندازی دوباره با تغییر» را روشن کن، یا اول قطع کن.',
+  'a11yConnect': 'اتصال',
+  'a11yDisconnect': 'قطع اتصال',
+  'decryptFailed': 'این فایل باز نشد. رمز و فایل را بررسی کن.',
+  'autostartUnsafe': 'شروع با سیستم فقط در نسخهٔ نصب‌شده کار می‌کند: پوشهٔ نسخهٔ پرتابل را برنامه‌های دیگر می‌توانند تغییر دهند.',
+  'deleteAll': 'حذف همه',
+  'deleteAllAsk': 'همهٔ {n} کانفیگی که دستی اضافه کرده‌ای حذف شود؟ این کار قابل بازگشت نیست.',
   'storeUnreadable': 'فایل {file} خوانده نشد. با نام {file}.broken نگه داشته می‌شود و پاک نمی‌شود؛ برنامه بدون آن شروع می‌کند.',
   'proxyNotSet': 'وصل شد، اما پروکسی سیستم تنظیم نشد و برنامه‌هایی که از آن پیروی می‌کنند از VPN استفاده نمی‌کنند. پروکسی را دستی روی 127.0.0.1 بگذار یا از تانل استفاده کن.',
   'subCertError': 'گواهی «{name}» تأیید نشد. اگر به این ارائه‌دهنده اعتماد داری، در تنظیمات «اجازه اتصال ناامن» را روشن کن.',
@@ -246,6 +268,17 @@ const extraToolsFa = <String, String>{
 };
 
 const extraToolsRu = <String, String>{
+  'dnsInvalid': 'Неверный адрес DNS. Укажите имя или IP (можно с портом) либо https://, h3://, tls://, quic://, tcp:// и имя.',
+  'portBusy': 'Этот порт занят другой программой. Выберите другой.',
+  'lanPlainWarn': 'Логин общего подключения передаётся по сети без шифрования: делитесь только в сети, которой доверяете.',
+  'subHttp': '«{name}» добавлена по http://, а не https://. Любой на пути может прочитать или изменить её список серверов.',
+  'selectBlocked': 'Чтобы сменить сервер при подключении, включите в настройках «Перезапуск при изменении» или сначала отключитесь.',
+  'a11yConnect': 'Подключить',
+  'a11yDisconnect': 'Отключить',
+  'decryptFailed': 'Не удалось открыть этот файл. Проверьте пароль и файл.',
+  'autostartUnsafe': 'Запуск вместе с системой работает только в установленной версии: папку портативной версии могут изменить другие программы.',
+  'deleteAll': 'Удалить всё',
+  'deleteAllAsk': 'Удалить все {n} конфигураций, добавленных вручную? Это нельзя отменить.',
   'storeUnreadable': 'Не удалось прочитать {file}. Файл сохранён как {file}.broken и не удалён; приложение запускается без него.',
   'proxyNotSet': 'Подключено, но системный прокси не удалось задать, поэтому программы, которые ему следуют, не используют VPN. Укажите прокси вручную 127.0.0.1 или используйте туннель.',
   'subCertError': 'Не удалось проверить сертификат «{name}». Если вы доверяете этому провайдеру, включите «Разрешить небезопасное подключение» в настройках.',
@@ -368,6 +401,17 @@ const extraToolsRu = <String, String>{
 };
 
 const extraToolsVi = <String, String>{
+  'dnsInvalid': 'Địa chỉ DNS không hợp lệ. Dùng tên hoặc IP (có thể kèm cổng), hoặc https://, h3://, tls://, quic://, tcp:// rồi đến tên.',
+  'portBusy': 'Chương trình khác đang dùng cổng này. Hãy chọn cổng khác.',
+  'lanPlainWarn': 'Thông tin đăng nhập của kết nối chia sẻ đi qua mạng không mã hóa: chỉ chia sẻ trên mạng bạn tin cậy.',
+  'subHttp': '"{name}" được thêm bằng http://, không phải https://. Bất kỳ ai trên đường đi đều có thể đọc hoặc sửa danh sách máy chủ của nó.',
+  'selectBlocked': 'Để đổi máy chủ khi đang kết nối, hãy bật "Khởi động lại khi đổi" trong Cài đặt, hoặc ngắt kết nối trước.',
+  'a11yConnect': 'Kết nối',
+  'a11yDisconnect': 'Ngắt kết nối',
+  'decryptFailed': 'Không mở được tệp này. Hãy kiểm tra mật khẩu và tệp.',
+  'autostartUnsafe': 'Khởi động cùng hệ thống chỉ dùng được ở bản đã cài: thư mục của bản portable có thể bị chương trình khác thay đổi.',
+  'deleteAll': 'Xóa tất cả',
+  'deleteAllAsk': 'Xóa tất cả {n} cấu hình bạn đã thêm thủ công? Không thể hoàn tác.',
   'storeUnreadable': 'Không đọc được {file}. Tệp được giữ lại là {file}.broken và không bị xóa; ứng dụng khởi động mà không có nó.',
   'proxyNotSet': 'Đã kết nối, nhưng không đặt được proxy hệ thống nên các chương trình dùng nó không đi qua VPN. Hãy đặt proxy thủ công là 127.0.0.1 hoặc dùng đường hầm.',
   'subCertError': 'Không xác minh được chứng chỉ của "{name}". Nếu tin nhà cung cấp này, hãy bật "Cho phép kết nối không an toàn" trong Cài đặt.',
@@ -490,6 +534,17 @@ const extraToolsVi = <String, String>{
 };
 
 const extraToolsZh = <String, String>{
+  'dnsInvalid': 'DNS 地址无效。请使用名称或 IP（可带端口），或 https://、h3://、tls://、quic://、tcp:// 加名称。',
+  'portBusy': '此端口已被其他程序占用，请换一个。',
+  'lanPlainWarn': '共享连接的登录信息在网络上不加密传输：仅在你信任的网络中共享。',
+  'subHttp': '“{name}”是通过 http://（而非 https://）添加的。路径上的任何人都能读取或修改它的服务器列表。',
+  'selectBlocked': '要在连接时更换服务器，请在设置中开启“更改后重启”，或先断开连接。',
+  'a11yConnect': '连接',
+  'a11yDisconnect': '断开连接',
+  'decryptFailed': '无法打开此文件。请检查密码和文件。',
+  'autostartUnsafe': '随系统启动仅适用于已安装的版本：便携版的文件夹可能被其他程序修改。',
+  'deleteAll': '全部删除',
+  'deleteAllAsk': '删除你手动添加的全部 {n} 个配置？此操作无法撤销。',
   'storeUnreadable': '无法读取 {file}。它被保留为 {file}.broken，没有被删除；应用将不带它启动。',
   'proxyNotSet': '已连接，但无法设置系统代理，遵循系统代理的程序不会使用 VPN。请手动把代理设为 127.0.0.1，或使用隧道。',
   'subCertError': '无法验证“{name}”的证书。如果你信任该提供商，请在设置中开启“允许不安全连接”。',
@@ -612,6 +667,17 @@ const extraToolsZh = <String, String>{
 };
 
 const extraToolsAr = <String, String>{
+  'dnsInvalid': 'عنوان DNS غير صالح. استخدم اسمًا أو IP (مع منفذ اختياري)، أو https://‎ أو h3://‎ أو tls://‎ أو quic://‎ أو tcp://‎ متبوعًا باسم.',
+  'portBusy': 'برنامج آخر يستخدم هذا المنفذ. اختر منفذًا مختلفًا.',
+  'lanPlainWarn': 'بيانات الدخول إلى الاتصال المشترك تنتقل عبر الشبكة دون تشفير: شاركه فقط على شبكة تثق بها.',
+  'subHttp': 'أُضيف «{name}» عبر http:// وليس https://. يستطيع أي شخص في الطريق قراءة قائمة خوادمه أو تغييرها.',
+  'selectBlocked': 'لتغيير الخادم أثناء الاتصال، فعّل «إعادة التشغيل عند التغيير» في الإعدادات أو اقطع الاتصال أولًا.',
+  'a11yConnect': 'اتصال',
+  'a11yDisconnect': 'قطع الاتصال',
+  'decryptFailed': 'تعذّر فتح هذا الملف. تحقق من كلمة المرور والملف.',
+  'autostartUnsafe': 'التشغيل مع النظام يعمل فقط في النسخة المثبّتة: مجلد النسخة المحمولة يمكن لبرامج أخرى تغييره.',
+  'deleteAll': 'حذف الكل',
+  'deleteAllAsk': 'حذف جميع الإعدادات الـ {n} التي أضفتها يدويًا؟ لا يمكن التراجع عن ذلك.',
   'storeUnreadable': 'تعذّرت قراءة {file}. تم الاحتفاظ به باسم {file}.broken ولم يُحذف؛ يبدأ التطبيق بدونه.',
   'proxyNotSet': 'تم الاتصال، لكن تعذّر ضبط وكيل النظام، فلا تستخدم البرامج التي تتبعه الـVPN. اضبط الوكيل يدويًا على 127.0.0.1 أو استخدم النفق.',
   'subCertError': 'تعذّر التحقق من شهادة «{name}». إذا كنت تثق بهذا المزوّد فشغّل «السماح بالاتصال غير الآمن» في الإعدادات.',

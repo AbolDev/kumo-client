@@ -328,8 +328,9 @@ Uint8List _unwrapPassphrase(Map pass, String password) {
   }
   final salt = _b64Url('${pass['salt'] ?? ''}');
   final wrap = _b64Url('${pass['wrap'] ?? ''}');
-  if (wrap.length != _npvsWrapSize)
+  if (wrap.length != _npvsWrapSize) {
     throw ConfigDecryptError('Invalid key data');
+  }
   try {
     return _chachaOpen(_pbkdf2(password, salt, iters), wrap.sublist(0, 12),
         wrap.sublist(12), salt);

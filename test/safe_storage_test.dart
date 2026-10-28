@@ -92,7 +92,7 @@ void main() {
     expect(File(path('servers.json')).readAsStringSync(), 'this is not json');
     // The first save sets it aside.
     state.clearTestResults();
-    await Future<void>.delayed(const Duration(milliseconds: 400));
+    await state.flushStore();
     expect(File(path('servers.json.broken')).readAsStringSync(), 'this is not json');
     expect(jsonDecode((await vpn.readFile('servers.json'))!), isA<Map>());
   });

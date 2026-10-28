@@ -110,3 +110,6 @@ install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
 # The VPN cores (see tools/fetch_windows_core.ps1) sit next to kumo.exe.
 file(GLOB KUMO_CORE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/core/*")
 install(FILES ${KUMO_CORE_FILES} DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
+
+# The helper that takes the system proxy away if Kumo ends without doing it (proxy_watchdog.dart).
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/guard/proxy_guard.ps1" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)

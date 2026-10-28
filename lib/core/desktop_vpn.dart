@@ -9,6 +9,7 @@ import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
 import 'win_dpapi.dart';
 import 'win_job.dart';
+import 'win_tools.dart';
 
 /// The VPN on the desktop: the same sing-box core as on Android, run as a child process
 /// (kumo-core, with its TUN device made by wintun.dll on Windows). Xray (kumo-xray) is started
@@ -181,14 +182,49 @@ class DesktopVpn {
     _states.add(_state);
   }
 
+  // The cores this app started and that are still running, written to a file so that a run that was
+  // killed can clean up after itself at the next start. (They are no longer found by their name: that
+  // would also end the cores of another user or session on the same computer.)
+  final _pids = <int>{};
+  File get _pidFile => File('$dataDir${_sep}cores.pid');
+
+  Future<void> _writePids() async {
+    try {
+      await Directory(dataDir).create(recursive: true);
+      await _pidFile.writeAsString(_pids.join(','));
+    } catch (_) {}
+  }
+
+  void _track(Process p) {
+    _pids.add(p.pid);
+    _writePids();
+    p.exitCode.then((_) {
+      _pids.remove(p.pid);
+      _writePids();
+    });
+  }
+
   Future<void> _killStale() async {
     try {
-      if (Platform.isWindows) {
-        await Process.run('taskkill', ['/F', '/IM', 'kumo-core.exe', '/IM', 'kumo-xray.exe']);
-      } else {
-        await Process.run('pkill', ['-x', 'kumo-core']);
-        await Process.run('pkill', ['-x', 'kumo-xray']);
+      final file = _pidFile;
+      if (!await file.exists()) return;
+      final old = (await file.readAsString()).split(',').map(int.tryParse).whereType<int>();
+      for (final id in old) {
+        if (Platform.isWindows) {
+          // Only a process that is still one of ours (the number may have been given to another
+          // program since).
+          final r = await Process.run(winTool('tasklist'), ['/FI', 'PID eq $id', '/FO', 'CSV', '/NH']);
+          final text = '${r.stdout}'.toLowerCase();
+          if (text.contains('kumo-core.exe') || text.contains('kumo-xray.exe')) {
+            await Process.run(winTool('taskkill'), ['/F', '/PID', '$id']);
+          }
+        } else {
+          final r = await Process.run('ps', ['-p', '$id', '-o', 'comm=']);
+          final name = '${r.stdout}'.trim();
+          if (name == 'kumo-core' || name == 'kumo-xray') Process.killPid(id);
+        }
       }
+      await file.delete();
     } catch (_) {}
   }
 
@@ -202,6 +238,7 @@ class DesktopVpn {
   Future<Process> _spawn(String exe, List<String> args, StringBuffer output) async {
     final p = await Process.start(_exePath(exe), args, workingDirectory: dataDir);
     if (Platform.isWindows) WinJob.add(p.pid);
+    _track(p);
     void collect(List<int> data) {
       if (output.length < 4000) output.write(utf8.decode(data, allowMalformed: true));
     }
@@ -247,7 +284,11 @@ class DesktopVpn {
       if ('${id.stdout}'.trim() == '0') return true;
       if (Platform.isLinux) {
         final caps = await Process.run('getcap', [_exePath('kumo-core')]);
-        return '${caps.stdout}'.contains('cap_net_admin');
+        if (!'${caps.stdout}'.contains('cap_net_admin')) return false;
+        // The packages give the core to the group "kumo" only: someone outside it cannot run it
+        // and is asked for a password instead.
+        final run = await Process.run('test', ['-x', _exePath('kumo-core')]);
+        return run.exitCode == 0;
       }
     } catch (_) {}
     return false;
@@ -726,7 +767,7 @@ rm -rf "$T"
   Future<List<AppEntry>> runningProcesses() async {
     final names = <String>{};
     if (Platform.isWindows) {
-      final r = await Process.run('tasklist', ['/fo', 'csv', '/nh']);
+      final r = await Process.run(winTool('tasklist'), ['/fo', 'csv', '/nh']);
       for (final line in '${r.stdout}'.split('\n')) {
         final m = RegExp(r'^"([^"]+\.exe)"', caseSensitive: false).firstMatch(line.trim());
         if (m != null) names.add(m.group(1)!);
@@ -754,6 +795,7 @@ rm -rf "$T"
   Future<Process> spawnQuiet(String exe, List<String> args) async {
     final p = await Process.start(exe, args, workingDirectory: dataDir);
     if (Platform.isWindows) WinJob.add(p.pid);
+    _track(p);
     return p;
   }
 

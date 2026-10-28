@@ -5,7 +5,7 @@ import 'dart:io';
 import 'dart:convert';
 
 import 'proxy_config.dart';
-import 'singbox_config.dart' show buildXrayConfig;
+import 'singbox_config.dart' show XrayAuth, buildXrayConfig;
 import 'vpn_channel.dart';
 
 /// Page fetched through the proxy to measure the real delay. Plain HTTP on purpose: HTTPS adds a
@@ -132,6 +132,7 @@ Future<int> realDelay(ProxyConfig c,
 /// of a connection pays for warming up everything on the way.
 Future<int> tunnelDelay(
     {int? socksPort,
+    XrayAuth? socksAuth,
     int? proxyPort,
     int samples = 1,
     Duration timeout = const Duration(seconds: 8)}) async {
@@ -148,17 +149,18 @@ Future<int> tunnelDelay(
   }
   var best = -1;
   for (var i = 0; i < samples; i++) {
-    final ms = await _delayOnce(uri, socksPort, proxyPort, timeout);
+    final ms = await _delayOnce(uri, socksPort, socksAuth, proxyPort, timeout);
     if (ms < 0) return best;
     if (best < 0 || ms < best) best = ms;
   }
   return best;
 }
 
-Future<int> _delayOnce(Uri uri, int? socksPort, int? proxyPort, Duration timeout) async {
+Future<int> _delayOnce(
+    Uri uri, int? socksPort, XrayAuth? socksAuth, int? proxyPort, Duration timeout) async {
   final sw = Stopwatch();
   try {
-    if (socksPort != null) return socksWarmDelay(socksPort, uri, timeout);
+    if (socksPort != null) return socksWarmDelay(socksPort, uri, timeout, auth: socksAuth);
     final client = HttpClient()..connectionTimeout = timeout;
     // Without a tunnel the page is fetched through the local proxy instead.
     if (proxyPort != null) {
@@ -190,26 +192,39 @@ Future<int> _delayOnce(Uri uri, int? socksPort, int? proxyPort, Duration timeout
 /// that a user's traffic then sees. That is what other clients such as v2rayN call the real delay;
 /// timing the first one counts the whole set-up, which came out about three times as high. Falls
 /// back to the time of the first request when the end of its answer cannot be told. -1 on failure.
-Future<int> socksWarmDelay(int socksPort, Uri uri, Duration timeout) async {
+Future<int> socksWarmDelay(int socksPort, Uri uri, Duration timeout, {XrayAuth? auth}) async {
   Socket? socket;
   try {
     socket = await Socket.connect('127.0.0.1', socksPort, timeout: timeout);
     final reader = StreamIterator<List<int>>(socket);
-    final buffer = <int>[];
+    // The bytes received and not read yet; [at] is the next one (reading by position keeps a
+    // long answer from being shifted byte by byte).
+    var buffer = <int>[];
+    var at = 0;
     Future<int> nextByte() async {
-      if (buffer.isEmpty) {
+      if (at >= buffer.length) {
         if (!await reader.moveNext().timeout(timeout)) {
           throw const SocketException('closed');
         }
-        buffer.addAll(reader.current);
+        buffer = reader.current;
+        at = 0;
       }
-      return buffer.removeAt(0);
+      return buffer[at++];
     }
 
     Future<List<int>> take(int n) async => [for (var i = 0; i < n; i++) await nextByte()];
 
-    socket.add([5, 1, 0]);
-    if ((await take(2))[1] != 0) return -1;
+    if (auth == null) {
+      socket.add([5, 1, 0]);
+      if ((await take(2))[1] != 0) return -1;
+    } else {
+      // method 2: user name and password (RFC 1929)
+      socket.add([5, 1, 2]);
+      if ((await take(2))[1] != 2) return -1;
+      final user = utf8.encode(auth.user), pass = utf8.encode(auth.pass);
+      socket.add([1, user.length, ...user, pass.length, ...pass]);
+      if ((await take(2))[1] != 0) return -1;
+    }
     final host = utf8.encode(uri.host);
     final port = uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80);
     socket.add([5, 1, 0, 3, host.length, ...host, port >> 8, port & 255]);

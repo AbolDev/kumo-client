@@ -356,13 +356,29 @@ Future<Fetched> _fetchOnce(
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
   if (allowInsecure) client.badCertificateCallback = (_, __, ___) => true;
   try {
-    final req = await client.getUrl(Uri.parse(url)).timeout(timeout);
-    req.headers
-      ..set(HttpHeaders.userAgentHeader, agent)
-      ..set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*');
-    final res = await req.close().timeout(timeout);
-    if (res.statusCode != 200)
-      throw HttpException('HTTP ${res.statusCode}', uri: Uri.parse(url));
+    // Redirects are followed here, not by the client, so that an address that started as https
+    // is never sent on to an unencrypted one (the answer could then be changed on the way).
+    final first = Uri.parse(url);
+    var uri = first;
+    late HttpClientResponse res;
+    for (var hop = 0;; hop++) {
+      final req = await client.getUrl(uri).timeout(timeout);
+      req.followRedirects = false;
+      req.headers
+        ..set(HttpHeaders.userAgentHeader, agent)
+        ..set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*');
+      res = await req.close().timeout(timeout);
+      if (!res.isRedirect) break;
+      final location = res.headers.value(HttpHeaders.locationHeader);
+      await res.drain<void>();
+      if (location == null || hop >= 5) throw HttpException('Too many redirects', uri: first);
+      final next = uri.resolve(location);
+      if (first.scheme == 'https' && next.scheme != 'https') {
+        throw HttpException('Redirected from https to an unencrypted address', uri: first);
+      }
+      uri = next;
+    }
+    if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}', uri: first);
     final body = await _readCapped(res, timeout * 2);
     return Fetched.fromHeaders(
         body,

@@ -432,8 +432,9 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             VpnBridge.serverName = currentName ?: getString(R.string.notif_auto)
             VpnBridge.traffic(
                 message.uplink, message.downlink, message.uplinkTotal, message.downlinkTotal,
-                // the same name the app files its statistics under
-                if (serverNames.size == 1) serverNames[0] else "Automatic",
+                // the same name the app files its statistics under: the server the automatic group
+                // is using now, else the only server, else "Automatic"
+                currentName ?: (if (serverNames.size == 1) serverNames[0] else "Automatic"),
             )
             if (!showSpeed && !showVolume) return
             val parts = ArrayList<String>()

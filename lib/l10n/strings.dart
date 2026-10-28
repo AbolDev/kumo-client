@@ -376,7 +376,8 @@ class SEn implements S {
   @override
   String get allowInsecure => 'Allow insecure';
   @override
-  String get allowInsecureDesc => 'Ignore validation of SSL certificates';
+  String get allowInsecureDesc =>
+      "Download subscriptions even when the provider's certificate cannot be verified. Off is safer; this does not change how your servers are checked.";
   @override
   String get autoConnect => 'Auto connect at device startup';
   @override
@@ -681,7 +682,8 @@ class SFa implements S {
   @override
   String get allowInsecure => 'اجازه اتصال ناامن';
   @override
-  String get allowInsecureDesc => 'نادیده گرفتن بررسی گواهی SSL';
+  String get allowInsecureDesc =>
+      'دانلود ساب‌ها حتی وقتی گواهی ارائه‌دهنده تأیید نمی‌شود. خاموش امن‌تر است؛ روی بررسی سرورهای خودت اثری ندارد.';
   @override
   String get autoConnect => 'اتصال خودکار هنگام روشن شدن گوشی';
   @override

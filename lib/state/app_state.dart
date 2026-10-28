@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket;
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/material.dart';
 
 import '../core/backup.dart';
@@ -114,6 +113,9 @@ class AppState extends ChangeNotifier {
   final logs = <LogEntry>[];
   Timer? _logTimer;
 
+  /// Changes with every new line of the log, so the log page redraws without the whole app doing it.
+  final logRevision = ValueNotifier<int>(0);
+
   void log(String text) {
     logs.add(LogEntry(DateTime.now(), text));
     if (logs.length > _maxLogs) logs.removeRange(0, logs.length - _maxLogs);
@@ -125,7 +127,7 @@ class AppState extends ChangeNotifier {
           .join('\n');
       VpnChannel.writeFile(_logFile, data).catchError((_) {});
     });
-    notifyListeners();
+    logRevision.value++;
   }
 
   void clearLogs() {
@@ -179,6 +181,7 @@ class AppState extends ChangeNotifier {
   /// Delay through the live tunnel, measured after connecting (null = not measured yet).
   int? liveDelay;
   int? _xrayPort;
+  XrayAuth? _xrayAuth;
 
   Future<void> _measureLive() async {
     final selectedNow = selected;
@@ -186,7 +189,10 @@ class AppState extends ChangeNotifier {
       await Future<void>.delayed(const Duration(milliseconds: 600));
       if (!connected) return;
       final ms = await tunnelDelay(
-          socksPort: _xrayPort, proxyPort: net.tun ? null : net.proxyPort, samples: 2);
+          socksPort: _xrayPort,
+          socksAuth: _xrayAuth,
+          proxyPort: net.tun ? null : net.proxyPort,
+          samples: 2);
       if (!connected) return;
       if (ms >= 0 || attempt == 1) {
         liveDelay = ms;
@@ -291,6 +297,7 @@ class AppState extends ChangeNotifier {
     final lang = languageCode ?? WidgetsBinding.instance.platformDispatcher.locale.languageCode;
     alertText = trFor(lang, key, args);
     log('Notice: ${trFor('en', key, args)}');
+    notifyListeners();
   }
 
   /// Warns about [g] if its data or time is running out and the user was not told yet.
@@ -446,7 +453,11 @@ class AppState extends ChangeNotifier {
         _misses = 0;
         _healthDown = 0;
         _watch?.cancel();
-        _watch = Timer.periodic(const Duration(seconds: 20), (_) => _healthTick());
+        _watch = Timer.periodic(const Duration(seconds: 20), (_) {
+          _refreshActive();
+          _healthTick();
+        });
+        Future<void>.delayed(const Duration(seconds: 3), _refreshActive);
       } else if (s.status != VpnStatus.started) {
         _watch?.cancel();
         _watch = null;
@@ -505,6 +516,11 @@ class AppState extends ChangeNotifier {
   Future<void> _applyCachedSubscriptions() async {
     for (final g in List.of(subscriptions)) {
       try {
+        // The background job could not trust this provider's certificate.
+        if (await VpnChannel.readFile('subcache/${g.id}.error') != null) {
+          await VpnChannel.deleteFile('subcache/${g.id}.error');
+          if (!allowInsecure) _notice('subCertError', {'name': g.name});
+        }
         final raw = await VpnChannel.readFile('subcache/${g.id}.json');
         if (raw == null) continue;
         final j = jsonDecode(raw) as Map<String, dynamic>;
@@ -646,6 +662,7 @@ class AppState extends ChangeNotifier {
     _watch?.cancel();
     _trafficSub?.cancel();
     traffic.dispose();
+    logRevision.dispose();
     super.dispose();
   }
 
@@ -1074,7 +1091,7 @@ class AppState extends ChangeNotifier {
     day[0] += dd;
     day[1] += du;
     day[2] += gap;
-    final name = selected?.name ?? 'Automatic';
+    final name = selected?.name ?? _activeName ?? 'Automatic';
     final s = serverUsage.putIfAbsent(name, () => [0, 0, 0, 0]);
     s[0] += dd;
     s[1] += du;
@@ -1197,9 +1214,24 @@ class AppState extends ChangeNotifier {
   void _listenTraffic() =>
       _trafficSub ??= VpnChannel.traffic.listen(_onTraffic);
 
-  void _save() => _writeServers();
+  Timer? _saveTimer;
 
-  void _writeServers() {
+  /// Saves the servers a moment from now: a test that finishes a result every few milliseconds, or a
+  /// run of edits, writes the file once, not once each.
+  void _save() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 600), _writeServers);
+  }
+
+  /// Writes at once what [_save] was about to write (the app is being left or closed).
+  Future<void> flushStore() async {
+    if (_saveTimer?.isActive ?? false) {
+      _saveTimer!.cancel();
+      await _writeServers();
+    }
+  }
+
+  Future<void> _writeServers() {
     List<String> links(ServerGroup g, [int? limit]) =>
         g.configs.take(limit ?? g.configs.length).map((c) => c.link).toList();
     // Ping results, so they survive closing the app.
@@ -1245,7 +1277,7 @@ class AppState extends ChangeNotifier {
     });
     final locked = _storeLocked;
     _storeLocked = false;
-    _store(_storeFile, data, locked: locked).catchError((_) {});
+    return _store(_storeFile, data, locked: locked).catchError((_) {});
   }
 
   // ---------------------------------------------------------------- helpers
@@ -1530,11 +1562,30 @@ class AppState extends ChangeNotifier {
     if (updated == null) return false;
     final i = g.configs.indexOf(old);
     if (i < 0) return false;
-    g.configs[i] = updated;
-    if (selected == old) selected = updated;
+    // A server that is already in the list is not added a second time (two rows with the same
+    // link would also share one key in the list).
+    final same = g.configs.where((c) => !identical(c, old) && c.key == updated.key).firstOrNull;
+    if (same != null) {
+      g.configs.removeAt(i);
+      if (identical(selected, old)) selected = same;
+    } else {
+      g.configs[i] = updated;
+      if (identical(selected, old)) selected = updated;
+    }
     _save();
     notifyListeners();
     return true;
+  }
+
+  /// Removes every config that was added by hand.
+  void clearManual() {
+    if (tests[manual.id]?.running ?? false) cancelPing(manual);
+    final n = manual.configs.length;
+    if (selected != null && manual.configs.any((c) => identical(c, selected))) selected = null;
+    manual.configs.clear();
+    log('Removed all $n configs added manually');
+    _save();
+    notifyListeners();
   }
 
   void removeConfig(ServerGroup g, ProxyConfig c) {
@@ -1572,6 +1623,8 @@ class AppState extends ChangeNotifier {
       }
       var g = subscriptions.where((s) => s.url == first).firstOrNull;
       final isNew = g == null;
+      // Without https the list of servers can be read, or changed, by anyone on the way.
+      if (isNew && first.startsWith('http://')) _notice('subHttp', {'name': Uri.tryParse(first)?.host ?? first});
       if (g == null) {
         g = ServerGroup('sub-${DateTime.now().microsecondsSinceEpoch}',
             GroupKind.subscription,
@@ -1659,6 +1712,7 @@ class AppState extends ChangeNotifier {
   List<ProxyConfig>? _standbyChosen;
   int? _standbyXrayPort;
   int _standbyApi = 0;
+  XrayAuth? _standbyXrayAuth;
   String? _standbySecret;
 
   String _standbyKeyOf(List<ProxyConfig> chosen, ProviderRouting? routing) {
@@ -1713,6 +1767,7 @@ class AppState extends ChangeNotifier {
         _standbyKey = key;
         _standbyChosen = chosen;
         _standbyXrayPort = xrayPort;
+        _standbyXrayAuth = parts.xrayAuth;
         _standbyApi = parts.api;
         _standbySecret = parts.secret;
       } else {
@@ -1724,7 +1779,7 @@ class AppState extends ChangeNotifier {
   }
   /// The configuration of the proxy that stays up without the tunnel: the same options without
   /// the tunnel, the kill switch and the system proxy, with the login when one is set.
-  ({String config, String? xrayConfig, int api, String secret}) _standbyParts(List<ProxyConfig> chosen,
+  ({String config, String? xrayConfig, int api, String secret, XrayAuth? xrayAuth}) _standbyParts(List<ProxyConfig> chosen,
       ProviderRouting? routing, Map<String, String> sets, int? xrayPort) {
     final o = NetOptions()
       ..load(net.toJson())
@@ -1735,8 +1790,10 @@ class AppState extends ChangeNotifier {
     // The port of the control API is only used on the desktop; any free one will do.
     final api = 20000 + Random().nextInt(20000);
     final secret = _randomSecret();
+    final xrayAuth = viaXray ? _newXrayAuth() : null;
     final config = buildSingBoxConfig(chosen,
         xrayPort: xrayPort,
+        xrayAuth: xrayAuth,
         options: o,
         ruleSets: sets,
         apiPort: api,
@@ -1748,9 +1805,10 @@ class AppState extends ChangeNotifier {
         localLogin: true);
     return (
       config: config,
-      xrayConfig: viaXray ? buildXrayConfig(chosen.first, xrayPort, options: o) : null,
+      xrayConfig: viaXray ? buildXrayConfig(chosen.first, xrayPort, options: o, auth: xrayAuth) : null,
       api: api,
       secret: secret,
+      xrayAuth: xrayAuth,
     );
   }
 
@@ -1802,6 +1860,9 @@ class AppState extends ChangeNotifier {
     final names = chosen.map((c) => c.name).toList();
     _preparing = false;
     _xrayPort = null;
+    _xrayAuth = null;
+    _activeName = null;
+    _groupNames = chosen.length > 1 ? [for (final c in chosen) if (c.canSingBox) c.name] : const [];
     try {
       final routing = routingFor(chosen);
       // In the proxy mode the core that already runs the proxy becomes the connection: nothing is
@@ -1815,6 +1876,7 @@ class AppState extends ChangeNotifier {
         if (cancelled()) return;
         if (adopted) {
           _xrayPort = _standbyXrayPort;
+          _xrayAuth = _standbyXrayAuth;
           apiPort = _standbyApi;
           apiSecret = _standbySecret ?? '';
           return;
@@ -1834,8 +1896,11 @@ class AppState extends ChangeNotifier {
       final viaXray = chosen.length == 1 &&
           chosen.first.canXray &&
           (chosen.first.needsXray || net.core == 'xray');
+      // Xray's local port asks for a login of its own, so no other program here can use it.
+      final xrayAuth = viaXray ? _newXrayAuth() : null;
       String config(int? xray) => buildSingBoxConfig(chosen,
           xrayPort: xray,
+          xrayAuth: xrayAuth,
           options: net,
           ruleSets: sets,
           apiPort: apiPort,
@@ -1854,10 +1919,11 @@ class AppState extends ChangeNotifier {
       if (viaXray) {
         final port = xrayPortNew!;
         _xrayPort = port;
+        _xrayAuth = xrayAuth;
         await VpnChannel.start(
           config(port),
           serverNames: names,
-          xrayConfig: buildXrayConfig(chosen.first, port, options: net),
+          xrayConfig: buildXrayConfig(chosen.first, port, options: net, auth: xrayAuth),
           xrayPort: port,
           showSpeed: showSpeed,
           showVolume: showVolume,
@@ -1898,6 +1964,8 @@ class AppState extends ChangeNotifier {
     return port;
   }
 
+  XrayAuth _newXrayAuth() => (user: 'k${_randomSecret().substring(0, 8)}', pass: _randomSecret());
+
   String _randomSecret() {
     final r = Random.secure();
     return List.generate(24, (_) => r.nextInt(16).toRadixString(16)).join();
@@ -1906,6 +1974,24 @@ class AppState extends ChangeNotifier {
   // ---------------------------------------------------------------- failover
 
   Timer? _watch;
+
+  /// The names of the servers in the automatic group, in the order the core knows them (server-0 ...),
+  /// and the one the group uses now (asked from the core), so that the usage is filed under the
+  /// server that carried it.
+  List<String> _groupNames = const [];
+  String? _activeName;
+
+  Future<void> _refreshActive() async {
+    if (!connected || selected != null || _groupNames.length < 2) {
+      _activeName = null;
+      return;
+    }
+    final j = await api?.get('/proxies/proxy');
+    final now = j is Map ? '${j['now']}' : '';
+    final m = RegExp(r'^server-(\d+)$').firstMatch(now);
+    final i = m == null ? -1 : int.parse(m[1]!);
+    _activeName = i >= 0 && i < _groupNames.length ? _groupNames[i] : null;
+  }
   var _misses = 0;
   var _healthDown = 0;
   var _failingOver = false;
@@ -1926,6 +2012,7 @@ class AppState extends ChangeNotifier {
     }
     final ms = await tunnelDelay(
         socksPort: _xrayPort,
+        socksAuth: _xrayAuth,
         proxyPort: net.tun ? null : net.proxyPort,
         timeout: const Duration(seconds: 5));
     if (!connected) return;

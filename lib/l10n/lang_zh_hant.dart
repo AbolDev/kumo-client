@@ -16,7 +16,7 @@ class SZhHant implements S {
   @override
   String get autoFastest => '自動（最低延遲）';
   @override
-  String activeServers(int n) => '${n} 個可用伺服器';
+  String activeServers(int n) => '$n 個可用伺服器';
   @override
   String get collectorGroup => '公共伺服器';
   @override
@@ -88,7 +88,7 @@ class SZhHant implements S {
   @override
   String get savedToGallery => '已儲存到相簿';
   @override
-  String saveFailed(Object e) => '儲存失敗：${e}';
+  String saveFailed(Object e) => '儲存失敗：$e';
   @override
   String get password => '密碼';
   @override
@@ -114,9 +114,9 @@ class SZhHant implements S {
   @override
   String get sessionLabel => '本次連線';
   @override
-  String listLoaded(int n) => '清單已載入：${n} 個設定。';
+  String listLoaded(int n) => '清單已載入：$n 個設定。';
   @override
-  String addedConfigs(int n) => '已新增 ${n} 個設定。';
+  String addedConfigs(int n) => '已新增 $n 個設定。';
   @override
   String get subSettings => '訂閱設定';
   @override
@@ -136,7 +136,7 @@ class SZhHant implements S {
   @override
   String get allowInsecure => '允許不安全連線';
   @override
-  String get allowInsecureDesc => '忽略 SSL 憑證驗證';
+  String get allowInsecureDesc => '即使提供者的憑證無法驗證也下載訂閱。關閉較安全；這不影響你的伺服器的檢查方式。';
   @override
   String get autoConnect => '開機自動連線';
   @override
@@ -176,11 +176,11 @@ class SZhHant implements S {
   @override
   String get deleteWarning => '此操作無法復原。';
   @override
-  String daysLeft(int n) => '剩餘 ${n} 天';
+  String daysLeft(int n) => '剩餘 $n 天';
   @override
-  String hoursLeft(int n) => '剩餘 ${n} 小時';
+  String hoursLeft(int n) => '剩餘 $n 小時';
   @override
-  String minutesLeft(int n) => '剩餘 ${n} 分鐘';
+  String minutesLeft(int n) => '剩餘 $n 分鐘';
   @override
   String get expired => '已過期';
   @override
@@ -204,15 +204,15 @@ class SZhHant implements S {
   @override
   String get start => '開始';
   @override
-  String testStat(int alive, int percent) => '${alive} 個可用 · ${percent}%';
+  String testStat(int alive, int percent) => '$alive 個可用 · $percent%';
   @override
   String get timeWord => '時間';
   @override
   String get unlimitedData => '不限流量';
   @override
-  String usedOf(String used, String total) => '已用 ${used} / ${total}';
+  String usedOf(String used, String total) => '已用 $used / $total';
   @override
-  String usedUnlimited(String used) => '已用 ${used}';
+  String usedUnlimited(String used) => '已用 $used';
   @override
   String get theme => '主題';
   @override
@@ -224,15 +224,15 @@ class SZhHant implements S {
   @override
   String get fetchingList => '正在下載設定清單...';
   @override
-  String testingServers(int n) => '正在測試 ${n} 個伺服器...';
+  String testingServers(int n) => '正在測試 $n 個伺服器...';
   @override
-  String foundActive(int n) => '已找到 ${n} 個可用伺服器...';
+  String foundActive(int n) => '已找到 $n 個可用伺服器...';
   @override
   String get testingSaved => '正在測試已儲存的伺服器...';
   @override
   String get allSourcesFailed => '所有來源都無法連線。請手動新增訂閱連結或設定。';
   @override
-  String fetchFailed(Object e) => '無法下載清單：${e}';
+  String fetchFailed(Object e) => '無法下載清單：$e';
   @override
   String get noActiveServer => '找不到可用伺服器，請重試。';
   @override
@@ -240,15 +240,15 @@ class SZhHant implements S {
   @override
   String get noValidConfig => '找不到有效設定。';
   @override
-  String importResult(int alive, int total) => '${total} 個設定中有 ${alive} 個可用。';
+  String importResult(int alive, int total) => '$total 個設定中有 $alive 個可用。';
   @override
-  String importFailed(Object e) => '無法新增：${e}';
+  String importFailed(Object e) => '無法新增：$e';
   @override
-  String subscriptionUpdated(int n) => '訂閱已更新：${n} 個設定。';
+  String subscriptionUpdated(int n) => '訂閱已更新：$n 個設定。';
   @override
   String get vpnPermissionDenied => '未授予 VPN 權限。';
   @override
-  String connectFailed(String reason) => '無法連線：${reason}';
+  String connectFailed(String reason) => '無法連線：$reason';
   @override
   String get nameSubscription => '為這個訂閱取個名稱';
   @override

@@ -441,8 +441,9 @@ String _gen2V2rayLink(String remarks, String address, Map<String, String> p) {
 
 String _gen2SshText(String remarks, Map<String, String> s) {
   var target = _g(s, 'sshHost');
-  if (_g(s, 'sshPort').isNotEmpty)
+  if (_g(s, 'sshPort').isNotEmpty) {
     target = _joinHostPort(target, _g(s, 'sshPort'));
+  }
   final query = <String, dynamic>{};
   _gen2Set(query, 'remarks', remarks);
   _gen2Set(query, 'sshConfigType', _g(s, 'sshConfigType'));
@@ -455,10 +456,12 @@ String _gen2SshText(String remarks, Map<String, String> s) {
 String _gen2ProxyText(
     String remarks, String address, String kind, Map<String, String> p) {
   var scheme = kind;
-  if (scheme.endsWith('Config'))
+  if (scheme.endsWith('Config')) {
     scheme = scheme.substring(0, scheme.length - 6);
-  if (scheme.endsWith('Profile'))
+  }
+  if (scheme.endsWith('Profile')) {
     scheme = scheme.substring(0, scheme.length - 7);
+  }
   var target = _gen2Or(_g(p, 'server'), _gen2Or(_g(p, 'host'), address));
   final port =
       _gen2Or(_g(p, 'serverPort'), _gen2Or(_g(p, 'port'), _g(p, 'localPort')));
@@ -502,8 +505,9 @@ String _gen2Link(Object? cfg) {
     'proxyConfig'
   ]) {
     final sub = cfg[kind];
-    if (sub is Map)
+    if (sub is Map) {
       return _gen2ProxyText(remarks, address, kind, _gen2FlatMap(sub));
+    }
   }
   return _gen2KeyValues(_gen2FlatMap(cfg));
 }
@@ -586,8 +590,9 @@ String decryptNpvsOpen(Uint8List data) {
     throw ConfigDecryptError('npvs open: payload is not a config list');
   }
   final configs = _l(_m(env)['configs']);
-  if (configs.isEmpty)
+  if (configs.isEmpty) {
     throw ConfigDecryptError('npvs open: payload has no configs');
+  }
   return configs.map((c) => _gen2Link(_openDecodeSentinels(c))).join('\n');
 }
 

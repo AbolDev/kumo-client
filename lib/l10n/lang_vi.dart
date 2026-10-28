@@ -16,7 +16,7 @@ class SVi implements S {
   @override
   String get autoFastest => 'Tự động (ping thấp nhất)';
   @override
-  String activeServers(int n) => '${n} máy chủ hoạt động';
+  String activeServers(int n) => '$n máy chủ hoạt động';
   @override
   String get collectorGroup => 'Máy chủ công cộng';
   @override
@@ -89,7 +89,7 @@ class SVi implements S {
   @override
   String get savedToGallery => 'Đã lưu vào thư viện ảnh';
   @override
-  String saveFailed(Object e) => 'Không lưu được: ${e}';
+  String saveFailed(Object e) => 'Không lưu được: $e';
   @override
   String get password => 'Mật khẩu';
   @override
@@ -116,9 +116,9 @@ class SVi implements S {
   @override
   String get sessionLabel => 'Phiên này';
   @override
-  String listLoaded(int n) => 'Đã tải danh sách: ${n} cấu hình.';
+  String listLoaded(int n) => 'Đã tải danh sách: $n cấu hình.';
   @override
-  String addedConfigs(int n) => 'Đã thêm ${n} cấu hình.';
+  String addedConfigs(int n) => 'Đã thêm $n cấu hình.';
   @override
   String get subSettings => 'Cài đặt đăng ký';
   @override
@@ -140,7 +140,8 @@ class SVi implements S {
   @override
   String get allowInsecure => 'Cho phép kết nối không an toàn';
   @override
-  String get allowInsecureDesc => 'Bỏ qua việc xác thực chứng chỉ SSL';
+  String get allowInsecureDesc =>
+      'Tải gói đăng ký ngay cả khi không xác minh được chứng chỉ của nhà cung cấp. Tắt thì an toàn hơn; không ảnh hưởng cách kiểm tra máy chủ của bạn.';
   @override
   String get autoConnect => 'Tự động kết nối khi khởi động máy';
   @override
@@ -184,11 +185,11 @@ class SVi implements S {
   @override
   String get deleteWarning => 'Hành động này không thể hoàn tác.';
   @override
-  String daysLeft(int n) => 'Còn ${n} ngày';
+  String daysLeft(int n) => 'Còn $n ngày';
   @override
-  String hoursLeft(int n) => 'Còn ${n} giờ';
+  String hoursLeft(int n) => 'Còn $n giờ';
   @override
-  String minutesLeft(int n) => 'Còn ${n} phút';
+  String minutesLeft(int n) => 'Còn $n phút';
   @override
   String get expired => 'Đã hết hạn';
   @override
@@ -212,15 +213,15 @@ class SVi implements S {
   @override
   String get start => 'Bắt đầu';
   @override
-  String testStat(int alive, int percent) => '${alive} hoạt động · ${percent}%';
+  String testStat(int alive, int percent) => '$alive hoạt động · $percent%';
   @override
   String get timeWord => 'Thời gian';
   @override
   String get unlimitedData => 'Không giới hạn dung lượng';
   @override
-  String usedOf(String used, String total) => 'Đã dùng ${used} / ${total}';
+  String usedOf(String used, String total) => 'Đã dùng $used / $total';
   @override
-  String usedUnlimited(String used) => 'Đã dùng ${used}';
+  String usedUnlimited(String used) => 'Đã dùng $used';
   @override
   String get theme => 'Giao diện';
   @override
@@ -232,16 +233,16 @@ class SVi implements S {
   @override
   String get fetchingList => 'Đang tải danh sách cấu hình...';
   @override
-  String testingServers(int n) => 'Đang kiểm tra ${n} máy chủ...';
+  String testingServers(int n) => 'Đang kiểm tra $n máy chủ...';
   @override
-  String foundActive(int n) => 'Đã tìm thấy ${n} máy chủ hoạt động...';
+  String foundActive(int n) => 'Đã tìm thấy $n máy chủ hoạt động...';
   @override
   String get testingSaved => 'Đang kiểm tra các máy chủ đã lưu...';
   @override
   String get allSourcesFailed =>
       'Không truy cập được nguồn nào. Hãy thêm liên kết đăng ký hoặc cấu hình thủ công.';
   @override
-  String fetchFailed(Object e) => 'Không tải được danh sách: ${e}';
+  String fetchFailed(Object e) => 'Không tải được danh sách: $e';
   @override
   String get noActiveServer => 'Không tìm thấy máy chủ hoạt động. Hãy thử lại.';
   @override
@@ -250,15 +251,15 @@ class SVi implements S {
   String get noValidConfig => 'Không tìm thấy cấu hình hợp lệ.';
   @override
   String importResult(int alive, int total) =>
-      '${alive}/${total} cấu hình đang hoạt động.';
+      '$alive/$total cấu hình đang hoạt động.';
   @override
-  String importFailed(Object e) => 'Không thêm được: ${e}';
+  String importFailed(Object e) => 'Không thêm được: $e';
   @override
-  String subscriptionUpdated(int n) => 'Đã cập nhật đăng ký: ${n} cấu hình.';
+  String subscriptionUpdated(int n) => 'Đã cập nhật đăng ký: $n cấu hình.';
   @override
   String get vpnPermissionDenied => 'Chưa được cấp quyền VPN.';
   @override
-  String connectFailed(String reason) => 'Không kết nối được: ${reason}';
+  String connectFailed(String reason) => 'Không kết nối được: $reason';
   @override
   String get nameSubscription => 'Đặt tên cho đăng ký này';
   @override

@@ -31,10 +31,13 @@ Map<String, dynamic>? parseExtraJson(String text) {
   }
 }
 
+/// The user name and password of the local SOCKS port that sing-box reaches Xray through.
+typedef XrayAuth = ({String user, String pass});
+
 /// Builds the Xray configuration for one server: a local SOCKS inbound on 127.0.0.1:[port] that
 /// forwards everything to it. sing-box connects to that port.
 String buildXrayConfig(ProxyConfig server, int port,
-    {String logLevel = 'error', NetOptions? options}) {
+    {String logLevel = 'error', NetOptions? options, XrayAuth? auth}) {
   assert(server.canXray);
   final o = options ?? NetOptions();
   final outbound =
@@ -45,7 +48,16 @@ String buildXrayConfig(ProxyConfig server, int port,
       'listen': '127.0.0.1',
       'port': port,
       'protocol': 'socks',
-      'settings': {'auth': 'noauth', 'udp': true},
+      // With a login, other programs on this computer cannot use Xray's local port.
+      'settings': auth == null
+          ? {'auth': 'noauth', 'udp': true}
+          : {
+              'auth': 'password',
+              'accounts': [
+                {'user': auth.user, 'pass': auth.pass},
+              ],
+              'udp': true,
+            },
     },
   ];
   final outbounds = <Map<String, dynamic>>[];
@@ -222,12 +234,17 @@ Map<String, dynamic> _tweak(Map<String, dynamic> source, NetOptions o,
 /// The DNS server for the chosen address: plain UDP, `tcp://`, `tls://` (DoT), `quic://` (DoQ),
 /// `https://` (DoH) or `h3://` (DoH over HTTP/3). It is always reached through the proxy.
 Map<String, dynamic> _dnsServer(String address, {String resolver = 'dns-local'}) {
+  // An address that cannot be read falls back to the first preset rather than stopping the core.
+  if (!isValidDnsAddress(address)) address = dnsPresets.first.address;
   final scheme = RegExp(r'^(https|h3|tls|quic|tcp|udp)://').firstMatch(address)?[1];
   if (scheme == null) {
+    // "host" or "host:port" is a plain UDP server.
+    final withPort = RegExp(r'^([^:\[\]\s]+):(\d{1,5})$').firstMatch(address);
     return {
       'type': 'udp',
       'tag': 'dns-remote',
-      'server': address,
+      'server': withPort?[1] ?? address.replaceAll(RegExp(r'^\[|\]$'), ''),
+      if (withPort != null) 'server_port': int.parse(withPort[2]!),
       'domain_resolver': resolver,
       'detour': 'proxy',
     };
@@ -319,6 +336,7 @@ String buildSingBoxConfig(
   bool viaXray = false,
   ProviderRouting? routing,
   bool localLogin = false,
+  XrayAuth? xrayAuth,
 }) {
   assert(servers.isNotEmpty);
   final o = options ?? NetOptions();
@@ -358,6 +376,7 @@ String buildSingBoxConfig(
       'server': '127.0.0.1',
       'server_port': xrayPort,
       'version': '5',
+      if (xrayAuth != null) ...{'username': xrayAuth.user, 'password': xrayAuth.pass},
     });
   } else if (servers.length == 1) {
     addServer(servers.first, 'proxy');
@@ -447,7 +466,8 @@ String buildSingBoxConfig(
         ]
       : <String>[];
   final adsStrong = o.blockAds && o.adsLevel == 'strong';
-  final builtIn = o.blockAds ? builtInAdDomains : const <String>[];  final strict = o.strictDns;
+  final builtIn = o.blockAds ? builtInAdDomains : const <String>[];
+  final strict = o.strictDns;
   final iran = o.bypass.isNotEmpty;
   final suffixes = [for (final c in o.bypass) '.$c'];
   final block = _RuleFields(o.blockRules);

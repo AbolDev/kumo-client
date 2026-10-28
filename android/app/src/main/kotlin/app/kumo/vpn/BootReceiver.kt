@@ -15,6 +15,12 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
         // Without the system's VPN consent there is nothing the app can do on its own.
-        if (!VpnControl.startLast(context)) IdleNotification.show(context)
+        // The system may refuse to start the service at this moment; that must not take the app down.
+        val started = try {
+            VpnControl.startLast(context)
+        } catch (_: Exception) {
+            false
+        }
+        if (!started) IdleNotification.show(context)
     }
 }

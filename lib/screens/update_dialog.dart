@@ -6,14 +6,18 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/updater.dart';
 import '../core/vpn_channel.dart';
+import '../core/win_tools.dart';
 import '../core/desktop_vpn.dart' show DesktopVpn;
 import '../l10n/extra.dart';
 import 'share_sheet.dart';
 
 Future<void> openLink(String url) async {
+  // Only web addresses, and never through a command line that would read "&" as a second command.
+  final uri = Uri.tryParse(url);
+  if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http') || uri.host.isEmpty) return;
   try {
     if (Platform.isWindows) {
-      await Process.run('cmd', ['/c', 'start', '', url]);
+      await Process.run(winTool('rundll32'), ['url.dll,FileProtocolHandler', uri.toString()]);
     } else if (Platform.isMacOS) {
       await Process.run('open', [url]);
     } else if (Platform.isLinux) {

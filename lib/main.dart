@@ -65,7 +65,10 @@ class _KumoAppState extends State<KumoApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     // The usage numbers are saved every half minute; leaving the app saves them at once.
-    if (lifecycle != AppLifecycleState.resumed) _state.flushUsage();
+    if (lifecycle != AppLifecycleState.resumed) {
+      _state.flushUsage();
+      _state.flushStore();
+    }
   }
 
   @override
@@ -151,6 +154,7 @@ class _KumoAppState extends State<KumoApp>
     // wrong in there, the window still closes.
     for (final step in <Future<void> Function()>[
       _state.flushUsage,
+      _state.flushStore,
       VpnChannel.stop,
       VpnChannel.stopStandby,
       trayManager.destroy,

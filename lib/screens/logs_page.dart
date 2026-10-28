@@ -20,7 +20,8 @@ class LogsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = S.of(context);
     return ListenableBuilder(
-      listenable: state,
+      // Each new line of the log is announced on its own, not as a change of the whole app state.
+      listenable: Listenable.merge([state, state.logRevision]),
       builder: (context, _) {
         final items = state.logs.reversed.toList();
         return Scaffold(

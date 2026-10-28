@@ -7,7 +7,7 @@ import 'package:pointycastle/export.dart';
 
 /// Backup files are JSON. With a password the payload is encrypted with AES-256-GCM, the key
 /// coming from PBKDF2-HMAC-SHA256 of the password.
-const _iterations = 150000;
+const _iterations = 250000;
 
 /// Backups made before the count was written into the file used this many.
 const _legacyIterations = 60000;

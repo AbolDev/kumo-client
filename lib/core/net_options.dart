@@ -31,6 +31,29 @@ const dnsPresets = [
   DnsPreset('cloudflare-tcp', 'Cloudflare (TCP)', 'tcp://1.1.1.1'),
 ];
 
+/// Whether [address] can be used as the DNS server: a host or IP (with an optional port) for plain
+/// UDP, or `https://`, `h3://`, `tls://`, `quic://`, `tcp://`, `udp://` followed by a host, an
+/// optional port and, for the HTTPS kinds, a path.
+bool isValidDnsAddress(String address) {
+  final a = address.trim();
+  if (a.isEmpty || a.contains(RegExp(r'\s'))) return false;
+  bool validPort(int? p) => p == null || (p >= 1 && p <= 65535);
+  final scheme = RegExp(r'^(https|h3|tls|quic|tcp|udp)://').firstMatch(a)?[1];
+  if (scheme != null) {
+    final uri = Uri.tryParse(a);
+    if (uri == null || uri.host.isEmpty) return false;
+    return validPort(uri.hasPort ? uri.port : null);
+  }
+  if (a.contains('://')) return false;
+  // [::1] or ::1 (an IPv6 address), a name or an IPv4 address, each with an optional :port
+  if (a.startsWith('[')) return RegExp(r'^\[[0-9a-fA-F:.]+\](:\d{1,5})?$').hasMatch(a);
+  if (a.contains(':') && a.indexOf(':') != a.lastIndexOf(':')) {
+    return RegExp(r'^[0-9a-fA-F:.]+$').hasMatch(a);
+  }
+  final m = RegExp(r'^([A-Za-z0-9._-]+)(?::(\d{1,5}))?$').firstMatch(a);
+  return m != null && validPort(m[2] == null ? null : int.parse(m[2]!));
+}
+
 /// Multiplexing protocols sing-box offers on the TCP-based outbounds.
 const muxProtocols = ['h2mux', 'smux', 'yamux'];
 
@@ -97,6 +120,9 @@ const logLevels = ['error', 'warn', 'info', 'debug'];
 /// and the extra work of the chattier levels.
 const defaultLogLevel = 'warn';
 
+/// The tunnel's packet size when the user has not chosen one.
+const defaultMtu = 1500;
+
 /// Everything in Settings that changes how traffic is carried.
 class NetOptions {
   NetOptions();
@@ -119,7 +145,10 @@ class NetOptions {
 
   bool tlsFragment = false;
   bool mux = false;
-  int mtu = 9000;
+  /// 1500 fits an ordinary network without splitting the packets that UDP-based protocols (Hysteria,
+  /// TUIC, WireGuard, QUIC) send through the tunnel; 9000, the old default, was dropped or split by
+  /// many networks.
+  int mtu = defaultMtu;
   String fingerprint = '';
 
   /// Log level of the core (sing-box, and Xray when it runs).
@@ -168,9 +197,6 @@ class NetOptions {
 
   /// Android: how Wi-Fi and mobile data are used together.
   String networkStrategy = networkStrategies.first;
-
-  /// Android: the connection stays off (direct) while the phone is on one of these Wi-Fi names.
-  List<String> directWifi = [];
 
   /// Your own JSON, merged into every sing-box proxy outbound and into the stream settings of
   /// the Xray outbound (for options the app has no switch for: fragmenting, final masks ...).
@@ -247,7 +273,6 @@ class NetOptions {
         'blockStun': blockStun,
         'ntp': ntp,
         'networkStrategy': networkStrategy,
-        'directWifi': directWifi,
         'extraSingbox': extraSingbox,
         'extraXray': extraXray,
         'directRules': directRules,
@@ -287,7 +312,8 @@ class NetOptions {
     tlsFragment = flag('tlsFragment', false);
     mux = flag('mux', false);
     final m = j['mtu'];
-    if (m is int && m >= 1280 && m <= 65535) mtu = m;
+    // 9000 was the default of the earlier versions, not a choice: it moves to the new default.
+    if (m is int && m >= 1280 && m <= 9000) mtu = m == 9000 ? defaultMtu : m;
     final fp = j['fingerprint'];
     fingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
     final level = j['logLevel'];
@@ -314,8 +340,6 @@ class NetOptions {
     ntp = flag('ntp', false);
     final timeout = j['connectTimeout'];
     connectTimeout = timeout is int && timeout >= 0 && timeout <= 120 ? timeout : 0;
-    final wifi = j['directWifi'];
-    directWifi = wifi is List ? wifi.whereType<String>().toList() : [];
     extraSingbox = j['extraSingbox'] is String ? j['extraSingbox'] as String : '';
     extraXray = j['extraXray'] is String ? j['extraXray'] as String : '';
     shareLan = flag('shareLan', false);

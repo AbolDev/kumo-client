@@ -90,6 +90,7 @@ class SubUpdateJob : JobService() {
             try {
                 val answer = download(url, insecure)
                 Store.write(filesDir, "subcache/$id.json", answer.toString())
+                Store.delete(filesDir, "subcache/$id.error")
                 // The numbers the provider reported: warn if the data or the time is running out.
                 val values = HashMap<String, Long>()
                 answer.optString("userinfo").split(';').forEach {
@@ -104,6 +105,9 @@ class SubUpdateJob : JobService() {
                         values["expire"] ?: 0L,
                     )
                 }
+            } catch (e: javax.net.ssl.SSLException) {
+                // The certificate did not check out: the app tells the user the next time it opens.
+                runCatching { Store.write(filesDir, "subcache/$id.error", "certificate") }
             } catch (_: Exception) {
                 // try again at the next run
             }

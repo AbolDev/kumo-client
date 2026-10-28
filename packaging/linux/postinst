@@ -1,7 +1,15 @@
 #!/bin/sh
 set -e
-# Lets the VPN core open the tunnel (TUN) without asking for a password every time.
+# The tunnel needs network privileges. They go to the VPN core for the members of the group "kumo"
+# only, not for every program and user of the computer; everybody else is asked for a password.
 if command -v setcap >/dev/null 2>&1; then
+  getent group kumo >/dev/null 2>&1 || groupadd --system kumo >/dev/null 2>&1 || true
+  chgrp kumo /opt/kumo/kumo-core >/dev/null 2>&1 || true
+  chmod 750 /opt/kumo/kumo-core >/dev/null 2>&1 || true
   setcap cap_net_admin,cap_net_bind_service,cap_net_raw+ep /opt/kumo/kumo-core || true
+  # the person who installed it (with sudo) is in the group from the next sign-in
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    usermod -aG kumo "$SUDO_USER" >/dev/null 2>&1 || true
+  fi
 fi
 exit 0

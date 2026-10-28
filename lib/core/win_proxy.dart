@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'proxy_watchdog.dart';
 import 'system_proxy.dart';
+import 'win_tools.dart';
 
 const _key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
 
@@ -17,7 +18,7 @@ class WinProxy implements SystemProxy {
   File get _backup => File('$dataDir\\system_proxy_backup.json');
 
   Future<String?> _query(String name) async {
-    final r = await Process.run('reg', ['query', _key, '/v', name]);
+    final r = await Process.run(winTool('reg'), ['query', _key, '/v', name]);
     if (r.exitCode != 0) return null;
     final m = RegExp('$name\\s+REG_\\w+\\s+(.*)').firstMatch('${r.stdout}');
     return m?.group(1)?.trim();
@@ -25,9 +26,9 @@ class WinProxy implements SystemProxy {
 
   Future<void> _set(String name, String type, String? value) async {
     if (value == null) {
-      await Process.run('reg', ['delete', _key, '/v', name, '/f']);
+      await Process.run(winTool('reg'), ['delete', _key, '/v', name, '/f']);
     } else {
-      await Process.run('reg', ['add', _key, '/v', name, '/t', type, '/d', value, '/f']);
+      await Process.run(winTool('reg'), ['add', _key, '/v', name, '/t', type, '/d', value, '/f']);
     }
   }
 

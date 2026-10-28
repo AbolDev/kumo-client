@@ -51,16 +51,18 @@ String _goJson(Object? v, {String? indent, bool sortKeys = false}) {
       out.write('[');
       for (var i = 0; i < x.length; i++) {
         if (i > 0) out.write(',');
-        if (indent != null)
+        if (indent != null) {
           out
             ..write('\n')
             ..write(indent * (depth + 1));
+        }
         write(x[i], depth + 1);
       }
-      if (indent != null)
+      if (indent != null) {
         out
           ..write('\n')
           ..write(indent * depth);
+      }
       out.write(']');
     } else if (x is Map) {
       if (x.isEmpty) {
@@ -72,19 +74,21 @@ String _goJson(Object? v, {String? indent, bool sortKeys = false}) {
       out.write('{');
       for (var i = 0; i < keys.length; i++) {
         if (i > 0) out.write(',');
-        if (indent != null)
+        if (indent != null) {
           out
             ..write('\n')
             ..write(indent * (depth + 1));
+        }
         out
           ..write(jsonEncode(keys[i]))
           ..write(indent == null ? ':' : ': ');
         write(x[keys[i]], depth + 1);
       }
-      if (indent != null)
+      if (indent != null) {
         out
           ..write('\n')
           ..write(indent * depth);
+      }
       out.write('}');
     } else {
       out.write(jsonEncode('$x'));
@@ -244,8 +248,9 @@ Uint8List _unpadStrict(Uint8List d, [int block = 16]) {
     throw ConfigDecryptError('data length is not a multiple of block size');
   }
   final pad = d.last;
-  if (pad < 1 || pad > block)
+  if (pad < 1 || pad > block) {
     throw ConfigDecryptError('invalid padding length $pad');
+  }
   for (var i = d.length - pad; i < d.length; i++) {
     if (d[i] != pad) throw ConfigDecryptError('invalid padding bytes');
   }

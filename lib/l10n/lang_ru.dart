@@ -16,7 +16,7 @@ class SRu implements S {
   @override
   String get autoFastest => 'Авто (минимальный пинг)';
   @override
-  String activeServers(int n) => 'Активных серверов: ${n}';
+  String activeServers(int n) => 'Активных серверов: $n';
   @override
   String get collectorGroup => 'Публичные серверы';
   @override
@@ -89,7 +89,7 @@ class SRu implements S {
   @override
   String get savedToGallery => 'Сохранено в галерею';
   @override
-  String saveFailed(Object e) => 'Не удалось сохранить: ${e}';
+  String saveFailed(Object e) => 'Не удалось сохранить: $e';
   @override
   String get password => 'Пароль';
   @override
@@ -116,9 +116,9 @@ class SRu implements S {
   @override
   String get sessionLabel => 'За сеанс';
   @override
-  String listLoaded(int n) => 'Список загружен: ${n} конфигураций.';
+  String listLoaded(int n) => 'Список загружен: $n конфигураций.';
   @override
-  String addedConfigs(int n) => 'Добавлено конфигураций: ${n}.';
+  String addedConfigs(int n) => 'Добавлено конфигураций: $n.';
   @override
   String get subSettings => 'Настройки подписок';
   @override
@@ -140,7 +140,8 @@ class SRu implements S {
   @override
   String get allowInsecure => 'Разрешить небезопасное подключение';
   @override
-  String get allowInsecureDesc => 'Не проверять SSL-сертификаты';
+  String get allowInsecureDesc =>
+      'Загружать подписки, даже если сертификат провайдера не удаётся проверить. Выключено безопаснее; на проверку ваших серверов это не влияет.';
   @override
   String get autoConnect => 'Автоподключение при включении устройства';
   @override
@@ -185,11 +186,11 @@ class SRu implements S {
   @override
   String get deleteWarning => 'Это действие нельзя отменить.';
   @override
-  String daysLeft(int n) => 'Осталось дней: ${n}';
+  String daysLeft(int n) => 'Осталось дней: $n';
   @override
-  String hoursLeft(int n) => 'Осталось часов: ${n}';
+  String hoursLeft(int n) => 'Осталось часов: $n';
   @override
-  String minutesLeft(int n) => 'Осталось минут: ${n}';
+  String minutesLeft(int n) => 'Осталось минут: $n';
   @override
   String get expired => 'Истекла';
   @override
@@ -213,16 +214,16 @@ class SRu implements S {
   @override
   String get start => 'Начать';
   @override
-  String testStat(int alive, int percent) => 'Работают: ${alive} · ${percent}%';
+  String testStat(int alive, int percent) => 'Работают: $alive · $percent%';
   @override
   String get timeWord => 'Время';
   @override
   String get unlimitedData => 'Безлимитный трафик';
   @override
   String usedOf(String used, String total) =>
-      'Использовано ${used} из ${total}';
+      'Использовано $used из $total';
   @override
-  String usedUnlimited(String used) => 'Использовано ${used}';
+  String usedUnlimited(String used) => 'Использовано $used';
   @override
   String get theme => 'Тема';
   @override
@@ -234,16 +235,16 @@ class SRu implements S {
   @override
   String get fetchingList => 'Загрузка списка конфигураций...';
   @override
-  String testingServers(int n) => 'Проверка серверов: ${n}...';
+  String testingServers(int n) => 'Проверка серверов: $n...';
   @override
-  String foundActive(int n) => 'Найдено активных серверов: ${n}...';
+  String foundActive(int n) => 'Найдено активных серверов: $n...';
   @override
   String get testingSaved => 'Проверка сохранённых серверов...';
   @override
   String get allSourcesFailed =>
       'Ни один источник недоступен. Добавьте ссылку подписки или конфигурацию вручную.';
   @override
-  String fetchFailed(Object e) => 'Не удалось загрузить список: ${e}';
+  String fetchFailed(Object e) => 'Не удалось загрузить список: $e';
   @override
   String get noActiveServer => 'Активный сервер не найден. Попробуйте снова.';
   @override
@@ -252,15 +253,15 @@ class SRu implements S {
   String get noValidConfig => 'Допустимая конфигурация не найдена.';
   @override
   String importResult(int alive, int total) =>
-      'Активны ${alive} из ${total} конфигураций.';
+      'Активны $alive из $total конфигураций.';
   @override
-  String importFailed(Object e) => 'Не удалось добавить: ${e}';
+  String importFailed(Object e) => 'Не удалось добавить: $e';
   @override
-  String subscriptionUpdated(int n) => 'Подписка обновлена: ${n} конфигураций.';
+  String subscriptionUpdated(int n) => 'Подписка обновлена: $n конфигураций.';
   @override
   String get vpnPermissionDenied => 'Разрешение VPN не предоставлено.';
   @override
-  String connectFailed(String reason) => 'Не удалось подключиться: ${reason}';
+  String connectFailed(String reason) => 'Не удалось подключиться: $reason';
   @override
   String get nameSubscription => 'Назовите эту подписку';
   @override

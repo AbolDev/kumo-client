@@ -166,7 +166,6 @@ void main() {
       ..fakeIp = true
       ..tun = true
       ..networkStrategy = 'fallback'
-      ..directWifi = ['Home']
       ..blockRules = ['ads.example.com', 'port:25']
       ..directRules = ['full:www.a.com', 'keyword:cdn', 'regex:^ad[0-9]+\\.', 'port:1000-2000']
       ..extraSingbox = '{"tcp_keep_alive":"30s","tag":"ignored"}'

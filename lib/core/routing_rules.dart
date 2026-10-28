@@ -55,7 +55,75 @@ String? _cleanDomain(String input) {
   if (s.contains('@')) s = s.substring(s.lastIndexOf('@') + 1);
   s = s.replaceFirst(RegExp(r':\d+$'), '');
   s = s.replaceFirst(RegExp(r'^(\*\.|\.)+'), '');
+  // Names written in their own script (IDN) become the ASCII form the core compares with.
+  if (s.runes.any((r) => r > 127)) s = s.split('.').map(punycodeLabel).join('.');
   return s == 'localhost' || _domain.hasMatch(s) ? s : null;
+}
+
+/// One label of an internationalised domain name in Punycode (RFC 3492): `münchen` becomes
+/// `xn--mnchen-3ya`. A label of plain ASCII is returned as it is.
+String punycodeLabel(String label) {
+  if (label.runes.every((r) => r < 128)) return label;
+  const base = 36, tMin = 1, tMax = 26, skew = 38, damp = 700;
+  final input = label.runes.toList();
+  int adapt(int delta, int points, bool first) {
+    delta = first ? delta ~/ damp : delta ~/ 2;
+    delta += delta ~/ points;
+    var k = 0;
+    while (delta > ((base - tMin) * tMax) ~/ 2) {
+      delta ~/= base - tMin;
+      k += base;
+    }
+    return k + (base - tMin + 1) * delta ~/ (delta + skew);
+  }
+
+  String digit(int d) => String.fromCharCode(d < 26 ? 97 + d : 22 + d);
+  final out = StringBuffer();
+  final basic = input.where((c) => c < 128).toList();
+  out.writeAll(basic.map(String.fromCharCode));
+  var handled = basic.length;
+  final basicCount = handled;
+  if (basicCount > 0) out.write('-');
+  var n = 128, delta = 0, bias = 72;
+  while (handled < input.length) {
+    var m = 0x7fffffff;
+    for (final c in input) {
+      if (c >= n && c < m) m = c;
+    }
+    delta += (m - n) * (handled + 1);
+    n = m;
+    for (final c in input) {
+      if (c < n) delta++;
+      if (c == n) {
+        var q = delta;
+        for (var k = base;; k += base) {
+          final t = k <= bias ? tMin : (k >= bias + tMax ? tMax : k - bias);
+          if (q < t) break;
+          out.write(digit(t + (q - t) % (base - t)));
+          q = (q - t) ~/ (base - t);
+        }
+        out.write(digit(q));
+        bias = adapt(delta, handled + 1, handled == basicCount);
+        delta = 0;
+        handled++;
+      }
+    }
+    delta++;
+    n++;
+  }
+  return 'xn--$out';
+}
+
+/// Whether [pattern] only uses what RE2 (the engine of sing-box) understands: no look-ahead or
+/// look-behind, no back-references, no atomic groups, possessive quantifiers or `\k<name>`.
+bool isRe2Compatible(String pattern) {
+  // Escapes are skipped so that `\(` or `\\` do not look like the start of a group.
+  final p = pattern.replaceAll(RegExp(r'\\\\'), '');
+  if (RegExp(r'\(\?(?:=|!|<=|<!|>)').hasMatch(p.replaceAll(RegExp(r'\\.'), ''))) return false;
+  if (RegExp(r'\\[1-9]').hasMatch(p)) return false; // back-reference
+  if (RegExp(r'\\k<').hasMatch(p)) return false;
+  if (RegExp(r'(?:[*+?]|\})\+').hasMatch(p.replaceAll(RegExp(r'\\.'), ''))) return false; // possessive
+  return true;
 }
 
 /// Reads what the user typed: an IPv4 or IPv6 address (with an optional /prefix), a domain, a
@@ -83,11 +151,19 @@ RouteRule? parseRouteRule(String input) {
   if (lower.startsWith('regex:')) {
     final r = raw.substring('regex:'.length).trim();
     if (r.isEmpty) return null;
+    // RE2 allows flags written in the pattern, `(?i)` or `(?i:...)`, which Dart does not know; they are
+    // taken out before Dart checks that the rest is well formed (brackets that match and so on).
+    final plain = r
+        .replaceAll(RegExp(r'\(\?[imsU]+\)'), '')
+        .replaceAllMapped(RegExp(r'\(\?[imsU-]+:'), (_) => '(?:');
     try {
-      RegExp(r);
+      RegExp(plain);
     } catch (_) {
       return null;
     }
+    // sing-box reads it with Go's RE2, which has no look-around and no back-references: a pattern
+    // that Dart accepts but RE2 refuses would stop the core from starting at all.
+    if (!isRe2Compatible(r)) return null;
     return RouteRule(RuleKind.regex, r);
   }
   if (lower.startsWith('port:')) {

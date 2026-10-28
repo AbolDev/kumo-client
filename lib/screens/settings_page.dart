@@ -138,11 +138,25 @@ class _SettingsPageState extends State<SettingsPage> {
     return r;
   }
 
+  /// Runs [job] behind a spinner that blocks the screen until it is done.
+  Future<T> _working<T>(Future<T> Function() job) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(canPop: false, child: Center(child: CircularProgressIndicator())),
+    );
+    try {
+      return await job();
+    } finally {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
   Future<void> _export() async {
     final password =
         await _password(tr(context, 'backupPassword'), hint: tr(context, 'backupNoPasswordWarn'));
     if (password == null) return;
-    final text = await state.exportBackup(password);
+    final text = await _working(() => state.exportBackup(password));
     final bytes = Uint8List.fromList(utf8.encode(text));
     final path = await FilePicker.platform.saveFile(
         fileName: 'kumo-backup.json', bytes: bytes, type: FileType.any);
@@ -161,11 +175,13 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     var password = '';
     if (backupIsEncrypted(text)) {
+      if (!mounted) return;
       final p = await _password(tr(context, 'backupPasswordNeeded'));
       if (p == null) return;
       password = p;
     }
-    final ok = await state.importBackup(text, password);
+    // Working out the key takes a few seconds: a spinner shows that the app has not stopped.
+    final ok = await _working(() => state.importBackup(text, password));
     if (mounted) {
       toast(context, tr(context, ok ? 'backupRestored' : 'backupWrongPassword'));
     }
@@ -363,9 +379,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 SwitchListTile(
                   value: state.net.startWithWindows,
-                  onChanged: (v) {
-                    WinAutostart.set(v);
-                    state.updateNet((o) => o.startWithWindows = v, reconnect: false);
+                  onChanged: (v) async {
+                    // The switch follows what really happened, not what was asked.
+                    final done = await WinAutostart.set(v);
+                    if (!done && v) {
+                      if (context.mounted) toast(context, tr(context, 'autostartUnsafe'));
+                      return;
+                    }
+                    await state.updateNet((o) => o.startWithWindows = v, reconnect: false);
                   },
                   title: Text(tr(context, Platform.isWindows ? 'startWithWindows' : 'startWithSystem')),
                   subtitle: Text(tr(context, Platform.isWindows ? 'startWithWindowsDesc' : 'startWithSystemDesc')),
@@ -599,12 +620,18 @@ class _SettingsPageState extends State<SettingsPage> {
               hintText: tr(context, 'settingsSearch'),
               leading: const Icon(Icons.search),
               elevation: const WidgetStatePropertyAll(0),
-              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              onChanged: (v) => setState(() {
+                _query = v.trim().toLowerCase();
+                if (_query.isEmpty) _otherLanguages = null;
+              }),
               trailing: [
                 if (_query.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.close),
-                    onPressed: () => setState(() => _query = ''),
+                    onPressed: () => setState(() {
+                      _query = '';
+                      _otherLanguages = null;
+                    }),
                   ),
               ],
             ),
@@ -619,6 +646,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   String _query = '';
+
+  /// The sections in every language, kept while a search is going on.
+  List<List<_Section>>? _otherLanguages;
 
   /// The words a settings row shows (title and description), lower case.
   String _words(Widget w) {
@@ -637,15 +667,20 @@ class _SettingsPageState extends State<SettingsPage> {
   /// own name matches shows all of its rows.
   List<Widget> _results(BuildContext context) {
     final out = <Widget>[];
-    // The same screen built in every language, so a word typed in any of them finds the row.
-    final others = <List<_Section>>[];
-    try {
-      for (final code in S.languageNames.keys) {
-        S.forcedLanguage = code;
-        others.add(_sections(context));
+    // The same screen built in every language, so a word typed in any of them finds the row. Built
+    // once per search, not at every letter typed.
+    var others = _otherLanguages;
+    if (others == null) {
+      others = <List<_Section>>[];
+      try {
+        for (final code in S.languageNames.keys) {
+          S.forcedLanguage = code;
+          others.add(_sections(context));
+        }
+      } finally {
+        S.forcedLanguage = null;
       }
-    } finally {
-      S.forcedLanguage = null;
+      _otherLanguages = others;
     }
     void walk(List<_Section> sections, List<List<_Section>> others) {
       for (final (i, s) in sections.indexed) {

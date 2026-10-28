@@ -1,9 +1,11 @@
-import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
 import 'package:zxing2/qrcode.dart';
+
+// Reading the screen and the clipboard goes through the system calls in win_capture.dart.
+export 'win_capture.dart' show captureScreen, clipboardImage;
 
 /// Reads the text of the first QR code found in an image (PNG, JPEG, ...), or null.
 /// Large pictures such as screenshots are also tried at smaller sizes, which helps the
@@ -37,40 +39,4 @@ String? _decode(Uint8List bytes) {
     }
   }
   return null;
-}
-
-/// Windows: a screenshot of the whole screen (all monitors) as PNG bytes, or null.
-Future<Uint8List?> captureScreen() => _powershellImage(r'''
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-$b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-$bmp.Save($args[0], [System.Drawing.Imaging.ImageFormat]::Png)
-''');
-
-/// Windows: the image currently on the clipboard as PNG bytes, or null.
-Future<Uint8List?> clipboardImage() => _powershellImage(r'''
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-$i = [System.Windows.Forms.Clipboard]::GetImage()
-if ($i -ne $null) { $i.Save($args[0], [System.Drawing.Imaging.ImageFormat]::Png) }
-''');
-
-Future<Uint8List?> _powershellImage(String script) async {
-  final dir = await Directory.systemTemp.createTemp('kumo-qr');
-  try {
-    final out = '${dir.path}\\image.png';
-    final file = File('${dir.path}\\run.ps1');
-    await file.writeAsString(script);
-    await Process.run('powershell',
-        ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', file.path, out]);
-    final png = File(out);
-    return await png.exists() ? await png.readAsBytes() : null;
-  } catch (_) {
-    return null;
-  } finally {
-    try {
-      await dir.delete(recursive: true);
-    } catch (_) {}
-  }
 }

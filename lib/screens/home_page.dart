@@ -261,7 +261,9 @@ class HomePage extends StatelessWidget {
     return DropTarget(
       onDragDone: (d) async {
         for (final f in d.files) {
-          await _importDropped(context, f.path, await f.readAsBytes());
+          final bytes = await f.readAsBytes();
+          if (!context.mounted) return;
+          await _importDropped(context, f.path, bytes);
         }
       },
       child: child,
@@ -337,8 +339,12 @@ class HomePage extends StatelessWidget {
       if (bytes != null && context.mounted) {
         // The screenshot fills the screen; the user drags over the QR code to pick it.
         await windowManager.setFullScreen(true);
-        if (context.mounted) bytes = await pickRegion(context, bytes);
-        await windowManager.setFullScreen(false);
+        try {
+          if (context.mounted) bytes = await pickRegion(context, bytes);
+        } finally {
+          // Whatever happened in the picker, the window does not stay full screen.
+          await windowManager.setFullScreen(false);
+        }
         if (bytes == null) return;
       }
     }
@@ -357,8 +363,9 @@ class HomePage extends StatelessWidget {
     final text = clip?.text?.trim() ?? '';
     final raw = Uint8List.fromList(utf8.encode(text));
     if (text.isNotEmpty && isProtectedFile('clipboard.txt', raw)) {
-      if (context.mounted)
+      if (context.mounted) {
         await _importProtected(context, raw, 'clipboard.txt');
+      }
       return;
     }
     final usable = text.startsWith('http://') ||
@@ -382,6 +389,7 @@ class HomePage extends StatelessWidget {
       if (context.mounted) toast(context, t.clipboardEmpty);
       return;
     }
+    if (!context.mounted) return;
     await _import(context, text);
   }
 
@@ -425,9 +433,12 @@ class HomePage extends StatelessWidget {
     try {
       final tables = await _loadTables();
       final text = await compute(_decrypt, (bytes, name, password, tables));
+      if (!context.mounted) return;
       await _import(context, text);
     } catch (e) {
-      if (context.mounted) toast(context, '$e');
+      // The raw error is for the log; the screen gets a plain sentence.
+      state.log('Could not open $name: $e');
+      if (context.mounted) toast(context, tr(context, 'decryptFailed'));
     }
   }
 
@@ -476,7 +487,7 @@ class HomePage extends StatelessWidget {
       context,
       MaterialPageRoute(builder: (_) => const ScanPage()),
     );
-    if (value != null) await _import(context, value);
+    if (value != null && context.mounted) await _import(context, value);
   }
 }
 
@@ -776,7 +787,11 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
   @override
   void initState() {
     super.initState();
-    _ticker = createTicker((elapsed) => _time.value = _base + elapsed.inMicroseconds / 1e6);
+    // The rings drift slowly, so thirty updates a second look the same as sixty and cost half.
+    _ticker = createTicker((elapsed) {
+      final t = _base + elapsed.inMicroseconds / 1e6;
+      if (t - _time.value >= 1 / 31) _time.value = t;
+    });
     if (widget.on) _ticker.start();
   }
 
@@ -846,6 +861,18 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
   }
 
   Widget _button(Color color) {
+    // A screen reader says what the button does, not only that it is a button.
+    return Semantics(
+      button: true,
+      enabled: widget.onTap != null,
+      label: tr(context, widget.on ? 'a11yDisconnect' : 'a11yConnect'),
+      onTap: widget.onTap,
+      excludeSemantics: true,
+      child: _buttonBody(color),
+    );
+  }
+
+  Widget _buttonBody(Color color) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _down = true),
       onTapCancel: () => setState(() => _down = false),
@@ -1187,7 +1214,8 @@ class _ServerListState extends State<_ServerList> {
               duration: const Duration(milliseconds: 350),
               curve: Curves.easeOut);
           final box = _flashKey.currentContext;
-          if (mounted && box != null) {
+          if (!mounted) return;
+          if (box != null && box.mounted) {
             await Scrollable.ensureVisible(box,
                 alignment: 0.3, duration: const Duration(milliseconds: 250));
           }
@@ -1319,7 +1347,27 @@ Future<bool?> _askUntested(BuildContext context) {
   );
 }
 
-enum _GroupAction { tcping, realDelay, cancelTest, refresh, cancelRefresh, info, edit, share, delete }
+enum _GroupAction { tcping, realDelay, cancelTest, refresh, cancelRefresh, info, edit, share, delete, deleteAll }
+
+/// Asks before every config added by hand is removed. Always asked, whatever the setting for single
+/// deletions says: this removes the whole list at once.
+Future<bool> _confirmDeleteAll(BuildContext context, int count) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dialog) {
+      final t = S.of(dialog);
+      return AlertDialog(
+        title: Text(tr(dialog, 'deleteAll')),
+        content: Text(tr(dialog, 'deleteAllAsk', {'n': count})),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(t.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(t.delete)),
+        ],
+      );
+    },
+  );
+  return ok == true;
+}
 
 /// The title row of a dropdown: the collector, a subscription, or configs added by hand.
 class _GroupHeader extends StatelessWidget {
@@ -1379,10 +1427,14 @@ class _GroupHeader extends StatelessWidget {
         confirmDeletion(context, state).then((ok) {
           if (ok) state.removeSubscription(group);
         });
+      case _GroupAction.deleteAll:
+        _confirmDeleteAll(context, group.configs.length).then((ok) {
+          if (ok) state.clearManual();
+        });
     }
   }
 
-  /// "<n> works · <p>%": only the count is green, the progress keeps the normal color.
+  /// "N works - P%": only the count is green, the progress keeps the normal color.
   Widget _testStat(String text, ColorScheme scheme) {
     final i = text.indexOf(' · ');
     if (i < 0) return Text(text);
@@ -1464,6 +1516,10 @@ class _GroupHeader extends StatelessWidget {
                     : PopupMenuItem(
                         value: _GroupAction.refresh,
                         child: _MenuRow(Icons.refresh, t.refreshList)),
+              if (group.kind == GroupKind.manual && group.configs.isNotEmpty)
+                PopupMenuItem(
+                    value: _GroupAction.deleteAll,
+                    child: _MenuRow(Icons.delete_sweep_outlined, tr(context, 'deleteAll'))),
               if (isSub || group.kind == GroupKind.collector)
                 PopupMenuItem(
                     value: _GroupAction.info,
@@ -1494,10 +1550,34 @@ class _GroupHeader extends StatelessWidget {
 }
 
 /// Time left as a chip, and usage as a bar coloured by how much is used.
-class _SubscriptionInfo extends StatelessWidget {
+class _SubscriptionInfo extends StatefulWidget {
   const _SubscriptionInfo({required this.info});
 
   final SubInfo info;
+
+  @override
+  State<_SubscriptionInfo> createState() => _SubscriptionInfoState();
+}
+
+class _SubscriptionInfoState extends State<_SubscriptionInfo> {
+  Timer? _timer;
+
+  SubInfo get info => widget.info;
+
+  @override
+  void initState() {
+    super.initState();
+    // The time left is worked out from the clock, so it is redrawn as the minutes pass.
+    _timer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1734,7 +1814,11 @@ class _ConfigTile extends StatelessWidget {
             softWrap: false,
             overflow: TextOverflow.ellipsis,
           ),
-          onTap: state.canSelect ? () => state.select(config) : null,
+          onTap: state.canSelect
+              ? () => state.select(config)
+              : (state.connected && !state.restartOnChange
+                  ? () => toast(context, tr(context, 'selectBlocked'))
+                  : null),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

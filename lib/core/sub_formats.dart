@@ -40,7 +40,7 @@ List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
       // not JSON after all
     }
   }
-  if (text.contains('proxies:') || text.contains('proxy-providers:')) {
+  if ((text.contains('proxies:') || text.contains('proxy-providers:')) && _yamlIsSafe(text)) {
     try {
       final found = _fromJson(_plain(loadYaml(text)));
       if (found.isNotEmpty) return found;
@@ -64,15 +64,49 @@ List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
   return const [];
 }
 
+/// A YAML document can expand a few lines into gigabytes by naming parts of itself again and
+/// again (anchors and aliases, the "billion laughs" shape). The parser shares the parts, so the
+/// harm is done when they are copied out (see [_plain], which counts what it copies); here only
+/// a very large file is turned away.
+bool _yamlIsSafe(String text) => text.length <= 8 * 1024 * 1024;
+
+/// The most nodes copied out of one YAML document; a list of thousands of servers is far below it.
+const _yamlBudget = 2000000;
+
 /// Same, off the UI thread (a top-level function so nothing else is captured).
 Future<List<String>> extractSubscriptionLinksInBackground(String body) =>
     Isolate.run(() => extractSubscriptionLinks(body));
 
-/// YAML nodes -> plain Dart maps and lists.
-Object? _plain(Object? v) {
-  if (v is YamlMap)
-    return {for (final e in v.entries) '${e.key}': _plain(e.value)};
-  if (v is YamlList) return [for (final e in v) _plain(e)];
+/// YAML nodes -> plain Dart maps and lists. Throws when the document holds more than
+/// [_yamlBudget] nodes once its aliases are written out.
+Object? _plain(Object? v, [List<int>? left]) {
+  final budget = left ?? [_yamlBudget];
+  if (--budget[0] < 0) throw const FormatException('the YAML document expands too far');
+  if (v is YamlMap) {
+    final out = <String, Object?>{};
+    Object? merge;
+    for (final e in v.entries) {
+      // `<<: *defaults` pulls the entries of another map in (Clash files use it to give every server
+      // the same settings); the package does not do it itself. Entries written out stay as they are.
+      if ('${e.key}' == '<<') {
+        merge = e.value;
+      } else {
+        out['${e.key}'] = _plain(e.value, budget);
+      }
+    }
+    void apply(Object? m) {
+      final p = _plain(m, budget);
+      if (p is Map<String, Object?>) p.forEach((k, val) => out.putIfAbsent(k, () => val));
+    }
+
+    if (merge is YamlList) {
+      merge.forEach(apply);
+    } else if (merge != null) {
+      apply(merge);
+    }
+    return out;
+  }
+  if (v is YamlList) return [for (final e in v) _plain(e, budget)];
   return v;
 }
 

@@ -48,7 +48,7 @@ class _TroubleshootPageState extends State<TroubleshootPage> {
       _running = true;
       _done = false;
     });
-    final t = (String key, [Map<String, Object>? args]) => tr(context, key, args);
+    String t(String key, [Map<String, Object>? args]) => tr(context, key, args);
 
     // 1. Internet. With the VPN on, the test goes through it.
     final internet = await internetWorks();

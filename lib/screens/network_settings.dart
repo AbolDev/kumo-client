@@ -1,4 +1,4 @@
-import 'dart:io' show InternetAddressType, NetworkInterface, Platform;
+import 'dart:io' show InternetAddress, InternetAddressType, NetworkInterface, ServerSocket;
 import 'dart:math' show Random;
 
 import 'package:flutter/material.dart';
@@ -131,15 +131,7 @@ List<Widget> networkSections(
       if (o.dns == 'custom')
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: TextFormField(
-            initialValue: o.customDns,
-            textDirection: TextDirection.ltr,
-            onFieldSubmitted: (v) => state.updateNet((o) => o.customDns = v),
-            onTapOutside: (_) {},
-            decoration: const InputDecoration(
-                hintText: 'https://dns.example/dns-query',
-                border: OutlineInputBorder()),
-          ),
+          child: _DnsField(state: state),
         ),
       flag(tr(context, 'fakeIp'), tr(context, 'fakeIpDesc'), o.fakeIp,
           (v) => o.fakeIp = v),
@@ -247,6 +239,79 @@ List<Widget> networkSections(
       ),
     ]),
   ];
+}
+
+/// The box for a DNS address of one's own: checked as it is typed, and saved when it is valid and
+/// the user presses Enter, leaves the box or leaves the page.
+class _DnsField extends StatefulWidget {
+  const _DnsField({required this.state});
+
+  final AppState state;
+
+  @override
+  State<_DnsField> createState() => _DnsFieldState();
+}
+
+class _DnsFieldState extends State<_DnsField> {
+  late final _controller = TextEditingController(text: widget.state.net.customDns);
+  final _focus = FocusNode();
+  bool _invalid = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus) _save();
+    });
+  }
+
+  bool get _valid {
+    final v = _controller.text.trim();
+    return v.isEmpty || isValidDnsAddress(v);
+  }
+
+  void _save() {
+    final v = _controller.text.trim();
+    if (!_valid || v == widget.state.net.customDns) return;
+    widget.state.updateNet((o) => o.customDns = v);
+  }
+
+  @override
+  void dispose() {
+    _save();
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: _controller,
+      focusNode: _focus,
+      textDirection: TextDirection.ltr,
+      autocorrect: false,
+      onChanged: (_) => setState(() => _invalid = !_valid),
+      onSubmitted: (_) => _save(),
+      onTapOutside: (_) => _focus.unfocus(),
+      decoration: InputDecoration(
+        hintText: 'https://dns.example/dns-query',
+        errorText: _invalid ? tr(context, 'dnsInvalid') : null,
+        border: const OutlineInputBorder(),
+      ),
+    );
+  }
+}
+
+/// Whether nothing on this computer listens on [port] (it could be bound).
+Future<bool> _portFree(int port) async {
+  try {
+    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+    await socket.close();
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 /// Shows the options as radio buttons and returns the one the user picked (null if closed).
@@ -360,7 +425,8 @@ List<Widget> _lanTiles(BuildContext context, AppState state) {
   return [
     Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-      child: Text(tr(context, 'lanNote'), style: Theme.of(context).textTheme.bodySmall),
+      child: Text('${tr(context, 'lanNote')}\n${tr(context, 'lanPlainWarn')}',
+          style: Theme.of(context).textTheme.bodySmall),
     ),
     _LanAddress(port: o.lanPort),
     ListTile(
@@ -375,18 +441,51 @@ List<Widget> _lanTiles(BuildContext context, AppState state) {
       subtitle: Text(o.lanUser, textDirection: TextDirection.ltr),
       onTap: () => _copy(context, o.lanUser),
     ),
-    ListTile(
-      leading: const Icon(Icons.key),
-      title: Text(tr(context, 'lanPassword')),
-      subtitle: Text(o.lanPassword, textDirection: TextDirection.ltr),
-      onTap: () => _copy(context, o.lanPassword),
-      trailing: IconButton(
-        tooltip: tr(context, 'lanNewPassword'),
-        icon: const Icon(Icons.refresh),
-        onPressed: () => state.updateNet((o) => o.lanPassword = _newPassword()),
-      ),
+    _LanPassword(
+      password: o.lanPassword,
+      onCopy: () => _copy(context, o.lanPassword),
+      onNew: () => state.updateNet((o) => o.lanPassword = _newPassword()),
     ),
   ];
+}
+
+/// The password of the shared connection: hidden until the eye is pressed, so it is not read off
+/// the screen by someone looking over the shoulder.
+class _LanPassword extends StatefulWidget {
+  const _LanPassword({required this.password, required this.onCopy, required this.onNew});
+
+  final String password;
+  final VoidCallback onCopy;
+  final VoidCallback onNew;
+
+  @override
+  State<_LanPassword> createState() => _LanPasswordState();
+}
+
+class _LanPasswordState extends State<_LanPassword> {
+  bool _show = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.key),
+      title: Text(tr(context, 'lanPassword')),
+      subtitle: Text(_show ? widget.password : '•' * widget.password.length,
+          textDirection: TextDirection.ltr),
+      onTap: widget.onCopy,
+      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+        IconButton(
+          icon: Icon(_show ? Icons.visibility_off : Icons.visibility),
+          onPressed: () => setState(() => _show = !_show),
+        ),
+        IconButton(
+          tooltip: tr(context, 'lanNewPassword'),
+          icon: const Icon(Icons.refresh),
+          onPressed: widget.onNew,
+        ),
+      ]),
+    );
+  }
 }
 
 Future<void> _editLanPort(BuildContext context, AppState state) async {
@@ -420,10 +519,18 @@ Future<void> _editLanPort(BuildContext context, AppState state) async {
 }
 
 /// The address of this device on the local network, with the port: tap to copy.
-class _LanAddress extends StatelessWidget {
+class _LanAddress extends StatefulWidget {
   const _LanAddress({required this.port});
 
   final int port;
+
+  @override
+  State<_LanAddress> createState() => _LanAddressState();
+}
+
+class _LanAddressState extends State<_LanAddress> {
+  // Asked for once, not at every redraw: the list would otherwise flicker back to "…".
+  late final Future<List<String>> _future = _addresses();
 
   static Future<List<String>> _addresses() async {
     try {
@@ -444,8 +551,9 @@ class _LanAddress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final port = widget.port;
     return FutureBuilder<List<String>>(
-      future: _addresses(),
+      future: _future,
       builder: (context, snap) {
         final list = snap.data ?? const <String>[];
         return ListTile(
@@ -496,35 +604,47 @@ class RadioGroupLike extends StatelessWidget {
 Future<void> _editProxyLogin(BuildContext context, AppState state) async {
   final user = TextEditingController(text: state.net.proxyUser);
   final pass = TextEditingController(text: state.net.proxyPassword);
+  var show = false;
   final ok = await showDialog<bool>(
     context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(tr(dialog, 'proxyLogin')),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(tr(dialog, 'proxyLoginDesc')),
-          const SizedBox(height: 12),
-          TextField(
-            controller: user,
-            autofocus: true,
-            textDirection: TextDirection.ltr,
-            decoration: InputDecoration(
-                labelText: tr(dialog, 'proxyUser'), border: const OutlineInputBorder()),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: pass,
-            textDirection: TextDirection.ltr,
-            decoration: InputDecoration(
-                labelText: tr(dialog, 'proxyPass'), border: const OutlineInputBorder()),
-          ),
+    builder: (dialog) => StatefulBuilder(
+      builder: (dialog, setState) => AlertDialog(
+        title: Text(tr(dialog, 'proxyLogin')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(tr(dialog, 'proxyLoginDesc')),
+            const SizedBox(height: 12),
+            TextField(
+              controller: user,
+              autofocus: true,
+              textDirection: TextDirection.ltr,
+              decoration: InputDecoration(
+                  labelText: tr(dialog, 'proxyUser'), border: const OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pass,
+              obscureText: !show,
+              enableSuggestions: false,
+              autocorrect: false,
+              textDirection: TextDirection.ltr,
+              decoration: InputDecoration(
+                labelText: tr(dialog, 'proxyPass'),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(show ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => show = !show),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('✕')),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('OK')),
         ],
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('✕')),
-        FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('OK')),
-      ],
     ),
   );
   final u = user.text.trim(), p = pass.text;
@@ -565,6 +685,16 @@ Future<void> _editPort(BuildContext context, AppState state) async {
   if (port == null) return;
   if (port < 1024 || port > 65535) {
     if (context.mounted) toast(context, tr(context, 'invalidPort'));
+    return;
+  }
+  // The port of the shared connection (LAN) is another one; and a port that something else
+  // holds would stop the proxy from starting with an unclear error.
+  if (state.net.shareLan && port == state.net.lanPort) {
+    if (context.mounted) toast(context, tr(context, 'lanPortInvalid'));
+    return;
+  }
+  if (port != state.net.proxyPort && !await _portFree(port)) {
+    if (context.mounted) toast(context, tr(context, 'portBusy'));
     return;
   }
   await state.updateNet((o) => o.proxyPort = port);

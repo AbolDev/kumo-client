@@ -17,38 +17,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: '3.27.4'
           cache: true
           pub-cache: true
 
       - run: flutter pub get
+
+      # The same sing-box the app ships, so that the tests can ask it to check the configurations the app
+      # builds (test/config_check_test.dart): a setting that would stop the core from starting fails here.
+      - run: bash tools/fetch_unix_core.sh linux x64
       - run: flutter test
+        env:
+          KUMO_CORE: ${{ github.workspace }}/linux/core/kumo-core
 
   # sing-box (libbox.aar) for every Android CPU. Built once, then cached until the version changes.
   native-box:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: native-out
           key: native-box-${{ env.SING_BOX }}-${{ hashFiles('tools/libbox_patch/**') }}-v1
 
       - if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '17'
 
       - if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
           cache: false
@@ -75,7 +81,7 @@ jobs:
             ./experimental/libbox)
           cp sb/libbox.aar native-out/libbox.aar
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-box
           path: native-out
@@ -86,16 +92,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: native-out
           key: native-xray-${{ env.XRAY }}-v1
 
       - if: steps.cache.outputs.cache-hit != 'true'
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: stable
           cache: false
@@ -120,7 +126,7 @@ jobs:
           build_xray x86_64 amd64 x86_64-linux-android23-clang
           ls -R native-out
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: native-xray
           path: native-out
@@ -148,24 +154,24 @@ jobs:
             args: ''
             file: app-release.apk
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '17'
 
       # Restores Gradle's dependency and build caches faster than setup-java's cache.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: '3.27.4'
           cache: true
           pub-cache: true
 
       # The committed copies hold arm64 only; these cover arm64, arm and x86_64.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: native-*
           path: native-out
@@ -196,12 +202,20 @@ jobs:
           flutter build apk --release --dart-define=KUMO_COMMIT=${{ github.sha }} ${{ matrix.args }}
           --obfuscate --split-debug-info=build/symbols --no-pub
 
+      # What turns a crash report of the obfuscated build back into names of functions and files.
+      # Kept for 90 days; the name does not start with kumo-, so it is not part of the release.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: debug-symbols-${{ matrix.name }}
+          path: build/symbols
+          retention-days: 90
+
       - run: |
           mkdir dist
           cp build/app/outputs/flutter-apk/${{ matrix.file }} dist/kumo-android-${{ matrix.name }}.apk
 
       # Uploaded as the bare file (no zip); the artifact takes the file's name.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-android-${{ matrix.name }}.apk
           archive: false
@@ -219,9 +233,9 @@ jobs:
             flutter: '3.27.4'
             target: ''
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ matrix.flutter }}
           cache: true
@@ -243,7 +257,7 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=${{ matrix.arch }}" installer\kumo.iss
           if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-windows-${{ matrix.arch }}-setup.exe
           archive: false
@@ -258,7 +272,7 @@ jobs:
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Compress-Archive -Path "$src\*" -DestinationPath "dist\kumo-windows-${{ matrix.arch }}-portable.zip"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-windows-${{ matrix.arch }}-portable.zip
           archive: false
@@ -271,7 +285,7 @@ jobs:
     runs-on: windows-11-arm
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Flutter from source
         shell: pwsh
@@ -324,7 +338,7 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=arm64" installer\kumo.iss
           if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-windows-arm64-setup.exe
           archive: false
@@ -337,7 +351,7 @@ jobs:
           New-Item -ItemType Directory -Path dist -Force | Out-Null
           Compress-Archive -Path "$src\*" -DestinationPath "dist\kumo-windows-arm64-portable.zip"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-windows-arm64-portable.zip
           archive: false
@@ -357,14 +371,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Build tools and libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libayatana-appindicator3-dev
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         if: matrix.arch == 'x64'
         with:
           flutter-version: '3.27.4'
@@ -436,27 +450,31 @@ jobs:
           install -m644 packaging/linux/kumo-appimage.desktop AppDir/kumo.desktop
           install -m644 linux/runner/resources/kumo.png AppDir/kumo.png
           cp linux/runner/resources/kumo.png AppDir/.DirIcon
-          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$tool_arch.AppImage"
+          # A numbered release, checked against the hash pinned in tools/core_sha256.txt (the
+          # "continuous" build changes under the same name).
+          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-$tool_arch.AppImage"
+          want="$(awk -v n="appimagetool-1.9.1-$tool_arch.AppImage" '$2 == n { print $1 }' tools/core_sha256.txt)"
+          [ -n "$want" ] && echo "$want  appimagetool" | sha256sum -c -
           chmod +x appimagetool
           ARCH="$tool_arch" ./appimagetool --appimage-extract-and-run --no-appstream AppDir "dist/kumo-linux-$arch.AppImage"
           ls -l dist
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-linux-${{ matrix.arch }}.deb
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-linux-${{ matrix.arch }}.rpm
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-linux-${{ matrix.arch }}.AppImage
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-linux-${{ matrix.arch }}-portable.tar.gz
           archive: false
@@ -469,9 +487,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: '3.27.4'
           cache: true
@@ -524,32 +542,32 @@ jobs:
           wait_all $p1 $p2 $p3
           ls -l dist
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-macos-universal.dmg
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-macos-universal-portable.zip
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-macos-arm64.dmg
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-macos-arm64-portable.zip
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-macos-x64.dmg
           archive: false
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           path: dist/kumo-macos-x64-portable.zip
           archive: false
@@ -568,7 +586,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: 'kumo-*'
           path: dist
@@ -593,7 +611,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: main
 

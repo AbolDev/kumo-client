@@ -16,7 +16,7 @@ class SAr implements S {
   @override
   String get autoFastest => 'تلقائي (أقل بينغ)';
   @override
-  String activeServers(int n) => '${n} خوادم نشطة';
+  String activeServers(int n) => '$n خوادم نشطة';
   @override
   String get collectorGroup => 'الخوادم العامة';
   @override
@@ -88,7 +88,7 @@ class SAr implements S {
   @override
   String get savedToGallery => 'تم الحفظ في المعرض';
   @override
-  String saveFailed(Object e) => 'تعذّر الحفظ: ${e}';
+  String saveFailed(Object e) => 'تعذّر الحفظ: $e';
   @override
   String get password => 'كلمة المرور';
   @override
@@ -115,9 +115,9 @@ class SAr implements S {
   @override
   String get sessionLabel => 'هذه الجلسة';
   @override
-  String listLoaded(int n) => 'تم تحميل القائمة: ${n} إعدادات.';
+  String listLoaded(int n) => 'تم تحميل القائمة: $n إعدادات.';
   @override
-  String addedConfigs(int n) => 'تمت إضافة ${n} إعدادات.';
+  String addedConfigs(int n) => 'تمت إضافة $n إعدادات.';
   @override
   String get subSettings => 'إعدادات الاشتراكات';
   @override
@@ -139,7 +139,8 @@ class SAr implements S {
   @override
   String get allowInsecure => 'السماح بالاتصال غير الآمن';
   @override
-  String get allowInsecureDesc => 'تجاهل التحقق من شهادات SSL';
+  String get allowInsecureDesc =>
+      'تنزيل الاشتراكات حتى عندما يتعذّر التحقق من شهادة المزوّد. الإيقاف أكثر أمانًا؛ ولا يغيّر طريقة فحص خوادمك.';
   @override
   String get autoConnect => 'الاتصال تلقائيًا عند تشغيل الجهاز';
   @override
@@ -182,11 +183,11 @@ class SAr implements S {
   @override
   String get deleteWarning => 'لا يمكن التراجع عن هذا الإجراء.';
   @override
-  String daysLeft(int n) => 'متبقي ${n} يوم';
+  String daysLeft(int n) => 'متبقي $n يوم';
   @override
-  String hoursLeft(int n) => 'متبقي ${n} ساعة';
+  String hoursLeft(int n) => 'متبقي $n ساعة';
   @override
-  String minutesLeft(int n) => 'متبقي ${n} دقيقة';
+  String minutesLeft(int n) => 'متبقي $n دقيقة';
   @override
   String get expired => 'منتهي';
   @override
@@ -210,15 +211,15 @@ class SAr implements S {
   @override
   String get start => 'ابدأ';
   @override
-  String testStat(int alive, int percent) => '${alive} تعمل · ${percent}٪';
+  String testStat(int alive, int percent) => '$alive تعمل · $percent٪';
   @override
   String get timeWord => 'الوقت';
   @override
   String get unlimitedData => 'بيانات غير محدودة';
   @override
-  String usedOf(String used, String total) => 'تم استخدام ${used} من ${total}';
+  String usedOf(String used, String total) => 'تم استخدام $used من $total';
   @override
-  String usedUnlimited(String used) => 'تم استخدام ${used}';
+  String usedUnlimited(String used) => 'تم استخدام $used';
   @override
   String get theme => 'المظهر';
   @override
@@ -230,16 +231,16 @@ class SAr implements S {
   @override
   String get fetchingList => 'جارٍ تنزيل قائمة الإعدادات...';
   @override
-  String testingServers(int n) => 'جارٍ اختبار ${n} خوادم...';
+  String testingServers(int n) => 'جارٍ اختبار $n خوادم...';
   @override
-  String foundActive(int n) => 'تم العثور على ${n} خوادم نشطة...';
+  String foundActive(int n) => 'تم العثور على $n خوادم نشطة...';
   @override
   String get testingSaved => 'جارٍ اختبار الخوادم المحفوظة...';
   @override
   String get allSourcesFailed =>
       'تعذّر الوصول إلى أي مصدر. أضف رابط اشتراك أو إعدادًا يدويًا.';
   @override
-  String fetchFailed(Object e) => 'تعذّر تنزيل القائمة: ${e}';
+  String fetchFailed(Object e) => 'تعذّر تنزيل القائمة: $e';
   @override
   String get noActiveServer => 'لم يتم العثور على خادم نشط. حاول مرة أخرى.';
   @override
@@ -248,15 +249,15 @@ class SAr implements S {
   String get noValidConfig => 'لم يتم العثور على إعداد صالح.';
   @override
   String importResult(int alive, int total) =>
-      '${alive} من ${total} إعدادات نشطة.';
+      '$alive من $total إعدادات نشطة.';
   @override
-  String importFailed(Object e) => 'تعذّرت الإضافة: ${e}';
+  String importFailed(Object e) => 'تعذّرت الإضافة: $e';
   @override
-  String subscriptionUpdated(int n) => 'تم تحديث الاشتراك: ${n} إعدادات.';
+  String subscriptionUpdated(int n) => 'تم تحديث الاشتراك: $n إعدادات.';
   @override
   String get vpnPermissionDenied => 'لم يتم منح إذن VPN.';
   @override
-  String connectFailed(String reason) => 'تعذّر الاتصال: ${reason}';
+  String connectFailed(String reason) => 'تعذّر الاتصال: $reason';
   @override
   String get nameSubscription => 'سمِّ هذا الاشتراك';
   @override
