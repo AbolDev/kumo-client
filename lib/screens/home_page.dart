@@ -23,6 +23,7 @@ import '../l10n/extra.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
+import '../widgets/title_bar.dart' show TitleAction;
 import 'edit_config_page.dart';
 import '../core/platform.dart';
 import 'scan_page.dart';
@@ -59,53 +60,34 @@ class HomePage extends StatelessWidget {
 
   final AppState state;
 
-  @override
-  Widget build(BuildContext context) {
+  /// The entries of the menu behind "+" (also shown from the Windows title bar).
+  List<PopupMenuEntry<VoidCallback>> addItems(BuildContext context) {
     final t = S.of(context);
-    return ListenableBuilder(
-      listenable: state,
-      builder: (context, _) => Scaffold(
-        // The tint of the connection card reaches up behind the title bar, with no seam.
-        extendBodyBehindAppBar: Platform.isAndroid,
-        appBar: AppBar(
-          scrolledUnderElevation: 0,
-          backgroundColor: Colors.transparent,
-          title: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.cloud, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 8),
-            const Text('Kumo'),
-          ]),
-          actions: [
-            PopupMenuButton<VoidCallback>(
-              icon: const Icon(Icons.add),
-              tooltip: t.add,
-              onSelected: (action) => action(),
-              itemBuilder: (menu) => [
+    return [
                 PopupMenuItem(
-                  value: () => _addFromClipboard(context),
+                  value: () => addFromClipboard(context),
                   child: _MenuRow(Icons.content_paste, t.addFromClipboard),
                 ),
                 PopupMenuItem(
-                  value: () => _addFromFile(context),
+                  value: () => addFromFile(context),
                   child: _MenuRow(Icons.file_open, t.addFromFile),
                 ),
                 if (Platform.isAndroid)
                   PopupMenuItem(
-                    value: () => _scan(context),
+                    value: () => scan(context),
                     child: _MenuRow(Icons.qr_code_scanner, t.scanQr),
                   ),
                 if (Platform.isWindows) ...[
                   PopupMenuItem(
-                    value: () => _qrFrom(context, 'screen'),
+                    value: () => qrFrom(context, 'screen'),
                     child: _MenuRow(Icons.screenshot_monitor, tr(context, 'importQrScreen')),
                   ),
                 ],
-              ],
-            ),
-            PopupMenuButton<VoidCallback>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (action) => action(),
-              itemBuilder: (menu) => [
+    ];
+  }
+
+  /// The entries of the menu behind the three dots.
+  List<PopupMenuEntry<VoidCallback>> moreItems(BuildContext context) => [
                 PopupMenuItem(
                   value: () => Navigator.push(
                     context,
@@ -168,20 +150,52 @@ class HomePage extends StatelessWidget {
                   value: state.updateAllSubscriptions,
                   child: _MenuRow(Icons.sync, tr(context, 'menuUpdateSubs')),
                 ),
-              ],
-            ),
-            IconButton(
-              tooltip: t.settings,
-              icon: const Icon(Icons.settings),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                    builder: (_) => SettingsPage(state: state)),
+      ];
+
+  void openSettings(BuildContext context) => Navigator.push(
+        context,
+        MaterialPageRoute<void>(builder: (_) => SettingsPage(state: state)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final t = S.of(context);
+    return ListenableBuilder(
+      listenable: state,
+      builder: (context, _) => Scaffold(
+        // The tint of the connection card reaches up behind the title bar, with no seam.
+        extendBodyBehindAppBar: Platform.isAndroid,
+        // Windows: the buttons of this bar sit in the row of the window buttons (see title_bar.dart),
+        // so there is no second row.
+        appBar: Platform.isWindows
+            ? null
+            : AppBar(
+                scrolledUnderElevation: 0,
+                backgroundColor: Colors.transparent,
+                title: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.cloud, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(width: 8),
+                  const Text('Kumo'),
+                ]),
+                actions: [
+                  PopupMenuButton<VoidCallback>(
+                    icon: const Icon(Icons.add),
+                    tooltip: t.add,
+                    onSelected: (action) => action(),
+                    itemBuilder: (menu) => addItems(context),
+                  ),
+                  PopupMenuButton<VoidCallback>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (action) => action(),
+                    itemBuilder: (menu) => moreItems(context),
+                  ),
+                  IconButton(
+                    tooltip: t.settings,
+                    icon: const Icon(Icons.settings),
+                    onPressed: () => openSettings(context),
+                  ),
+                ],
               ),
-            ),
-            if (Platform.isWindows) const SizedBox(width: 12),
-          ],
-        ),
         body: _withDrop(context, LayoutBuilder(builder: (context, box) {
           // A wide desktop window puts the controls beside the server list.
           if (isDesktop && box.maxWidth >= 760) {
@@ -251,7 +265,7 @@ class HomePage extends StatelessWidget {
     if (!isDesktop) return child;
     return CallbackShortcuts(
       bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyV, control: true): () => _addFromClipboard(context),
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true): () => addFromClipboard(context),
       },
       child: Focus(autofocus: true, child: _dropTarget(context, child)),
     );
@@ -327,7 +341,7 @@ class HomePage extends StatelessWidget {
 
   /// Windows: reads a QR code from a screenshot of the screen or an image on the clipboard
   /// (an image file goes through Add from file).
-  Future<void> _qrFrom(BuildContext context, String source) async {
+  Future<void> qrFrom(BuildContext context, String source) async {
     Uint8List? bytes;
     if (source == 'screen') {
       // The window steps aside so the QR code on the screen is not covered by it.
@@ -357,7 +371,7 @@ class HomePage extends StatelessWidget {
     await _import(context, text);
   }
 
-  Future<void> _addFromClipboard(BuildContext context) async {
+  Future<void> addFromClipboard(BuildContext context) async {
     final t = S.of(context);
     final clip = await Clipboard.getData(Clipboard.kTextPlain);
     final text = clip?.text?.trim() ?? '';
@@ -396,7 +410,7 @@ class HomePage extends StatelessWidget {
   /// Reads a text file (share links, a base64 list or a subscription URL) or an image holding a QR
   /// code, and adds it.
   /// Password-protected exports (.slip, .npvs, .zsx ...) ask for the user's password first.
-  Future<void> _addFromFile(BuildContext context) async {
+  Future<void> addFromFile(BuildContext context) async {
     final picked = await FilePicker.platform.pickFiles(withData: true);
     final file = picked?.files.single;
     final bytes = file?.bytes;
@@ -482,7 +496,7 @@ class HomePage extends StatelessWidget {
     ).whenComplete(controller.dispose);
   }
 
-  Future<void> _scan(BuildContext context) async {
+  Future<void> scan(BuildContext context) async {
     final value = await Navigator.push<String>(
       context,
       MaterialPageRoute(builder: (_) => const ScanPage()),
@@ -599,7 +613,12 @@ class _ConnectCard extends StatelessWidget {
       ),
       child: Padding(
       padding: EdgeInsets.fromLTRB(16,
-          isDesktop ? 100 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
+          // On Windows the home screen has no bar of its own: its buttons sit in the title bar.
+          Platform.isWindows
+              ? 84
+              : (isDesktop ? 100 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8),
+          16,
+          12),
       child: Column(
         children: [
           _PowerButton(
@@ -1921,5 +1940,47 @@ Future<void> _editSubscription(
     final n = name.text.trim();
     await state.editSubscription(
         group, n.isEmpty ? group.name : n, url.text.trim());
+  }
+}
+
+/// Windows: the buttons of the home screen (add, more, settings), shown in the row of the window
+/// buttons. The title bar sits above the Navigator, so the menus are opened on the Navigator.
+class HomeTitleActions extends StatelessWidget {
+  const HomeTitleActions({super.key, required this.state, required this.navigator});
+
+  final AppState state;
+  final GlobalKey<NavigatorState> navigator;
+
+  Future<void> _menu(Rect anchor, List<PopupMenuEntry<VoidCallback>> Function(BuildContext) items) async {
+    final nav = navigator.currentContext;
+    if (nav == null || !nav.mounted) return;
+    final overlay = Navigator.of(nav).overlay?.context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+    // opens just under the button
+    final under = Rect.fromLTRB(anchor.left, anchor.bottom, anchor.right, anchor.bottom);
+    final action = await showMenu<VoidCallback>(
+      context: nav,
+      position: RelativeRect.fromRect(under, Offset.zero & overlay.size),
+      items: items(nav),
+    );
+    action?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = S.of(context);
+    final home = HomePage(state: state);
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      TitleAction(icon: Icons.add, label: t.add, onTap: (r) => _menu(r, home.addItems)),
+      TitleAction(icon: Icons.more_vert, label: t.more, onTap: (r) => _menu(r, home.moreItems)),
+      TitleAction(
+        icon: Icons.settings,
+        label: t.settings,
+        onTap: (_) {
+          final nav = navigator.currentContext;
+          if (nav != null && nav.mounted) home.openSettings(nav);
+        },
+      ),
+    ]);
   }
 }

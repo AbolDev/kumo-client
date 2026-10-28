@@ -4,7 +4,13 @@ import 'package:window_manager/window_manager.dart';
 /// Windows: the app draws its own title bar (drag area plus minimize, maximize and close),
 /// so the window matches the rest of the app.
 class AppTitleBar extends StatefulWidget {
-  const AppTitleBar({super.key});
+  const AppTitleBar({super.key, this.leading, this.actions});
+
+  /// At the left end (the name of the app on the home screen).
+  final Widget? leading;
+
+  /// Between the drag area and the window buttons (the buttons of the home screen).
+  final Widget? actions;
 
   @override
   State<AppTitleBar> createState() => _AppTitleBarState();
@@ -44,6 +50,7 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
       height: 36,
       child: Row(
         children: [
+          if (widget.leading != null) widget.leading!,
           Expanded(
             child: DragToMoveArea(
               child: GestureDetector(
@@ -55,6 +62,7 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
               ),
             ),
           ),
+          if (widget.actions != null) widget.actions!,
           _CaptionButton(
               icon: Icons.remove,
               tooltip: 'Minimize',
@@ -122,5 +130,76 @@ class _CaptionButtonState extends State<_CaptionButton> {
           ),
         ),
     );
+  }
+}
+
+/// The name of the app at the left of the title bar.
+class TitleBrand extends StatelessWidget {
+  const TitleBrand({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: 12),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.cloud, size: 18, color: scheme.primary),
+        const SizedBox(width: 8),
+        const Text('Kumo', style: TextStyle(fontWeight: FontWeight.w600)),
+      ]),
+    );
+  }
+}
+
+/// An icon button in the title bar. Like the window buttons it has no tooltip (there is no Overlay
+/// above the Navigator to show one in); it hands the place it sits at to [onTap], so that a menu
+/// can open under it.
+class TitleAction extends StatefulWidget {
+  const TitleAction({super.key, required this.icon, required this.label, required this.onTap});
+
+  final IconData icon;
+
+  /// What a screen reader says.
+  final String label;
+  final void Function(Rect bounds) onTap;
+
+  @override
+  State<TitleAction> createState() => _TitleActionState();
+}
+
+class _TitleActionState extends State<TitleAction> {
+  var _over = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: widget.label,
+      excludeSemantics: true,
+      onTap: () => _tap(context),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _over = true),
+        onExit: (_) => setState(() => _over = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _tap(context),
+          child: Container(
+            width: 42,
+            height: 36,
+            alignment: Alignment.center,
+            color: _over ? scheme.onSurface.withValues(alpha: 0.1) : Colors.transparent,
+            child: Icon(widget.icon, size: 20, color: scheme.onSurface),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _tap(BuildContext context) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    widget.onTap(box.localToGlobal(Offset.zero) & box.size);
   }
 }
