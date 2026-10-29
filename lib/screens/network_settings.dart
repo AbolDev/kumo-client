@@ -11,6 +11,7 @@ import '../core/singbox_config.dart' show parseExtraJson;
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
+import '../widgets/flag_name.dart';
 import 'app_routing_page.dart';
 import 'routing_rules_page.dart';
 import 'share_sheet.dart';
@@ -792,7 +793,7 @@ Future<void> _pickChain(BuildContext context, AppState state) async {
                     for (final c in shown)
                       ListTile(
                         dense: true,
-                        title: Text(c.name, maxLines: 1),
+                        title: FlagName(c.name),
                         subtitle: Text('${c.label} · ${c.maskedAddress}',
                             textDirection: TextDirection.ltr),
                         onTap: () => Navigator.pop(dialog, c),

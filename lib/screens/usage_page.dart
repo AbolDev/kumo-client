@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/usage_stats.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
+import '../widgets/flag_name.dart';
 import 'home_page.dart' show confirmDeletion;
 
 const _downColor = Colors.green;
@@ -535,9 +536,7 @@ class _UsagePageState extends State<UsagePage> {
                       children: [
                         Row(children: [
                           Expanded(
-                            child: Text(e.key,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                            child: FlagName(e.key,
                                 style: const TextStyle(
                                     fontWeight: FontWeight.w600)),
                           ),
