@@ -45,6 +45,10 @@ class WarpController extends ChangeNotifier {
 
   WarpAccount? account;
 
+  /// Whether WARP is on: its server is in the list. Off by default; turning it off takes the server
+  /// out of the list but keeps the account, so that turning it on again needs no new sign-up.
+  bool enabled = false;
+
   /// Which combination of [combos] the link is built from.
   int choice = 0;
 
@@ -122,6 +126,8 @@ class WarpController extends ChangeNotifier {
       final j = text == null ? null : jsonDecode(text);
       if (j is Map) {
         account = WarpAccount.fromJson(j['account']);
+        // Saved before the switch existed: an account that was made is in use.
+        enabled = j['enabled'] is bool ? j['enabled'] as bool : account != null;
         choice = j['choice'] is int ? j['choice'] as int : 0;
         link = j['link'] is String ? j['link'] as String : null;
         _checkedAt = j['checked'] is int ? j['checked'] as int : 0;
@@ -138,6 +144,7 @@ class WarpController extends ChangeNotifier {
       _file,
       jsonEncode({
         'account': account?.toJson(),
+        'enabled': enabled,
         'choice': choice,
         'link': link,
         'checked': _checkedAt,
@@ -146,7 +153,7 @@ class WarpController extends ChangeNotifier {
   /// At the start of the app: when an account exists, looks for a newer profile now and then.
   Future<void> startup() async {
     await load();
-    if (account == null) return;
+    if (account == null || !enabled) return;
     if (DateTime.now().millisecondsSinceEpoch - _checkedAt < _every.inMilliseconds) {
       return;
     }
@@ -196,13 +203,41 @@ class WarpController extends ChangeNotifier {
           account = await registerWarp(store.profile!);
         }
       }
+      enabled = true;
       await _apply(choose: true);
     } catch (e) {
       error = '$e'.replaceFirst('Bad state: ', '');
+      if (account == null) enabled = false;
     } finally {
       busy = false;
       notifyListeners();
     }
+  }
+
+  /// Turns WARP on: the server goes back in the list (the account is made first when there is none).
+  Future<void> enable() async {
+    if (account == null) return setUp();
+    if (busy) return;
+    enabled = true;
+    error = null;
+    try {
+      await load();
+      await _apply();
+    } catch (e) {
+      error = '$e'.replaceFirst('Bad state: ', '');
+    }
+    await _save();
+    notifyListeners();
+  }
+
+  /// Turns WARP off: the server leaves the list; the account stays.
+  Future<void> disable() async {
+    final c = config;
+    if (c != null) _state.removeConfig(_state.manual, c);
+    enabled = false;
+    error = null;
+    await _save();
+    notifyListeners();
   }
 
   /// Switches to the next way of reaching WARP (another method, endpoint or port).
@@ -260,6 +295,7 @@ class WarpController extends ChangeNotifier {
     final previous = old == null ? null : _state.manual.configs.where((c) => c.link == old).firstOrNull;
     if (previous != null) _state.removeConfig(_state.manual, previous);
     account = null;
+    enabled = false;
     link = null;
     currentMethod = currentAddress = null;
     choice = 0;

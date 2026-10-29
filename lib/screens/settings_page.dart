@@ -23,7 +23,7 @@ import 'network_settings.dart';
 import 'share_sheet.dart';
 import 'update_dialog.dart';
 import 'usage_page.dart';
-import 'warp_page.dart';
+import 'free_connections_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.state});
@@ -451,19 +451,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
             ]),
-            _section(Icons.cloud_outlined, tr(context, 'warpTitle'), [
+            _section(Icons.volunteer_activism_outlined, tr(context, 'freeConnections'), [
               ListTile(
-                leading: const Icon(Icons.cloud_outlined),
-                title: Text(tr(context, 'warpTitle')),
-                subtitle: Text(state.warp.account == null
-                    ? tr(context, 'warpNotSetUp')
-                    : tr(context, 'warpMethod', {
-                        'method': state.warp.currentMethod ?? '',
-                        'address': state.warp.currentAddress ?? '',
-                      })),
+                leading: const Icon(Icons.volunteer_activism_outlined),
+                title: Text(tr(context, 'freeConnections')),
+                subtitle: Text(tr(context, 'freeConnectionsDesc')),
                 onTap: () => Navigator.push(
                   context,
-                  MaterialPageRoute<void>(builder: (_) => WarpPage(state: state)),
+                  MaterialPageRoute<void>(builder: (_) => FreeConnectionsPage(state: state)),
                 ),
               ),
             ]),

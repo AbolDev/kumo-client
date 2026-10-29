@@ -24,6 +24,7 @@ import '../l10n/extra.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
+import 'free_connections_page.dart';
 import 'edit_config_page.dart';
 import '../core/platform.dart';
 import 'scan_page.dart';
@@ -101,6 +102,14 @@ class HomePage extends StatelessWidget {
                     child: _MenuRow(Icons.screenshot_monitor, tr(context, 'importQrScreen')),
                   ),
                 ],
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(builder: (_) => FreeConnectionsPage(state: state)),
+                  ),
+                  child: _MenuRow(Icons.volunteer_activism_outlined, tr(context, 'freeConnections')),
+                ),
               ],
             ),
             PopupMenuButton<VoidCallback>(
