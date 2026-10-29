@@ -9,10 +9,10 @@ $packageArgs = @{
   checksumType64 = 'sha256'
 }
 if ($arm) {
-  $packageArgs.url64bit      = 'https://github.com/AbolDev/kumo-client/releases/download/v1.10.1/kumo-windows-arm64-setup.exe'
-  $packageArgs.checksum64    = 'abefd666f5a1d1c52d2f6f0dabc0746679a8bcaf8d9766be041ea817f842f757'
+  $packageArgs.url64bit      = 'https://github.com/AbolDev/kumo-client/releases/download/v1.11.0/kumo-windows-arm64-setup.exe'
+  $packageArgs.checksum64    = 'f5676f4ced1e132fe07260b867165495f21714ca823b1aef19aa90208281a1a6'
 } else {
-  $packageArgs.url64bit      = 'https://github.com/AbolDev/kumo-client/releases/download/v1.10.1/kumo-windows-x64-setup.exe'
-  $packageArgs.checksum64    = '5e55104b50c578a489427c744650f1b68f3272482dfa219233d205ed098b4124'
+  $packageArgs.url64bit      = 'https://github.com/AbolDev/kumo-client/releases/download/v1.11.0/kumo-windows-x64-setup.exe'
+  $packageArgs.checksum64    = '85f149b1817fb19443a0419795b4cf2200cecede5cb9622b5cd74f0024cb8354'
 }
 Install-ChocolateyPackage @packageArgs
