@@ -588,6 +588,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The notes of the release are a file of the tagged commit (docs/release-notes).
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          sparse-checkout: docs/release-notes
+
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: 'kumo-*'
@@ -596,11 +601,26 @@ jobs:
           # The portable zip must stay a zip instead of being unpacked into dist/.
           skip-decompress: true
 
-      - env:
+      # The text comes from docs/release-notes/<tag>.md followed by the download table (downloads.html,
+      # with the tag put in); a tag with a dash (v1.12.0-beta.1) is a pre-release and never the latest
+      # one. Without a notes file for the tag, GitHub's own generated notes are used.
+      - name: Publish the release
+        env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}"
-          --title "Kumo ${{ github.ref_name }}" --generate-notes
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes="docs/release-notes/$TAG.md"
+          flags=()
+          case "$TAG" in
+            *-*) flags+=(--prerelease --latest=false) ;;
+          esac
+          if [ -f "$notes" ]; then
+            { cat "$notes"; echo; sed "s/@@TAG@@/$TAG/g" docs/release-notes/downloads.html; } > body.md
+            flags+=(--notes-file body.md)
+          else
+            flags+=(--generate-notes)
+          fi
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "Kumo $TAG" "${flags[@]}"
 
   # After a release: refreshes the manifests in packaging/. A tag with a dash (v1.8.0-beta) is a test
   # version and is skipped. (The new version is sent to winget by hand: no token is kept here.)
