@@ -35,7 +35,8 @@ class _MyIpPageState extends State<MyIpPage> {
     });
     IpInfo? info;
     try {
-      info = await fetchIpInfo(proxyPort: widget.state.localProxyPort);
+      info = await fetchIpInfo(
+          proxyPort: widget.state.localProxyPort, askIran: !widget.state.connected);
     } catch (_) {}
     if (!mounted) return;
     setState(() {

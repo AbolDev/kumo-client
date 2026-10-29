@@ -60,7 +60,12 @@ bool _isV6(String s) => s.contains(':') && InternetAddress.tryParse(s) != null;
 
 /// The IPv4 and IPv6 addresses (either can be missing) and the place the IPv4 one is in.
 /// [proxyPort] sends the requests through the local proxy when the tunnel is not used.
-Future<IpInfo> fetchIpInfo({int? proxyPort}) async {
+///
+/// [askIran] is false while a VPN is connected. The Iranian service below is an Iranian address, and
+/// the connection sends Iranian addresses straight out (the bypass rules, or the VPN server itself),
+/// so it answers with the user's real address; because it says Iran and the other services say the
+/// VPN's country, [chooseIpInfo] would then show the real address as if it were the VPN's.
+Future<IpInfo> fetchIpInfo({int? proxyPort, bool askIran = true}) async {
   Future<String?> v4() async {
     for (final url in const ['https://api.ipify.org', 'https://ipv4.icanhazip.com']) {
       try {
@@ -83,7 +88,7 @@ Future<IpInfo> fetchIpInfo({int? proxyPort}) async {
 
   // Services of the world often cannot see the address of a user in Iran. This Iranian service can,
   // so it is asked as well.
-  final results = await Future.wait([v4(), v6(), fetchIranInfo(proxyPort)]);
+  final results = await Future.wait([v4(), v6(), askIran ? fetchIranInfo(proxyPort) : Future.value(null)]);
   final ip4 = results[0] as String?, ip6 = results[1] as String?;
   final iran = results[2] as IpInfo?;
   String? country, code, city, region, isp;
