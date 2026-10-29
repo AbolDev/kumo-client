@@ -31,6 +31,15 @@ const _links = [
 AppState _state() {
   final s = AppState();
   s.collector.configs.addAll(parseLinks(_links));
+  // WARP is on: its server is in a group of its own, with some usage.
+  s.warp.enabled = true;
+  s.warp.currentMethod = 'wg-noise-a';
+  s.warp.currentAddress = '162.159.192.1:2408';
+  s.warpGroup.configs.addAll(parseLinks([
+    'wireguard://yOe8Js2xW3Qq6x1VY0m8m7mCzJ8h0o4xkq1o2m8x2E8%3D@162.159.192.1:2408?publickey=bmXOC%2BF1FxEMF9dyiK2H5%2F1SUtzH0JuVo51h2wPfgyo%3D&address=172.16.0.2%2F32&mtu=1280&noise=rand~10-30~5-10#WARP',
+  ]));
+  s.warpUsage[0] = 3 << 20;
+  s.warpUsage[1] = 1 << 20;
   s.collector.configs[0].latencyMs = 120;
   s.collector.configs[1].latencyMs = -1;
   final g = ServerGroup('sub-1', GroupKind.subscription, name: 'My provider', url: 'https://example.com/sub')

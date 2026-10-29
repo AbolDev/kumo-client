@@ -25,6 +25,7 @@ import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
 import 'free_connections_page.dart';
+import 'warp_page.dart';
 import 'edit_config_page.dart';
 import '../core/platform.dart';
 import 'scan_page.dart';
@@ -1396,7 +1397,20 @@ Future<bool?> _askUntested(BuildContext context) {
   );
 }
 
-enum _GroupAction { tcping, realDelay, cancelTest, refresh, cancelRefresh, info, edit, share, delete, deleteAll }
+enum _GroupAction {
+  tcping,
+  realDelay,
+  cancelTest,
+  refresh,
+  cancelRefresh,
+  info,
+  edit,
+  share,
+  delete,
+  deleteAll,
+  warpNext,
+  warpOff,
+}
 
 /// Asks before every config added by hand is removed. Always asked, whatever the setting for single
 /// deletions says: this removes the whole list at once.
@@ -1446,12 +1460,14 @@ class _GroupHeader extends StatelessWidget {
   String _title(S t) => switch (group.kind) {
         GroupKind.collector => t.collectorGroup,
         GroupKind.manual => t.manualGroup,
+        GroupKind.warp => 'WARP',
         GroupKind.subscription => group.name,
       };
 
   IconData get _icon => switch (group.kind) {
         GroupKind.collector => Icons.public,
         GroupKind.manual => Icons.edit_note,
+        GroupKind.warp => Icons.cloud_outlined,
         GroupKind.subscription => Icons.rss_feed,
       };
 
@@ -1475,9 +1491,11 @@ class _GroupHeader extends StatelessWidget {
         state.cancelRefresh(group);
       case _GroupAction.info:
         Navigator.of(context).push(MaterialPageRoute<void>(
-            builder: (_) => group.kind == GroupKind.collector
-                ? CollectorInfoPage(state: state)
-                : SubscriptionInfoPage(state: state, group: group)));
+            builder: (_) => switch (group.kind) {
+                  GroupKind.collector => CollectorInfoPage(state: state),
+                  GroupKind.warp => WarpPage(state: state),
+                  _ => SubscriptionInfoPage(state: state, group: group),
+                }));
       case _GroupAction.edit:
         _editSubscription(context, state, group);
       case _GroupAction.share:
@@ -1492,6 +1510,10 @@ class _GroupHeader extends StatelessWidget {
         _confirmDeleteAll(context, group.configs.length).then((ok) {
           if (ok) state.clearManual();
         });
+      case _GroupAction.warpNext:
+        state.warp.nextMethod();
+      case _GroupAction.warpOff:
+        state.warp.disable();
     }
   }
 
@@ -1508,26 +1530,40 @@ class _GroupHeader extends StatelessWidget {
     ]));
   }
 
-  /// The test result and, once anything went through the free servers, how much (like the usage a
-  /// subscription shows, but without a limit).
-  Widget? _collectorSubtitle(BuildContext context, S t, ColorScheme scheme) {
-    final test = state.tests[group.id];
+  /// The test result (public servers) or the way of connecting (WARP) and, once anything went through
+  /// these free servers, how much (like the usage a subscription shows, but without a limit).
+  Widget? _freeSubtitle(BuildContext context, S t, ColorScheme scheme) {
+    final isWarp = group.kind == GroupKind.warp;
+    final test = isWarp ? null : state.tests[group.id];
     return ListenableBuilder(
       listenable: Listenable.merge([state, state.traffic]),
       builder: (context, _) {
-        final used = state.publicUsage[0] + state.publicUsage[1];
-        if (test == null && used == 0) return const SizedBox.shrink();
+        final usage = isWarp ? state.warpUsage : state.publicUsage;
+        final used = usage[0] + usage[1];
+        final way = isWarp && state.warp.currentMethod != null
+            ? tr(context, 'warpMethod', {
+                'method': state.warp.currentMethod ?? '',
+                'address': state.warp.currentAddress ?? '',
+              })
+            : null;
+        if (test == null && way == null && used == 0) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (test != null) _testStat(t.testStat(test.alive, test.percent), scheme),
+            if (way != null)
+              Text(way,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textDirection: TextDirection.ltr,
+                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
             if (used > 0)
               Padding(
                 padding: EdgeInsetsDirectional.only(top: test == null ? 4 : 6, end: 8),
                 child: Semantics(
                   container: true,
                   excludeSemantics: true,
-                  label: tr(context, 'a11yPubUsage', {'used': _bytes(used)}),
+                  label: tr(context, isWarp ? 'a11yWarpUsage' : 'a11yPubUsage', {'used': _bytes(used)}),
                   child: _UsageBar(
                     fraction: 1,
                     fill: Colors.purple.shade400,
@@ -1581,7 +1617,9 @@ class _GroupHeader extends StatelessWidget {
                   padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
                   child: _SubscriptionInfo(info: group.info!),
                 ))
-          : (group.kind == GroupKind.collector ? _collectorSubtitle(context, t, scheme) : null),
+          : (group.kind == GroupKind.collector || group.kind == GroupKind.warp
+              ? _freeSubtitle(context, t, scheme)
+              : null),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1589,7 +1627,19 @@ class _GroupHeader extends StatelessWidget {
             tooltip: t.more,
             icon: const Icon(Icons.more_vert),
             onSelected: (a) => _onAction(context, a),
-            itemBuilder: (menu) => [
+            itemBuilder: (menu) => group.kind == GroupKind.warp
+                ? [
+                    PopupMenuItem(
+                        value: _GroupAction.info,
+                        child: _MenuRow(Icons.info_outline, tr(context, 'subInfo'))),
+                    PopupMenuItem(
+                        value: _GroupAction.warpNext,
+                        child: _MenuRow(Icons.swap_horiz, tr(context, 'warpTryNext'))),
+                    PopupMenuItem(
+                        value: _GroupAction.warpOff,
+                        child: _MenuRow(Icons.power_settings_new, tr(context, 'warpTurnOff'))),
+                  ]
+                : [
               if (state.tests[group.id]?.running ?? false)
                 PopupMenuItem(
                     value: _GroupAction.cancelTest,

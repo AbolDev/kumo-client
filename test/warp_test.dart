@@ -6,12 +6,14 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
+import 'package:kumo/core/vpn_channel.dart';
 import 'package:kumo/core/warp/warp_keys.dart';
 import 'package:kumo/core/warp/warp_link.dart';
 import 'package:kumo/core/warp/warp_profile.dart';
 import 'package:kumo/core/warp/warp_register.dart';
 import 'package:kumo/core/warp/warp_signature.dart';
 import 'package:kumo/core/warp/x25519.dart';
+import 'package:kumo/core/desktop_vpn.dart';
 import 'package:kumo/state/app_state.dart';
 
 List<int> _hex(String h) => [for (var i = 0; i < h.length; i += 2) int.parse(h.substring(i, i + 2), radix: 16)];
@@ -27,6 +29,19 @@ const _account = WarpAccount(
 WarpProfile _profile() => parseWarpProfile(File('docs/warp/profile.json').readAsStringSync());
 
 void main() {
+  // The tests keep their files in a folder of their own: AppState saves the servers and the usage, and
+  // that must never reach the files of the user who runs the tests.
+  late Directory dataDir;
+  setUpAll(() {
+    dataDir = Directory.systemTemp.createTempSync('kumo_test_data');
+    DesktopVpn.dataDirOverride = dataDir.path;
+  });
+  tearDownAll(() {
+    DesktopVpn.dataDirOverride = null;
+    try {
+      dataDir.deleteSync(recursive: true);
+    } catch (_) {}
+  });
   test('X25519 gives the answers of RFC 7748', () {
     final alice = _hex('77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a');
     final bob = _hex('5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb');
@@ -117,35 +132,76 @@ void main() {
     });
   });
 
-  group('the WARP server in the list', () {
+  group('the WARP group', () {
     final p = _profile();
     final method = p.usable(platform: 'windows', build: 30).firstWhere((m) => m.kind == 'wg-noise');
 
     ProxyConfig make(int port) => parseLink(warpLink(_account, method, p.endpoints.first, port))!;
 
-    test('is added, then replaced by the next one and stays the chosen one', () {
+    AppState on() {
       final s = AppState();
+      s.warp.enabled = true;
+      return s;
+    }
+
+    test('is a group of its own while WARP is on, and not while it is off', () {
+      final s = on();
+      s.setWarpServer(make(0));
+      expect(s.groups.map((g) => g.kind), contains(GroupKind.warp));
+      expect(s.manual.configs, isEmpty);
+      s.warp.enabled = false;
+      expect(s.groups.map((g) => g.kind), isNot(contains(GroupKind.warp)));
+    });
+
+    test('is replaced by the next one and stays the chosen one', () {
+      final s = on();
       final first = make(0);
-      s.swapManual(null, first, choose: true);
-      expect(s.manual.configs, [first]);
+      s.setWarpServer(first, choose: true);
       expect(identical(s.selected, first), isTrue);
       final second = make(1);
-      s.swapManual(first, second);
-      expect(s.manual.configs, [second]);
+      s.setWarpServer(second);
+      expect(s.warpGroup.configs, [second]);
       expect(identical(s.selected, second), isTrue);
     });
 
-    test('an unchosen one stays unchosen, and a twin already in the list is not doubled', () {
-      final s = AppState();
+    test('an unchosen one stays unchosen; emptying the group drops the choice of it', () {
+      final s = on();
       final first = make(0);
-      s.swapManual(null, first);
+      s.setWarpServer(first);
       expect(s.selected, isNull);
-      final twin = make(0);
-      s.swapManual(null, twin);
-      expect(s.manual.configs.length, 1);
+      s.setWarpServer(first, choose: true);
+      s.setWarpServer(null);
+      expect(s.warpGroup.configs, isEmpty);
+      expect(s.selected, isNull);
+    });
+
+    test('a copy kept by hand by an earlier version moves to the group, with the choice', () {
+      final s = on();
+      final old = make(0);
+      s.manual.configs.add(old);
+      s.selected = old;
+      s.restoreWarpServer(make(0));
+      expect(s.manual.configs, isEmpty);
+      expect(s.warpGroup.configs.length, 1);
+      expect(identical(s.selected, s.warpGroup.configs.first), isTrue);
+    });
+
+    test('what goes through the chosen WARP server is counted, and nothing else', () {
+      final s = on();
+      s.collector.configs.addAll(parseLinks(['vless://11111111-1111-1111-1111-111111111111@v.example.com:443?security=tls#Free one']));
+      s.setWarpServer(make(0), choose: true);
+      s.onTrafficForTest(const Traffic(0, 0, 100, 1000));
+      s.onTrafficForTest(const Traffic(0, 0, 300, 5000));
+      expect(s.warpUsage, [5000, 300]);
+      expect(s.publicUsage, [0, 0]);
+      s.selected = s.collector.configs.first;
+      s.onTrafficForTest(const Traffic(0, 0, 400, 7000));
+      expect(s.warpUsage, [5000, 300]);
+      expect(s.publicUsage, [2000, 100]);
+      s.resetUsage();
+      expect(s.warpUsage, [0, 0]);
     });
   });
-
   group('the sign-up connection', () {
     test('the first bytes go out in small pieces and everything arrives in order', () async {
       final received = <List<int>>[];

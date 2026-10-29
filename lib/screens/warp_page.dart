@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/usage_stats.dart' show formatBytes;
 import '../core/warp/warp_store.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
@@ -125,7 +126,35 @@ class _WarpPageState extends State<WarpPage> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(warp.error!, style: TextStyle(color: scheme.error)),
                 ),
-              const Divider(height: 24),
+              if (warp.account != null) ...[
+                const SizedBox(height: 8),
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Text(tr(context, 'warpUsed'),
+                          style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w600)),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.arrow_downward),
+                      title: Text(tr(context, 'warpDown')),
+                      subtitle: Text(formatBytes(widget.state.warpUsage[0]), textDirection: TextDirection.ltr),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.arrow_upward),
+                      title: Text(tr(context, 'warpUp')),
+                      subtitle: Text(formatBytes(widget.state.warpUsage[1]), textDirection: TextDirection.ltr),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.swap_vert),
+                      title: Text(tr(context, 'warpTotal')),
+                      subtitle: Text(formatBytes(widget.state.warpUsage[0] + widget.state.warpUsage[1]),
+                          textDirection: TextDirection.ltr),
+                    ),
+                  ]),
+                ),
+              ],              const Divider(height: 24),
               ListTile(
                 leading: warp.busy && warp.account != null
                     ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))

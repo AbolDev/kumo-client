@@ -38,7 +38,7 @@ const _settingsFile = 'settings.json';
 /// A status line that is turned into text with the current language when it is shown.
 typedef Message = String Function(S s);
 
-enum GroupKind { collector, subscription, manual }
+enum GroupKind { collector, subscription, manual, warp }
 
 /// Configs that come from the same place: the free collector, one subscription link,
 /// or links added by hand.
@@ -101,6 +101,10 @@ class AppState extends ChangeNotifier {
 
   /// Cloudflare WARP (see warp_controller.dart).
   late final warp = WarpController(this);
+
+  /// The WARP server, in a group of its own while WARP is on. It is not saved with the servers: the
+  /// controller makes it from the account it keeps.
+  final warpGroup = ServerGroup('warp', GroupKind.warp);
   final manual = ServerGroup('manual', GroupKind.manual);
   final List<ServerGroup> subscriptions = [];
 
@@ -389,7 +393,12 @@ class AppState extends ChangeNotifier {
   bool _stale(String key, int gen) => _generations[key] != gen;
 
   List<ServerGroup> get groups {
-    final base = [if (showCollector) collector, ...subscriptions, manual];
+    final base = [
+      if (showCollector) collector,
+      if (warp.enabled && warpGroup.configs.isNotEmpty) warpGroup,
+      ...subscriptions,
+      manual,
+    ];
     int rank(ServerGroup g) {
       final i = groupOrder.indexOf(g.id);
       return i < 0 ? 1 << 20 : i;
@@ -956,6 +965,8 @@ class AppState extends ChangeNotifier {
       return;
     }
     final j = read.data;
+    // The WARP server is made before the choice of server is read, so that it can be the chosen one.
+    await warp.restoreServer();
     if (j == null) return;
     // One damaged entry must not take the others down with it (the next save would drop them).
     try {
@@ -1011,7 +1022,7 @@ class AppState extends ChangeNotifier {
       final inGroup = j['selectedGroup'] as String?;
       // The same link can be in two groups: the one that was picked is the one that comes back.
       selected = [
-        for (final g in [collector, manual, ...subscriptions])
+        for (final g in [collector, warpGroup, manual, ...subscriptions])
           if (g.id == inGroup) ...g.configs,
       ].where((c) => c.link == link).firstOrNull ??
           all.where((c) => c.link == link).firstOrNull;
@@ -1045,6 +1056,9 @@ class AppState extends ChangeNotifier {
   /// per-server numbers, which are pruned and renamed with the list.
   final publicUsage = <int>[0, 0];
 
+  /// The same for WARP, [down, up].
+  final warpUsage = <int>[0, 0];
+
   /// Whether the server that carried the traffic is from the public list: the one the user picked, or
   /// (in automatic mode) a server whose name is in that list and in no other.
   bool _isPublic(String name) {
@@ -1052,6 +1066,16 @@ class AppState extends ChangeNotifier {
     if (pick != null) return collector.configs.any((c) => identical(c, pick));
     return collector.configs.any((c) => c.name == name) &&
         !manual.configs.any((c) => c.name == name) &&
+        !subscriptions.any((g) => g.configs.any((c) => c.name == name));
+  }
+
+  /// Whether the server that carried the traffic is the WARP one (see [_isPublic]).
+  bool _isWarp(String name) {
+    final pick = selected;
+    if (pick != null) return warpGroup.configs.any((c) => identical(c, pick));
+    return warpGroup.configs.any((c) => c.name == name) &&
+        !manual.configs.any((c) => c.name == name) &&
+        !collector.configs.any((c) => c.name == name) &&
         !subscriptions.any((g) => g.configs.any((c) => c.name == name));
   }
 
@@ -1120,9 +1144,14 @@ class AppState extends ChangeNotifier {
     s[1] += du;
     s[2] += gap;
     s[3] = now.millisecondsSinceEpoch;
-    if ((dd > 0 || du > 0) && _isPublic(name)) {
-      publicUsage[0] += dd;
-      publicUsage[1] += du;
+    if (dd > 0 || du > 0) {
+      if (_isPublic(name)) {
+        publicUsage[0] += dd;
+        publicUsage[1] += du;
+      } else if (_isWarp(name)) {
+        warpUsage[0] += dd;
+        warpUsage[1] += du;
+      }
     }
     if (serverUsage.length > _maxServers) _pruneServers();
     _usageDirty = true;
@@ -1147,6 +1176,7 @@ class AppState extends ChangeNotifier {
               'days': dayUsage,
               'servers': serverUsage,
               'public': publicUsage,
+              'warp': warpUsage,
               'peak': [peakDown, peakUp],
             }))
         .catchError((_) {});
@@ -1182,6 +1212,9 @@ class AppState extends ChangeNotifier {
         if (_isPublic('$k')) {
           publicUsage[0] += add[0];
           publicUsage[1] += add[1];
+        } else if (_isWarp('$k')) {
+          warpUsage[0] += add[0];
+          warpUsage[1] += add[1];
         }
       });
       _usageDirty = true;
@@ -1216,6 +1249,11 @@ class AppState extends ChangeNotifier {
         publicUsage[0] = (pub[0] as num).toInt();
         publicUsage[1] = (pub[1] as num).toInt();
       }
+      final warpSaved = j['warp'];
+      if (warpSaved is List && warpSaved.length == 2) {
+        warpUsage[0] = (warpSaved[0] as num).toInt();
+        warpUsage[1] = (warpSaved[1] as num).toInt();
+      }
       (j['days'] as Map?)?.forEach((k, v) {
         final l = (v as List).map((e) => (e as num).toInt()).toList();
         if (l.length >= 2) dayUsage['$k'] = [l[0], l[1], l.length > 2 ? l[2] : 0];
@@ -1244,6 +1282,7 @@ class AppState extends ChangeNotifier {
     dayUsage.clear();
     serverUsage.clear();
     publicUsage[0] = publicUsage[1] = 0;
+    warpUsage[0] = warpUsage[1] = 0;
     peakDown = peakUp = 0;
     _writeUsage();
     notifyListeners();
@@ -1308,7 +1347,7 @@ class AppState extends ChangeNotifier {
           },
       ],
       'selected': selected?.link,
-      'selectedGroup': [collector, manual, ...subscriptions]
+      'selectedGroup': [collector, warpGroup, manual, ...subscriptions]
           .where((g) => g.configs.any((c) => identical(c, selected)))
           .firstOrNull
           ?.id,
@@ -1420,9 +1459,12 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  String _title(ServerGroup g) => g.kind == GroupKind.collector
-      ? 'Public servers'
-      : (g.kind == GroupKind.manual ? 'Manual configs' : g.name);
+  String _title(ServerGroup g) => switch (g.kind) {
+        GroupKind.collector => 'Public servers',
+        GroupKind.manual => 'Manual configs',
+        GroupKind.warp => 'WARP',
+        GroupKind.subscription => g.name,
+      };
 
   /// Tests one config from its menu.
   Future<void> testOne(ProxyConfig c, {required bool real}) async {
@@ -1615,27 +1657,35 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  /// Puts [fresh] in the configs added by hand in place of [old] (at the end when there is no [old]),
-  /// keeping the choice when [old] was the chosen one, or making it the chosen one with [choose].
-  void swapManual(ProxyConfig? old, ProxyConfig fresh, {bool choose = false}) {
-    final at = old == null ? -1 : manual.configs.indexOf(old);
+  /// Puts [config] in the WARP group (null empties it). The choice is kept when the server it replaces
+  /// was the chosen one, and [choose] makes it the chosen one.
+  void setWarpServer(ProxyConfig? config, {bool choose = false}) {
+    final old = warpGroup.configs.firstOrNull;
     final wasChosen = old != null && identical(selected, old);
-    final same = manual.configs.where((c) => !identical(c, old) && c.key == fresh.key).firstOrNull;
-    final config = same ?? fresh;
-    if (same == null) {
-      if (at >= 0) {
-        manual.configs[at] = fresh;
-      } else {
-        manual.configs.add(fresh);
-      }
-    } else if (at >= 0) {
-      manual.configs.removeAt(at);
+    warpGroup.configs.clear();
+    if (config == null) {
+      if (wasChosen) selected = null;
+    } else {
+      warpGroup.configs.add(config);
+      if (choose || wasChosen) selected = config;
     }
-    if (choose || wasChosen) selected = config;
     _save();
     notifyListeners();
   }
 
+  /// Puts the WARP server in its group at the start of the app. A copy that an earlier version kept
+  /// among the configs added by hand is taken out of there (and the choice moves to the new one).
+  void restoreWarpServer(ProxyConfig config) {
+    var changed = false;
+    if (warpGroup.configs.isEmpty) warpGroup.configs.add(config);
+    final shown = warpGroup.configs.first;
+    for (final old in manual.configs.where((c) => c.link == config.link).toList()) {
+      if (identical(selected, old)) selected = shown;
+      manual.configs.remove(old);
+      changed = true;
+    }
+    if (changed) _save();
+  }
   /// Removes every config that was added by hand.
   void clearManual() {
     if (tests[manual.id]?.running ?? false) cancelPing(manual);
@@ -2234,6 +2284,7 @@ class AppState extends ChangeNotifier {
       dayUsage.clear();
       serverUsage.clear();
       publicUsage[0] = publicUsage[1] = 0;
+      warpUsage[0] = warpUsage[1] = 0;
       peakDown = peakUp = 0;
       await _loadSettings();
       await _loadServers();

@@ -1,12 +1,27 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/vpn_channel.dart';
+import 'package:kumo/core/desktop_vpn.dart';
 import 'package:kumo/state/app_state.dart';
 
 const _public = 'vless://11111111-1111-1111-1111-111111111111@v.example.com:443?security=tls#Free one';
 const _mine = 'trojan://secret@t.example.com:443?sni=t.example.com#My own';
 
 void main() {
+  // The tests keep their files in a folder of their own: AppState saves the servers and the usage, and
+  // that must never reach the files of the user who runs the tests.
+  late Directory dataDir;
+  setUpAll(() {
+    dataDir = Directory.systemTemp.createTempSync('kumo_test_data');
+    DesktopVpn.dataDirOverride = dataDir.path;
+  });
+  tearDownAll(() {
+    DesktopVpn.dataDirOverride = null;
+    try {
+      dataDir.deleteSync(recursive: true);
+    } catch (_) {}
+  });
   AppState state() {
     final s = AppState();
     s.collector.configs.addAll(parseLinks([_public]));

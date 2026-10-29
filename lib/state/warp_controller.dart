@@ -152,7 +152,7 @@ class WarpController extends ChangeNotifier {
 
   /// At the start of the app: when an account exists, looks for a newer profile now and then.
   Future<void> startup() async {
-    await load();
+    await restoreServer();
     if (account == null || !enabled) return;
     if (DateTime.now().millisecondsSinceEpoch - _checkedAt < _every.inMilliseconds) {
       return;
@@ -176,11 +176,9 @@ class WarpController extends ChangeNotifier {
   Future<void> _apply({bool choose = false}) async {
     final all = await combos();
     if (all.isEmpty) throw StateError('no method of the profile fits this version');
-    final old = link;
     final config = await _configFor(all);
     if (config == null) throw StateError('the profile gave a link that cannot be used');
-    final previous = old == null ? null : _state.manual.configs.where((c) => c.link == old).firstOrNull;
-    _state.swapManual(previous, config, choose: choose);
+    _state.setWarpServer(config, choose: choose);
     await _save();
   }
 
@@ -232,9 +230,8 @@ class WarpController extends ChangeNotifier {
 
   /// Turns WARP off: the server leaves the list; the account stays.
   Future<void> disable() async {
-    final c = config;
-    if (c != null) _state.removeConfig(_state.manual, c);
     enabled = false;
+    _state.setWarpServer(null);
     error = null;
     await _save();
     notifyListeners();
@@ -291,11 +288,9 @@ class WarpController extends ChangeNotifier {
 
   /// Takes the WARP server out of the list and forgets the account.
   Future<void> remove() async {
-    final old = link;
-    final previous = old == null ? null : _state.manual.configs.where((c) => c.link == old).firstOrNull;
-    if (previous != null) _state.removeConfig(_state.manual, previous);
     account = null;
     enabled = false;
+    _state.setWarpServer(null);
     link = null;
     currentMethod = currentAddress = null;
     choice = 0;
@@ -306,9 +301,16 @@ class WarpController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The server of the list that is WARP, if it is there.
-  ProxyConfig? get config {
+  /// The WARP server, when it is in the list.
+  ProxyConfig? get config => _state.warpGroup.configs.firstOrNull;
+
+  /// At the start of the app, before the choice of server is read: puts the server of the saved
+  /// account in its group (when WARP is on), so that it can be the chosen one.
+  Future<void> restoreServer() async {
+    await load();
     final l = link;
-    return l == null ? null : _state.manual.configs.where((c) => c.link == l).firstOrNull;
+    if (!enabled || account == null || l == null) return;
+    final config = parseLink(l);
+    if (config != null) _state.restoreWarpServer(config);
   }
 }
