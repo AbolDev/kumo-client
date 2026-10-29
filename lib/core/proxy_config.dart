@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io' show File, Platform;
 import 'dart:isolate';
 
+import 'warp/warp_profile.dart' show WarpNoise, parseWarpNoise;
+
 part 'link_extra.dart';
 part 'xray_outbound.dart';
 

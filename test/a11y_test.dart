@@ -18,6 +18,7 @@ import 'package:kumo/screens/settings_page.dart';
 import 'package:kumo/screens/subscription_info_page.dart';
 import 'package:kumo/screens/troubleshoot_page.dart';
 import 'package:kumo/screens/usage_page.dart';
+import 'package:kumo/screens/warp_page.dart';
 import 'package:kumo/state/app_state.dart';
 
 const _links = [
@@ -75,6 +76,7 @@ void main() {
     'logs': (s) => LogsPage(state: s),
     'onboarding': (s) => OnboardingPage(state: s),
     'routing rules': (s) => RoutingRulesPage(state: s),
+    'warp': (s) => WarpPage(state: s),
     'edit config': (s) => EditConfigPage(config: s.collector.configs.first),
   };
 

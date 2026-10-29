@@ -165,6 +165,38 @@ String buildXrayConfig(ProxyConfig server, int port,
     node['address'] = '127.0.0.1';
     node['port'] = relayPort;
   }
+  // A WireGuard server with noise (WARP): the tunnel's packets go to a loopback port of Xray, which
+  // sends the noise and then the packets on to the real address.
+  final noise = outbound.remove('_noise');
+  final peers = settings['peers'];
+  if (noise is List && noise.isNotEmpty && protocol == 'wireguard' && peers is List && peers.isNotEmpty) {
+    final peer = peers.first as Map<String, dynamic>;
+    final endpoint = '${peer['endpoint']}';
+    final colon = endpoint.lastIndexOf(':');
+    final relayPort = port == 65535 ? port - 1 : port + 1;
+    inbounds.add({
+      'tag': 'noise-in',
+      'listen': '127.0.0.1',
+      'port': relayPort,
+      'protocol': 'dokodemo-door',
+      'settings': {
+        'address': endpoint.substring(0, colon).replaceAll(RegExp(r'^\[|\]$'), ''),
+        'port': int.parse(endpoint.substring(colon + 1)),
+        'network': 'udp',
+      },
+    });
+    outbounds.add({
+      'protocol': 'freedom',
+      'tag': 'noise-out',
+      'settings': {'noises': noise},
+    });
+    rules.add({
+      'type': 'field',
+      'inboundTag': ['noise-in'],
+      'outboundTag': 'noise-out',
+    });
+    peer['endpoint'] = '127.0.0.1:$relayPort';
+  }
   final config = {
     // Xray names its levels differently; the default stays at warning as before.
     'log': {

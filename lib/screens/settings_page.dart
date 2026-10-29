@@ -23,6 +23,7 @@ import 'network_settings.dart';
 import 'share_sheet.dart';
 import 'update_dialog.dart';
 import 'usage_page.dart';
+import 'warp_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.state});
@@ -447,6 +448,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   context,
                   MaterialPageRoute<void>(
                       builder: (_) => UsagePage(state: state)),
+                ),
+              ),
+            ]),
+            _section(Icons.cloud_outlined, tr(context, 'warpTitle'), [
+              ListTile(
+                leading: const Icon(Icons.cloud_outlined),
+                title: Text(tr(context, 'warpTitle')),
+                subtitle: Text(state.warp.account == null
+                    ? tr(context, 'warpNotSetUp')
+                    : tr(context, 'warpMethod', {
+                        'method': state.warp.currentMethod ?? '',
+                        'address': state.warp.currentAddress ?? '',
+                      })),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => WarpPage(state: state)),
                 ),
               ),
             ]),

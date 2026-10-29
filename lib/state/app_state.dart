@@ -21,6 +21,7 @@ import '../core/sources.dart';
 import '../core/sub_formats.dart';
 import '../core/sub_surge.dart' show subscriptionDeepLink;
 import '../core/updater.dart' show includePrerelease;
+import 'warp_controller.dart';
 import '../core/usage_alert.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart' show trFor;
@@ -97,6 +98,9 @@ const _maxLogs = 300;
 
 class AppState extends ChangeNotifier {
   final collector = ServerGroup('collector', GroupKind.collector);
+
+  /// Cloudflare WARP (see warp_controller.dart).
+  late final warp = WarpController(this);
   final manual = ServerGroup('manual', GroupKind.manual);
   final List<ServerGroup> subscriptions = [];
 
@@ -510,6 +514,8 @@ class AppState extends ChangeNotifier {
     }
     if (showCollector && collector.configs.isEmpty) await refreshCollector();
     if (updateOnStartup) await _updateSubscriptionsOnStartup();
+    warp.addListener(notifyListeners);
+    unawaited(warp.startup().catchError((Object _) {}));
   }
 
   /// Uses what the background job downloaded while the app was closed.
@@ -1607,6 +1613,27 @@ class AppState extends ChangeNotifier {
     _save();
     notifyListeners();
     return true;
+  }
+
+  /// Puts [fresh] in the configs added by hand in place of [old] (at the end when there is no [old]),
+  /// keeping the choice when [old] was the chosen one, or making it the chosen one with [choose].
+  void swapManual(ProxyConfig? old, ProxyConfig fresh, {bool choose = false}) {
+    final at = old == null ? -1 : manual.configs.indexOf(old);
+    final wasChosen = old != null && identical(selected, old);
+    final same = manual.configs.where((c) => !identical(c, old) && c.key == fresh.key).firstOrNull;
+    final config = same ?? fresh;
+    if (same == null) {
+      if (at >= 0) {
+        manual.configs[at] = fresh;
+      } else {
+        manual.configs.add(fresh);
+      }
+    } else if (at >= 0) {
+      manual.configs.removeAt(at);
+    }
+    if (choose || wasChosen) selected = config;
+    _save();
+    notifyListeners();
   }
 
   /// Removes every config that was added by hand.

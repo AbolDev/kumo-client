@@ -1,0 +1,2 @@
+# The signature of the WARP profile covers its exact bytes, so git must never change its line endings.
+docs/warp/* -text

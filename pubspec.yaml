@@ -1,7 +1,7 @@
 name: kumo
 description: "Free V2ray config collector and VPN client powered by sing-box."
 publish_to: 'none'
-version: 1.10.1+29
+version: 1.11.0-beta.1+30
 
 environment:
   sdk: ^3.6.2
@@ -39,4 +39,7 @@ flutter:
     - assets/npvs/
     - assets/tray_icon.ico
     - assets/tray_icon.png
+    # The WARP profile that is part of the app (the signed file of the repository).
+    - docs/warp/profile.json
+    - docs/warp/profile.json.sig
 

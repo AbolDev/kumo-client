@@ -267,6 +267,20 @@ ProxyConfig? _wireguard(String link) {
       if (reserved != null) 'reserved': reserved,
     },
   };
+  // noise= (a WARP link): the packets sent before the first one of the tunnel, so that its start
+  // does not look like WireGuard. Only Xray can send them, through a relay of its own.
+  final noiseText = q['noise'];
+  if (noiseText != null && noiseText.isNotEmpty) {
+    final noise = <WarpNoise>[];
+    for (final spec in noiseText.split(',')) {
+      final n = parseWarpNoise(spec);
+      if (n == null || noise.length >= 5) return null;
+      noise.add(n);
+    }
+    xray['_noise'] = [for (final n in noise) n.toXray()];
+    return _make(link, 'wireguard', _name(u, 'wireguard ${u.host}:$port'), u.host, port,
+        xray: xray, xrayNote: 'noise');
+  }
   return _make(link, 'wireguard', _name(u, 'wireguard ${u.host}:$port'), u.host,
       port,
       outbound: out, xray: xray);

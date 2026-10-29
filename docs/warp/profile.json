@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "version": 1,
+  "issued_at": "2026-10-30T12:00:00Z",
+  "expires_at": "2027-01-30T12:00:00Z",
+  "key_id": "k1",
+  "message": {},
+  "disabled_methods": [],
+  "register": {
+    "fragment": { "size": [5, 40], "delay_ms": [10, 10] },
+    "api_ips": ["104.16.192.82", "104.16.24.84"]
+  },
+  "endpoints": [
+    { "ip": "162.159.192.1", "ports": [2408, 500, 4500] },
+    { "ip": "188.114.97.1", "ports": [2408, 500] },
+    { "ip": "162.159.193.1", "ports": [2408] }
+  ],
+  "methods": [
+    {
+      "id": "wg-noise-a",
+      "kind": "wg-noise",
+      "rank": 1,
+      "requires": ["wg.noise.v1", "reg.fragment.v1"],
+      "min_build": 30,
+      "params": { "noise": [{ "type": "rand", "packet": [10, 30], "delay_ms": [5, 10] }] }
+    },
+    {
+      "id": "wg-noise-b",
+      "kind": "wg-noise",
+      "rank": 2,
+      "requires": ["wg.noise.v1", "reg.fragment.v1"],
+      "min_build": 30,
+      "params": { "noise": [{ "type": "rand", "packet": [50, 100], "delay_ms": [10, 20] }] }
+    },
+    {
+      "id": "wg-plain",
+      "kind": "wg-plain",
+      "rank": 3,
+      "requires": ["wg.plain.v1", "reg.fragment.v1"],
+      "min_build": 30
+    }
+  ]
+}
