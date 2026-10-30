@@ -1790,7 +1790,7 @@ class AppState extends ChangeNotifier {
 
   /// Starts OpenVPN for [c] and returns the name of its adapter, which sing-box sends through. Null when
   /// it could not (the user is told why).
-  Future<String?> _startOpenVpn(ProxyConfig c) async {
+  Future<String?> _startOpenVpn(ProxyConfig c, bool Function() cancelled) async {
     if (!Platform.isWindows) {
       _notice('ovpnUnsupported');
       return null;
@@ -1810,10 +1810,13 @@ class AppState extends ChangeNotifier {
         VpnChannel.stop();
       }
     };
+    _ovpnStarting = true;
     try {
       return await runner.start(c.ovpn!);
     } on OvpnConnectException catch (e) {
       log('OpenVPN: $e');
+      // The user stopped it while it was starting: nothing to tell.
+      if (cancelled()) return null;
       switch (e.failure) {
         case OvpnFailure.noBinary:
           _notice('ovpnNoBinary', {'detail': e.detail});
@@ -1826,15 +1829,26 @@ class AppState extends ChangeNotifier {
           _notice('ovpnAuthFailed');
           ovpnLoginRequest.value = c;
         case OvpnFailure.timeout:
-          _notice('ovpnTimeout', {'detail': _short(e.detail.split('\n').reversed.take(3).toList().reversed.join('\n'))});
+          // The server answered (its first packet came) but the secure handshake never ended: the usual
+          // sign of a network that cuts OpenVPN.
+          if (e.detail.contains('TLS: Initial packet') && !e.detail.contains('Peer Connection Initiated')) {
+            _notice('ovpnHandshake');
+          } else {
+            _notice('ovpnTimeout', {'detail': _short(e.detail.split('\n').reversed.take(3).toList().reversed.join('\n'))});
+          }
         case OvpnFailure.exited:
           _notice('ovpnExited', {'detail': _short(e.detail.split('\n').reversed.take(3).toList().reversed.join('\n'))});
         case OvpnFailure.unsupported:
           _notice('ovpnUnsupported');
       }
       return null;
+    } finally {
+      _ovpnStarting = false;
     }
   }
+
+  /// True while OpenVPN is being started (the tap that stops a connection must stop that too).
+  bool _ovpnStarting = false;
 
   /// The first lines of what a program said, on one line (for a notice).
   static String _short(String text) {
@@ -2022,7 +2036,8 @@ class AppState extends ChangeNotifier {
       for (final k in _generations.keys.toList()) {
         _generations[k] = _generations[k]! + 1;
       }
-      if (_preparing) {
+      // While OpenVPN is starting there is no core to answer a stop: the state is put back at once.
+      if (_preparing || _ovpnStarting) {
         _preparing = false;
         _show(VpnStatus.stopped);
         await stopOpenVpn();
@@ -2031,7 +2046,8 @@ class AppState extends ChangeNotifier {
       _show(VpnStatus.stopping);
       _expectStop = true;
       await VpnChannel.stop();
-      return;
+      // On the desktop a stop with nothing running (a core that never started) gives no answer: the screen
+      // must not stay on \
     }
     final id = ++_startId;
     _preparing = true;
@@ -2088,9 +2104,10 @@ class AppState extends ChangeNotifier {
       // everything out through its adapter.
       String? ovpnInterface;
       if (chosen.length == 1 && chosen.first.isOpenVpn) {
-        ovpnInterface = await _startOpenVpn(chosen.first);
+        ovpnInterface = await _startOpenVpn(chosen.first, cancelled);
         if (cancelled()) {
           await stopOpenVpn();
+          if (vpn.status != VpnStatus.stopped) _show(VpnStatus.stopped);
           return;
         }
         if (ovpnInterface == null) {
