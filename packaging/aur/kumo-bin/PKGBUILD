@@ -1,6 +1,6 @@
 # Maintainer: AbolDev <abolfazlbaghery07@gmail.com>
 pkgname=kumo-bin
-pkgver=1.10.1
+pkgver=1.11.0
 pkgrel=1
 pkgdesc="Free VPN client powered by sing-box and Xray"
 arch=('x86_64' 'aarch64')
@@ -13,8 +13,8 @@ options=('!strip' '!debug')
 install=kumo.install
 source_x86_64=("kumo-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/kumo-linux-x64-portable.tar.gz")
 source_aarch64=("kumo-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/kumo-linux-arm64-portable.tar.gz")
-sha256sums_x86_64=('672e7afb555ffc2ef5065e964292adfbeb37f17ae26495a862538cb1708f8775')
-sha256sums_aarch64=('66ff6f8a6d3fecf02de1260d90106041f85d047ee727c9ecbbf2dabda10b3563')
+sha256sums_x86_64=('1bb64fbd05bf38a4e8c5041ec2bca9ee29e36693a16e45a59214196358543a2a')
+sha256sums_aarch64=('12f4565e28e119c032400e9595b2479440b8e436e7b81d1fdbd331edaa8fa37f')
 
 package() {
   install -d "$pkgdir/opt/kumo"
