@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:country_flags/country_flags.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
@@ -52,15 +55,26 @@ class _MyIpPageState extends State<MyIpPage> {
     return String.fromCharCodes([for (final c in up) 0x1F1E6 + c - 0x41]);
   }
 
-  Widget _row(IconData icon, String label, String? value, {bool copy = false, String? leading}) {
+  /// The flag of a country: a picture where the system's font has no flag emoji (Windows shows the two
+  /// letters instead, Linux often has no font), the emoji elsewhere. Null when the code is not one.
+  Widget? _flagOf(String? code) {
+    if (code == null || !RegExp(r'^[A-Za-z]{2}$').hasMatch(code)) return null;
+    if (Platform.isWindows || Platform.isLinux) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: CountryFlag.fromCountryCode(code.toUpperCase(), height: 18, width: 26),
+      );
+    }
+    return Text(_flag(code), style: const TextStyle(fontSize: 20));
+  }
+
+  Widget _row(IconData icon, String label, String? value, {bool copy = false, Widget? flag}) {
     final scheme = Theme.of(context).colorScheme;
     final text = value == null || value.isEmpty ? '—' : value;
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: scheme.primaryContainer,
-        child: leading != null && leading.isNotEmpty
-            ? Text(leading, style: const TextStyle(fontSize: 20))
-            : Icon(icon, color: scheme.onPrimaryContainer),
+        child: flag ?? Icon(icon, color: scheme.onPrimaryContainer),
       ),
       title: Text(label),
       subtitle: SelectableText(text,
@@ -135,7 +149,7 @@ class _MyIpPageState extends State<MyIpPage> {
                                 info.v6 ?? tr(context, 'ipNoV6'),
                                 copy: info.v6 != null),
                             _row(Icons.public, tr(context, 'ipCountry'), info.country,
-                                leading: _flag(info.countryCode)),
+                                flag: _flagOf(info.countryCode)),
                             _row(Icons.location_city, tr(context, 'ipCity'),
                                 [info.city, info.region]
                                     .where((e) => e != null && e.isNotEmpty)

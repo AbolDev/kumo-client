@@ -52,12 +52,14 @@ void main() {
     File('${driver.path}/OemVista.inf').writeAsStringSync('x');
 
     const none = 'Available adapters [name, GUID, driver]:\n';
+    const dco = "Available adapters [name, GUID, driver]:\n'KumoOpenVPN' {11111111-2222-3333-4444-555555555555} ovpn-dco\n";
     const have = "Available adapters [name, GUID, driver]:\n'KumoOpenVPN' {11111111-2222-3333-4444-555555555555} tap-windows6\n";
 
     /// A stand-in for the programs: [create] answers the successive `tapctl create` calls.
-    ({OvpnRunner runner, List<String> calls}) make(String adapters, List<int> create,
+    ({OvpnRunner runner, List<String> calls, List<String> lines}) make(String adapters, List<int> create,
         {int pnputil = 0, bool withDriver = true}) {
       final calls = <String>[];
+      final lines = <String>[];
       var n = 0;
       final runner = OvpnRunner(
         binary: exe.path,
@@ -66,18 +68,42 @@ void main() {
         driverDir: withDriver ? driver.path : null,
         run: (e, args) async {
           calls.add('${e.split(RegExp(r'[\\/]')).last} ${args.first}');
+          lines.add('${e.split(RegExp(r'[\\/]')).last} ${args.join(' ')}');
+          if (args.first == 'delete') return ProcessResult(0, 0, '', '');
           if (args.first == '--show-adapters') return ProcessResult(0, 0, adapters, '');
           if (args.first == 'create') return ProcessResult(0, create[n++], 'out', 'err');
           return ProcessResult(0, pnputil, 'installed', '');
         },
       );
-      return (runner: runner, calls: calls);
+      return (runner: runner, calls: calls, lines: lines);
     }
 
     test('an adapter that is there is used, and nothing is installed', () async {
       final m = make(have, []);
       await m.runner.ensureAdapter();
       expect(m.calls, ['openvpn.exe --show-adapters']);
+    }, skip: !Platform.isWindows);
+
+    test('the adapter is asked for with the TAP driver by name, whatever tapctl would choose', () async {
+      final m = make(none, [0]);
+      await m.runner.ensureAdapter();
+      expect(m.lines.last, r'tapctl.exe create --name KumoOpenVPN --hwid root\tap0901');
+    }, skip: !Platform.isWindows);
+
+    test('an adapter of ours with another driver (ovpn-dco) is taken away and made again with TAP', () async {
+      final m = make(dco, [0]);
+      await m.runner.ensureAdapter();
+      expect(m.lines, [
+        'openvpn.exe --show-adapters',
+        'tapctl.exe delete KumoOpenVPN',
+        r'tapctl.exe create --name KumoOpenVPN --hwid root\tap0901',
+      ]);
+    }, skip: !Platform.isWindows);
+
+    test('pnputil saying the package was there already (259) is not a failure', () async {
+      final m = make(none, [1, 0], pnputil: 259);
+      await m.runner.ensureAdapter();
+      expect(m.calls.last, 'tapctl.exe create');
     }, skip: !Platform.isWindows);
 
     test('a missing adapter is made', () async {

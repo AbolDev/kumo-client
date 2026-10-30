@@ -125,13 +125,21 @@ class OvpnRunner {
     if (!Platform.isWindows) return;
     final shown = await _run(binary, ['--show-adapters']);
     final adapters = parseAdapters('${shown.stdout}');
-    if (adapters.any((a) => a.$1 == ovpnAdapterName && a.$2 == 'tap-windows6')) return;
+    final named = adapters.where((a) => a.$1 == ovpnAdapterName).toList();
+    if (named.any((a) => a.$2 == 'tap-windows6')) return;
     final ctl = tapctl;
     if (ctl == null || !File(ctl).existsSync()) {
       throw OvpnConnectException(OvpnFailure.noBinary, 'tapctl');
     }
-    Future<ProcessResult> create() => _run(ctl, ['create', '--name', ovpnAdapterName]);
+    // The type of the adapter is named: tapctl chooses by itself otherwise (it makes an "ovpn-dco" one
+    // when that driver is in Windows, which cannot carry the ciphers and the compression that most
+    // configurations use).
+    Future<ProcessResult> create() => _run(ctl, ['create', '--name', ovpnAdapterName, '--hwid', r'root\tap0901']);
     try {
+      if (named.isNotEmpty) {
+        // An adapter of ours that an earlier run made with another driver is taken away first.
+        await _run(ctl, ['delete', ovpnAdapterName]);
+      }
       var r = await create();
       if (r.exitCode != 0) {
         // The driver is not in Windows yet: the one that comes with Kumo (signed by Microsoft's hardware
@@ -164,8 +172,9 @@ class OvpnRunner {
     } on ProcessException catch (e) {
       throw OvpnConnectException(OvpnFailure.noDriver, e.message);
     }
-    // 0: done; 3010: done, a restart is advised (the adapter works without it).
-    if (r.exitCode != 0 && r.exitCode != 3010) {
+    // 0: done; 3010: done, a restart is advised (the adapter works without it); 259: the package was in
+    // Windows already and nothing needed it (the adapter can be made all the same).
+    if (r.exitCode != 0 && r.exitCode != 3010 && r.exitCode != 259) {
       throw OvpnConnectException(OvpnFailure.noDriver, '${r.stdout}${r.stderr}'.trim());
     }
   }

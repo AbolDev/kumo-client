@@ -1818,7 +1818,7 @@ class AppState extends ChangeNotifier {
         case OvpnFailure.noBinary:
           _notice('ovpnNoBinary', {'detail': e.detail});
         case OvpnFailure.noDriver:
-          _notice('ovpnNoDriver');
+          _notice('ovpnNoDriver', {'detail': _short(e.detail)});
         case OvpnFailure.needsLogin || OvpnFailure.needsKeyPassword:
           _notice(e.failure == OvpnFailure.needsLogin ? 'ovpnNeedsLogin' : 'ovpnNeedsKey');
           ovpnLoginRequest.value = c;
@@ -1826,14 +1826,21 @@ class AppState extends ChangeNotifier {
           _notice('ovpnAuthFailed');
           ovpnLoginRequest.value = c;
         case OvpnFailure.timeout:
-          _notice('ovpnTimeout', {'detail': e.detail.split('\n').last});
+          _notice('ovpnTimeout', {'detail': _short(e.detail.split('\n').reversed.take(3).toList().reversed.join('\n'))});
         case OvpnFailure.exited:
-          _notice('ovpnExited', {'detail': e.detail.split('\n').last});
+          _notice('ovpnExited', {'detail': _short(e.detail.split('\n').reversed.take(3).toList().reversed.join('\n'))});
         case OvpnFailure.unsupported:
           _notice('ovpnUnsupported');
       }
       return null;
     }
+  }
+
+  /// The first lines of what a program said, on one line (for a notice).
+  static String _short(String text) {
+    final lines = text.split(RegExp(r'\r?\n')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    final one = lines.take(3).join(' | ');
+    return one.length > 200 ? '${one.substring(0, 200)}...' : one;
   }
 
   /// Ends the OpenVPN program, if one runs (also when the app is closed).
