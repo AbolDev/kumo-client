@@ -77,12 +77,26 @@ String _quote(String s) => '"${s.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}
 
 /// Runs the OpenVPN program for one connection and talks to it over its management port.
 class OvpnRunner {
-  OvpnRunner({required this.binary, required this.tapctl, required this.workDir});
+  OvpnRunner({
+    required this.binary,
+    required this.tapctl,
+    required this.workDir,
+    this.driverDir,
+    Future<ProcessResult> Function(String exe, List<String> args)? run,
+  }) : _run = run ?? Process.run;
 
   /// `openvpn.exe`, and `tapctl.exe` (which makes the adapter), and a folder for the files of a run.
   final String binary;
   final String? tapctl;
   final String workDir;
+
+  /// The folder with the signed driver of the adapter (OemVista.inf, tap0901.sys and .cat), which is put
+  /// into Windows when it is not there yet.
+  final String? driverDir;
+  final Future<ProcessResult> Function(String exe, List<String> args) _run;
+
+  /// Called before the driver is installed (the screen says what is going on).
+  void Function()? onInstallingDriver;
 
   Process? _process;
   OvpnManagement? _port;
@@ -109,21 +123,50 @@ class OvpnRunner {
   /// driver is not there.
   Future<void> ensureAdapter() async {
     if (!Platform.isWindows) return;
-    final shown = await Process.run(binary, ['--show-adapters']);
+    final shown = await _run(binary, ['--show-adapters']);
     final adapters = parseAdapters('${shown.stdout}');
     if (adapters.any((a) => a.$1 == ovpnAdapterName && a.$2 == 'tap-windows6')) return;
     final ctl = tapctl;
     if (ctl == null || !File(ctl).existsSync()) {
       throw OvpnConnectException(OvpnFailure.noBinary, 'tapctl');
     }
+    Future<ProcessResult> create() => _run(ctl, ['create', '--name', ovpnAdapterName]);
     try {
-      final r = await Process.run(ctl, ['create', '--name', ovpnAdapterName]);
+      var r = await create();
       if (r.exitCode != 0) {
-        throw OvpnConnectException(OvpnFailure.noDriver, '${r.stdout}${r.stderr}'.trim());
+        // The driver is not in Windows yet: the one that comes with Kumo (signed by Microsoft's hardware
+        // program, made by the OpenVPN project) is put in, and the adapter is made again.
+        final first = '${r.stdout}${r.stderr}'.trim();
+        await _installDriver(first);
+        r = await create();
+        if (r.exitCode != 0) {
+          throw OvpnConnectException(OvpnFailure.noDriver, '${r.stdout}${r.stderr}'.trim());
+        }
       }
     } on ProcessException catch (e) {
       // tapctl asks for the rights of an administrator.
       throw OvpnConnectException(OvpnFailure.noDriver, e.message);
+    }
+  }
+
+  /// pnputil puts the driver package in the store of Windows (and installs it on the adapters that need
+  /// it). Throws noDriver when there is no package or Windows does not take it.
+  Future<void> _installDriver(String why) async {
+    final dir = driverDir;
+    final inf = dir == null ? null : File('$dir${Platform.pathSeparator}OemVista.inf');
+    if (inf == null || !inf.existsSync()) {
+      throw OvpnConnectException(OvpnFailure.noDriver, why);
+    }
+    onInstallingDriver?.call();
+    final ProcessResult r;
+    try {
+      r = await _run('pnputil', ['/add-driver', inf.path, '/install']);
+    } on ProcessException catch (e) {
+      throw OvpnConnectException(OvpnFailure.noDriver, e.message);
+    }
+    // 0: done; 3010: done, a restart is advised (the adapter works without it).
+    if (r.exitCode != 0 && r.exitCode != 3010) {
+      throw OvpnConnectException(OvpnFailure.noDriver, '${r.stdout}${r.stderr}'.trim());
     }
   }
 

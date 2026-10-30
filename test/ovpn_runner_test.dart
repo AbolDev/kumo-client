@@ -43,6 +43,90 @@ void main() {
     expect(text, isNot(contains('redirect-gateway')));
   });
 
+  group('the adapter and its driver', () {
+    final dir = Directory.systemTemp.createTempSync('ovpn_driver');
+    tearDownAll(() => dir.deleteSync(recursive: true));
+    final exe = File('${dir.path}/openvpn.exe')..writeAsStringSync('x');
+    final tapctl = File('${dir.path}/tapctl.exe')..writeAsStringSync('x');
+    final driver = Directory('${dir.path}/driver')..createSync();
+    File('${driver.path}/OemVista.inf').writeAsStringSync('x');
+
+    const none = 'Available adapters [name, GUID, driver]:\n';
+    const have = "Available adapters [name, GUID, driver]:\n'KumoOpenVPN' {11111111-2222-3333-4444-555555555555} tap-windows6\n";
+
+    /// A stand-in for the programs: [create] answers the successive `tapctl create` calls.
+    ({OvpnRunner runner, List<String> calls}) make(String adapters, List<int> create,
+        {int pnputil = 0, bool withDriver = true}) {
+      final calls = <String>[];
+      var n = 0;
+      final runner = OvpnRunner(
+        binary: exe.path,
+        tapctl: tapctl.path,
+        workDir: dir.path,
+        driverDir: withDriver ? driver.path : null,
+        run: (e, args) async {
+          calls.add('${e.split(RegExp(r'[\\/]')).last} ${args.first}');
+          if (args.first == '--show-adapters') return ProcessResult(0, 0, adapters, '');
+          if (args.first == 'create') return ProcessResult(0, create[n++], 'out', 'err');
+          return ProcessResult(0, pnputil, 'installed', '');
+        },
+      );
+      return (runner: runner, calls: calls);
+    }
+
+    test('an adapter that is there is used, and nothing is installed', () async {
+      final m = make(have, []);
+      await m.runner.ensureAdapter();
+      expect(m.calls, ['openvpn.exe --show-adapters']);
+    }, skip: !Platform.isWindows);
+
+    test('a missing adapter is made', () async {
+      final m = make(none, [0]);
+      await m.runner.ensureAdapter();
+      expect(m.calls, ['openvpn.exe --show-adapters', 'tapctl.exe create']);
+    }, skip: !Platform.isWindows);
+
+    test('without the driver, it is put into Windows and the adapter is made again', () async {
+      final m = make(none, [1, 0]);
+      var said = false;
+      m.runner.onInstallingDriver = () => said = true;
+      await m.runner.ensureAdapter();
+      expect(m.calls, ['openvpn.exe --show-adapters', 'tapctl.exe create', 'pnputil /add-driver', 'tapctl.exe create']);
+      expect(said, isTrue);
+    }, skip: !Platform.isWindows);
+
+    test('a restart that is only advised (3010) is not a failure', () async {
+      final m = make(none, [1, 0], pnputil: 3010);
+      await m.runner.ensureAdapter();
+      expect(m.calls.last, 'tapctl.exe create');
+    }, skip: !Platform.isWindows);
+
+    test('a driver that Windows refuses is the noDriver answer, with what Windows said', () async {
+      final m = make(none, [1], pnputil: 5);
+      try {
+        await m.runner.ensureAdapter();
+        fail('should throw');
+      } on OvpnConnectException catch (e) {
+        expect(e.failure, OvpnFailure.noDriver);
+        expect(e.detail, contains('installed'));
+      }
+      expect(m.calls.where((c) => c == 'tapctl.exe create').length, 1, reason: 'no second try when the driver was refused');
+    }, skip: !Platform.isWindows);
+
+    test('no driver package next to the program is the noDriver answer', () async {
+      final m = make(none, [1], withDriver: false);
+      await expectLater(m.runner.ensureAdapter(),
+          throwsA(isA<OvpnConnectException>().having((e) => e.failure, 'failure', OvpnFailure.noDriver)));
+      expect(m.calls.where((c) => c.startsWith('pnputil')), isEmpty);
+    }, skip: !Platform.isWindows);
+
+    test('an adapter that still cannot be made after the driver went in is the noDriver answer', () async {
+      final m = make(none, [1, 1]);
+      await expectLater(m.runner.ensureAdapter(),
+          throwsA(isA<OvpnConnectException>().having((e) => e.failure, 'failure', OvpnFailure.noDriver)));
+    }, skip: !Platform.isWindows);
+  });
+
   group('before anything is started', () {
     final dir = Directory.systemTemp.createTempSync('ovpn_runner');
     tearDownAll(() => dir.deleteSync(recursive: true));

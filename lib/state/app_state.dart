@@ -1800,7 +1800,9 @@ class AppState extends ChangeNotifier {
       binary: '$dir\\openvpn.exe',
       tapctl: '$dir\\tapctl.exe',
       workDir: await VpnChannel.dataDir(),
+      driverDir: '$dir\\driver',
     );
+    runner.onInstallingDriver = () => _notice('ovpnInstallingDriver');
     runner.onLost = (why) {
       // The program ended or was killed while connected: the tunnel is no use any more.
       if (connected) {

@@ -69,6 +69,20 @@ $ovBin = "$tmp\ovpn\OpenVPN\bin"
 foreach ($f in 'openvpn.exe', 'tapctl.exe') { Copy-Item "$ovBin\$f" "$ovOut\$f" -Force }
 foreach ($f in 'libcrypto*.dll', 'libssl*.dll', 'libpkcs11-helper*.dll', 'vcruntime140*.dll') { Copy-Item "$ovBin\$f" $ovOut -Force }
 Copy-Item "$tmp\ovpn\OpenVPN\license.txt" "$ovOut\license.txt" -Force
+
+# The network driver OpenVPN needs (TAP-Windows, from the OpenVPN project, signed through Microsoft's
+# hardware program). Kumo puts it into Windows the first time an OpenVPN server is used.
+$tap = Get-Zip "https://github.com/OpenVPN/tap-windows6/releases/download/9.27.0/dist.win10.zip" "tap" "tap-windows6-9.27.0-dist.win10.zip"
+$tapDir = "$ovOut\driver"
+New-Item -ItemType Directory -Force $tapDir | Out-Null
+$tapSrc = Get-ChildItem $tap -Recurse -Directory | Where-Object { $_.Name -eq $ovArch } | Select-Object -First 1
+foreach ($f in 'OemVista.inf', 'tap0901.sys', 'tap0901.cat') {
+    Copy-Item "$($tapSrc.FullName)\$f" "$tapDir\$f" -Force
+}
+foreach ($f in 'tap0901.sys', 'tap0901.cat') {
+    $s = Get-AuthenticodeSignature "$tapDir\$f"
+    if ($s.Status -ne 'Valid') { throw "$f of the TAP driver is not validly signed ($($s.Status))" }
+}
 if (-not (Test-Path "$ovOut\openvpn.exe")) { throw 'openvpn.exe was not found in the installer' }
 
 Remove-Item $tmp -Recurse -Force
