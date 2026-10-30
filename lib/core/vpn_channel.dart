@@ -77,9 +77,11 @@ class VpnChannel {
     String? standbyConfig,
     String? standbyXrayConfig,
     int? proxyPort,
+    List<String> directPrograms = const [],
   }) =>
       _win
       ? DesktopVpn.instance.start(configJson,
+          directPrograms: directPrograms,
           xrayConfig: xrayConfig,
           xrayPort: xrayPort,
           apiPort: apiPort ?? 9090,

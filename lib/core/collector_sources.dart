@@ -19,7 +19,16 @@ const kShatakSources = <String>[
   'https://raw.githubusercontent.com/ShatakVPN/ConfigForge-V2Ray/refs/heads/main/configs/all.txt',
 ];
 
-const kExtraLists = <List<String>>[kRoosterSources, kShatakSources];
+/// F0rc3Run/F0rc3Run: Best-Results/proxies.txt, a couple of hundred tested configs (mostly
+/// Shadowsocks and VMess), renewed often.
+const kForc3RunSources = <String>[
+  'https://cdn.jsdelivr.net/gh/F0rc3Run/F0rc3Run@main/Best-Results/proxies.txt',
+  'https://gcore.jsdelivr.net/gh/F0rc3Run/F0rc3Run@main/Best-Results/proxies.txt',
+  'https://fastly.jsdelivr.net/gh/F0rc3Run/F0rc3Run@main/Best-Results/proxies.txt',
+  'https://raw.githubusercontent.com/F0rc3Run/F0rc3Run/refs/heads/main/Best-Results/proxies.txt',
+];
+
+const kExtraLists = <List<String>>[kRoosterSources, kShatakSources, kForc3RunSources];
 
 /// The lists put together, without a link twice. Earlier lists come first.
 List<String> mergeLinks(List<String> first, List<String> second) => {...first, ...second}.toList();

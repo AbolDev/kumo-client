@@ -4,8 +4,12 @@
 #   kumo-core.exe  sing-box (TUN, routing, all protocols except XHTTP)
 #   kumo-xray.exe  Xray-core (only used for XHTTP configs)
 #   wintun.dll     virtual network adapter driver sing-box uses for the TUN device
+#
+# and, in windows/openvpn (copied to the openvpn folder next to kumo.exe):
+#   openvpn.exe, tapctl.exe and the libraries they need   the official OpenVPN, for OpenVPN servers
 param(
     [string]$SingBox = "1.13.21",
+    [string]$OpenVpn = "2.7.8-I002",
     [string]$Xray = "v26.10.21",
     [string]$Wintun = "0.14.1",
     [ValidateSet("x64", "arm64")][string]$Arch = "x64"
@@ -48,5 +52,24 @@ Copy-Item "$xr\xray.exe" "$out\kumo-xray.exe" -Force
 $wt = Get-Zip "https://www.wintun.net/builds/wintun-$Wintun.zip" "wintun" "wintun-$Wintun.zip"
 Copy-Item "$wt\wintun\bin\$(if ($Arch -eq 'arm64') { 'arm64' } else { 'amd64' })\wintun.dll" "$out\wintun.dll" -Force
 
+# OpenVPN: the official installer (signed by OpenVPN Inc.) is taken apart without installing it; only the
+# program, the tool that makes its adapter and the libraries are kept. The network driver (TAP-Windows)
+# is not part of it: it comes with OpenVPN's own installer (Kumo tells the user when it is missing).
+$ovArch = if ($Arch -eq 'arm64') { 'arm64' } else { 'amd64' }
+$ovName = "OpenVPN-$OpenVpn-$ovArch.msi"
+$ovMsi = "$tmp\$ovName"
+Invoke-WebRequest "https://build.openvpn.net/downloads/releases/$ovName" -OutFile $ovMsi
+Test-Pinned $ovMsi $ovName
+$sig = Get-AuthenticodeSignature $ovMsi
+if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'OpenVPN Inc') { throw "$ovName is not signed by OpenVPN Inc." }
+$ovOut = "$root\windows\openvpn"
+New-Item -ItemType Directory -Force $ovOut | Out-Null
+Start-Process msiexec.exe -ArgumentList "/a `"$ovMsi`" /qn TARGETDIR=`"$tmp\ovpn`"" -Wait
+$ovBin = "$tmp\ovpn\OpenVPN\bin"
+foreach ($f in 'openvpn.exe', 'tapctl.exe') { Copy-Item "$ovBin\$f" "$ovOut\$f" -Force }
+foreach ($f in 'libcrypto*.dll', 'libssl*.dll', 'libpkcs11-helper*.dll', 'vcruntime140*.dll') { Copy-Item "$ovBin\$f" $ovOut -Force }
+Copy-Item "$tmp\ovpn\OpenVPN\license.txt" "$ovOut\license.txt" -Force
+if (-not (Test-Path "$ovOut\openvpn.exe")) { throw 'openvpn.exe was not found in the installer' }
+
 Remove-Item $tmp -Recurse -Force
-Get-ChildItem $out | Select-Object Name, Length
+Get-ChildItem $out, $ovOut | Select-Object Name, Length

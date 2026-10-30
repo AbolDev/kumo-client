@@ -52,5 +52,5 @@ Filename: "{app}\kumo.exe"; Description: "Start Kumo"; Flags: nowait postinstall
 
 [UninstallRun]
 ; Stops the VPN processes and removes the start-with-Windows task, if there is one.
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM kumo.exe /IM kumo-core.exe /IM kumo-xray.exe"; Flags: runhidden; RunOnceId: "StopKumo"
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM kumo.exe /IM kumo-core.exe /IM kumo-xray.exe /IM openvpn.exe"; Flags: runhidden; RunOnceId: "StopKumo"
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN KumoAutoStart /F"; Flags: runhidden; RunOnceId: "RemoveKumoTask"

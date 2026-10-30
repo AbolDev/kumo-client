@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show File, Platform;
 import 'dart:isolate';
 
+import 'ovpn/ovpn_profile.dart';
 import 'warp/warp_profile.dart' show WarpNoise, parseWarpNoise;
 
 part 'link_extra.dart';
@@ -26,6 +27,7 @@ class ProxyConfig {
     this.xrayOutbound,
     this.inner = const [],
     this.xrayNote = 'xhttp',
+    this.ovpn,
   });
 
   final String link;
@@ -42,6 +44,12 @@ class ProxyConfig {
 
   /// What Xray is needed for, shown in lists ("xhttp", "kcp", "http header", "encryption").
   final String xrayNote;
+
+  /// An OpenVPN server: neither sing-box nor Xray carries it, the OpenVPN program does (it is
+  /// started by the connection, see openvpn_runner.dart).
+  final OvpnServer? ovpn;
+
+  bool get isOpenVpn => ovpn != null;
 
   /// TCP connect time in ms, null = not tested, -1 = unreachable.
   int? latencyMs;
@@ -68,6 +76,7 @@ class ProxyConfig {
         xrayOutbound: xrayOutbound,
         inner: inner,
         xrayNote: xrayNote,
+        ovpn: ovpn,
       )..latencyMs = latencyMs;
 
   /// Short text for lists, e.g. "vless" or "vless + xhttp".
@@ -79,9 +88,11 @@ class ProxyConfig {
   /// Same connection settings (server, credentials, transport, TLS) => same key; used to drop
   /// duplicates. The name is not part of it, and two entries that differ in e.g. the websocket
   /// path or SNI are different servers.
-  late final String key = outbound.isEmpty
-      ? 'xray|${link.split('#').first}'
-      : '$protocol|${jsonEncode([outbound, inner])}';
+  late final String key = ovpn != null
+      ? 'openvpn|${link.split('#').first}'
+      : outbound.isEmpty
+          ? 'xray|${link.split('#').first}'
+          : '$protocol|${jsonEncode([outbound, inner])}';
 }
 
 /// Hides most of an address, keeping its start and its last part:
@@ -116,6 +127,7 @@ const _supportedSchemes = [
   'wg://',
   'naive+https://',
   'naive+quic://',
+  'openvpn://',
 ];
 
 /// Splits a subscription body into share links. Handles both plain text lists
@@ -142,7 +154,7 @@ List<String> extractLinks(String body) {
 
 /// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`).
 final _schemeStart = RegExp(
-    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|naive\+https|naive\+quic)://)');
+    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|naive\+https|naive\+quic|openvpn)://)');
 
 /// Parses and shuffles thousands of links off the UI thread.
 ///
@@ -231,6 +243,7 @@ ProxyConfig? parseLink(String link) {
       return _wireguard(link);
     }
     if (link.startsWith('naive+')) return _naive(link);
+    if (link.startsWith('openvpn://')) return _openvpn(link);
   } catch (_) {
     // malformed link: skip it
   }

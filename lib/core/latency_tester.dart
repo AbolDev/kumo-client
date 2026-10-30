@@ -115,6 +115,8 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) async {
 /// place: a server that fails the real delay has failed it.
 Future<int> realDelay(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 8)}) async {
+  // An OpenVPN server is not measured by a throw-away core: the answer is "skipped".
+  if (c.isOpenVpn) return -2;
   if (!c.canSingBox) {
     if (!c.canXray) return -1;
     return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
@@ -359,6 +361,8 @@ final _realWorkers = Platform.isAndroid ? 4 : 6;
 /// DNS query on top of its own ping.
 Future<int> tcpLatency(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 3)}) async {
+  // Most OpenVPN servers listen on UDP, where a TCP connect says nothing: skipped.
+  if (c.isOpenVpn) return -2;
   try {
     final address = InternetAddress.tryParse(c.host) ??
         (await InternetAddress.lookup(c.host).timeout(timeout)).first;

@@ -52,6 +52,7 @@ app.*.map.json
 
 # Downloaded by tools/fetch_windows_core.ps1
 /windows/core/
+/windows/openvpn/
 
 # Installer output
 /dist/

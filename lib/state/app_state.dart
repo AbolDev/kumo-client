@@ -21,6 +21,8 @@ import '../core/sources.dart';
 import '../core/sub_formats.dart';
 import '../core/sub_surge.dart' show subscriptionDeepLink;
 import '../core/updater.dart' show includePrerelease;
+import '../core/ovpn/ovpn_profile.dart' show ovpnLink;
+import '../core/ovpn/ovpn_runner.dart';
 import 'warp_controller.dart';
 import '../core/usage_alert.dart';
 import '../core/vpn_channel.dart';
@@ -169,6 +171,8 @@ class AppState extends ChangeNotifier {
   ({String key, Map<String, Object> args})? _forcedReason;
 
   void _noteDisconnect(VpnState s) {
+    // The OpenVPN program lives as long as the connection does.
+    stopOpenVpn();
     final forced = _forcedReason;
     _forcedReason = null;
     if (forced != null) {
@@ -493,6 +497,9 @@ class AppState extends ChangeNotifier {
     await _loadSettings();
     settingsLoaded = true;
     notifyListeners();
+    if (Platform.isWindows) {
+      OvpnRunner.cleanLeftovers(await VpnChannel.dataDir()).catchError((Object _) {});
+    }
     await _loadLogs();
     await _loadUsage();
     // Only now: samples that came in earlier would be overwritten by the saved numbers.
@@ -1398,7 +1405,8 @@ class AppState extends ChangeNotifier {
     if (real && !_real) return;
     final key = 'ping-${g.id}';
     final gen = _begin(key);
-    final list = List.of(g.configs);
+    // OpenVPN servers are not tested (see realDelay).
+    final list = g.configs.where((c) => !c.isOpenVpn).toList();
     // The old pings of this list go as the test starts, so the numbers on screen are all new.
     for (final c in list) {
       c.latencyMs = null;
@@ -1773,6 +1781,77 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------- OpenVPN
+
+  OvpnRunner? _ovpn;
+
+  /// Set when the chosen OpenVPN server needs a user name and password: the home screen asks for them.
+  final ovpnLoginRequest = ValueNotifier<ProxyConfig?>(null);
+
+  /// Starts OpenVPN for [c] and returns the name of its adapter, which sing-box sends through. Null when
+  /// it could not (the user is told why).
+  Future<String?> _startOpenVpn(ProxyConfig c) async {
+    if (!Platform.isWindows) {
+      _notice('ovpnUnsupported');
+      return null;
+    }
+    final dir = DesktopVpn.instance.openvpnDir;
+    final runner = _ovpn ??= OvpnRunner(
+      binary: '$dir\\openvpn.exe',
+      tapctl: '$dir\\tapctl.exe',
+      workDir: await VpnChannel.dataDir(),
+    );
+    runner.onLost = (why) {
+      // The program ended or was killed while connected: the tunnel is no use any more.
+      if (connected) {
+        _notice('ovpnLost');
+        VpnChannel.stop();
+      }
+    };
+    try {
+      return await runner.start(c.ovpn!);
+    } on OvpnConnectException catch (e) {
+      log('OpenVPN: $e');
+      switch (e.failure) {
+        case OvpnFailure.noBinary:
+          _notice('ovpnNoBinary', {'detail': e.detail});
+        case OvpnFailure.noDriver:
+          _notice('ovpnNoDriver');
+        case OvpnFailure.needsLogin || OvpnFailure.needsKeyPassword:
+          _notice(e.failure == OvpnFailure.needsLogin ? 'ovpnNeedsLogin' : 'ovpnNeedsKey');
+          ovpnLoginRequest.value = c;
+        case OvpnFailure.authFailed:
+          _notice('ovpnAuthFailed');
+          ovpnLoginRequest.value = c;
+        case OvpnFailure.timeout:
+          _notice('ovpnTimeout', {'detail': e.detail.split('\n').last});
+        case OvpnFailure.exited:
+          _notice('ovpnExited', {'detail': e.detail.split('\n').last});
+        case OvpnFailure.unsupported:
+          _notice('ovpnUnsupported');
+      }
+      return null;
+    }
+  }
+
+  /// Ends the OpenVPN program, if one runs (also when the app is closed).
+  Future<void> stopOpenVpn() async {
+    final r = _ovpn;
+    if (r != null) await r.stop();
+  }
+
+  /// Gives an OpenVPN server its login: the link of the server is written again with it.
+  Future<void> setOvpnLogin(ProxyConfig c, {String? username, String? password, String? keyPassword}) async {
+    final server = c.ovpn;
+    if (server == null) return;
+    final link = ovpnLink(server.profile,
+        username: username ?? server.username,
+        password: password ?? server.password,
+        keyPassword: keyPassword ?? server.keyPassword,
+        name: c.name);
+    final group = groups.where((g) => g.configs.contains(c)).firstOrNull;
+    if (group != null) await editConfig(group, c, link);
+  }
   // ---------------------------------------------------------------- vpn
 
   /// True from the tap until the start request reached the service.
@@ -1851,6 +1930,10 @@ class AppState extends ChangeNotifier {
       // In automatic mode the servers the core already runs are kept, so the order of the latest
       // pings does not restart it.
       final chosen = selected == null ? (_standbyServers ?? _chosenServers()) : _chosenServers();
+      if (chosen.any((c) => c.isOpenVpn)) {
+        await VpnChannel.stopStandby();
+        return;
+      }
       final routing = routingFor(chosen);
       final key = _standbyKeyOf(chosen, routing);
       if (isDesktop && standbyUp && key == _standbyKey) return;
@@ -1933,6 +2016,7 @@ class AppState extends ChangeNotifier {
       if (_preparing) {
         _preparing = false;
         _show(VpnStatus.stopped);
+        await stopOpenVpn();
         return;
       }
       _show(VpnStatus.stopping);
@@ -1991,6 +2075,20 @@ class AppState extends ChangeNotifier {
           return;
         }
       }
+      // An OpenVPN server is carried by the OpenVPN program, which is started first; sing-box then sends
+      // everything out through its adapter.
+      String? ovpnInterface;
+      if (chosen.length == 1 && chosen.first.isOpenVpn) {
+        ovpnInterface = await _startOpenVpn(chosen.first);
+        if (cancelled()) {
+          await stopOpenVpn();
+          return;
+        }
+        if (ovpnInterface == null) {
+          _show(VpnStatus.stopped);
+          return;
+        }
+      }
       final tags = routing?.ruleSetTags ?? const <String>[];
       final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
@@ -2017,7 +2115,8 @@ class AppState extends ChangeNotifier {
           windows: isDesktop,
           chain: chain,
           viaXray: viaXray,
-          routing: routing);
+          routing: routing,
+          ovpnInterface: ovpnInterface);
       final proxyPort =
           isDesktop && !net.tun ? net.proxyPort : null;
       final xrayPortNew = viaXray ? 30000 + Random().nextInt(30000) : null;
@@ -2048,6 +2147,7 @@ class AppState extends ChangeNotifier {
         );
       } else {
         await VpnChannel.start(config(null),
+            directPrograms: ovpnInterface == null ? const [] : const ['openvpn'],
             serverNames: names,
             showSpeed: showSpeed,
             showVolume: showVolume,

@@ -25,6 +25,7 @@ import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
 import 'free_connections_page.dart';
+import '../widgets/ovpn_login.dart';
 import 'warp_page.dart';
 import 'edit_config_page.dart';
 import '../core/platform.dart';
@@ -62,8 +63,11 @@ class HomePage extends StatelessWidget {
 
   final AppState state;
 
+  // The login of an OpenVPN server is asked for here when a connection needs it.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => OvpnLoginHost(state: state, child: _page(context));
+
+  Widget _page(BuildContext context) {
     final t = S.of(context);
     return ListenableBuilder(
       listenable: state,
@@ -1890,7 +1894,7 @@ class _FractionClipper extends CustomClipper<Rect> {
   bool shouldReclip(_FractionClipper old) => old.fraction != fraction;
 }
 
-enum _ConfigAction { edit, share, tcping, realDelay, delete }
+enum _ConfigAction { edit, share, tcping, realDelay, delete, ovpnLogin }
 
 class _ConfigTile extends StatelessWidget {
   const _ConfigTile(
@@ -1911,6 +1915,8 @@ class _ConfigTile extends StatelessWidget {
   Future<void> _onAction(BuildContext context, _ConfigAction a) async {
     final t = S.of(context);
     switch (a) {
+      case _ConfigAction.ovpnLogin:
+        await showOvpnLogin(context, state, config);
       case _ConfigAction.edit:
         final result = await Navigator.push<String>(
           context,
@@ -1996,20 +2002,28 @@ class _ConfigTile extends StatelessWidget {
                 icon: const Icon(Icons.more_vert),
                 onSelected: (a) => _onAction(context, a),
                 itemBuilder: (menu) => [
-                  PopupMenuItem(
-                      enabled: !(locked && selected),
-                      value: _ConfigAction.edit,
-                      child: _MenuRow(Icons.edit, t.edit)),
+                  // An OpenVPN server has a login to change instead of a link to edit, and no tests.
+                  if (config.isOpenVpn)
+                    PopupMenuItem(
+                        value: _ConfigAction.ovpnLogin,
+                        child: _MenuRow(Icons.key, tr(context, 'ovpnLogin')))
+                  else
+                    PopupMenuItem(
+                        enabled: !(locked && selected),
+                        value: _ConfigAction.edit,
+                        child: _MenuRow(Icons.edit, t.edit)),
                   PopupMenuItem(
                       value: _ConfigAction.share,
                       child: _MenuRow(Icons.share, t.share)),
-                  PopupMenuItem(
-                      value: _ConfigAction.tcping,
-                      child: _MenuRow(Icons.network_check, t.tcping)),
-                  PopupMenuItem(
-                      enabled: state.canTestReal,
-                      value: _ConfigAction.realDelay,
-                      child: _MenuRow(Icons.speed, t.realDelay)),
+                  if (!config.isOpenVpn) ...[
+                    PopupMenuItem(
+                        value: _ConfigAction.tcping,
+                        child: _MenuRow(Icons.network_check, t.tcping)),
+                    PopupMenuItem(
+                        enabled: state.canTestReal,
+                        value: _ConfigAction.realDelay,
+                        child: _MenuRow(Icons.speed, t.realDelay)),
+                  ],
                   PopupMenuItem(
                       enabled: !(locked && selected),
                       value: _ConfigAction.delete,

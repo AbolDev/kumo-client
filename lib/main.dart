@@ -156,6 +156,7 @@ class _KumoAppState extends State<KumoApp>
       _state.flushUsage,
       _state.flushStore,
       VpnChannel.stop,
+      _state.stopOpenVpn,
       VpnChannel.stopStandby,
       trayManager.destroy,
     ]) {

@@ -332,3 +332,59 @@ List<String> wireguardConfToLinks(String text) {
   }
   return out;
 }
+
+/// The user name and password (and the passphrase of the private key) with which an OpenVPN profile is
+/// used. They are kept in the link, which is stored encrypted like the rest of the servers.
+class OvpnServer {
+  const OvpnServer(this.profile, {this.username, this.password, this.keyPassword});
+
+  final OvpnProfile profile;
+  final String? username;
+  final String? password;
+  final String? keyPassword;
+
+  /// What is still missing before it can connect.
+  bool get needsLogin => profile.needsLogin && ((username ?? '').isEmpty || password == null);
+  bool get needsKeyPassword => profile.needsKeyPassword && (keyPassword ?? '').isEmpty;
+}
+
+/// `openvpn://BASE64URL(configuration)?user=..&pass=..&kpass=..#name`. The configuration is read again
+/// here (it is not trusted because a link says it was checked): only what [parseOvpn] keeps is used.
+ProxyConfig? _openvpn(String link) {
+  final hash = link.indexOf('#');
+  final head = hash < 0 ? link : link.substring(0, hash);
+  final tail = hash < 0 ? '' : link.substring(hash + 1);
+  final q = head.indexOf('?');
+  final body = head.substring('openvpn://'.length, q < 0 ? head.length : q);
+  final query = q < 0 ? <String, String>{} : Uri.splitQueryString(head.substring(q + 1));
+  final String text;
+  try {
+    text = utf8.decode(base64Url.decode(base64Url.normalize(body)));
+  } catch (_) {
+    return null;
+  }
+  final OvpnProfile profile;
+  try {
+    profile = parseOvpn(text);
+  } on OvpnException {
+    return null;
+  }
+  final first = profile.remotes.first;
+  var name = first.host;
+  try {
+    final decoded = Uri.decodeComponent(tail).trim();
+    if (decoded.isNotEmpty) name = decoded;
+  } catch (_) {}
+  return ProxyConfig(
+    link: link,
+    protocol: 'openvpn',
+    name: name,
+    host: first.host,
+    port: first.port,
+    outbound: const {},
+    ovpn: OvpnServer(profile,
+        username: query['user'] ?? profile.username,
+        password: query['pass'] ?? profile.password,
+        keyPassword: query['kpass']),
+  );
+}

@@ -9,12 +9,13 @@ void main() {
   });
 
   test('each extra list has mirrors of its own file', () {
-    expect(kExtraLists.length, 2);
+    expect(kExtraLists.length, 3);
     for (final list in kExtraLists) {
       expect(list.length, greaterThan(1));
       expect(list.map((u) => u.split('/').last).toSet().length, 1);
     }
     expect(kRoosterSources.last, endsWith('roosterkid/openproxylist/refs/heads/main/V2RAY_RAW.txt'));
     expect(kShatakSources.last, endsWith('ShatakVPN/ConfigForge-V2Ray/refs/heads/main/configs/all.txt'));
+    expect(kForc3RunSources.last, endsWith('F0rc3Run/F0rc3Run/refs/heads/main/Best-Results/proxies.txt'));
   });
 }

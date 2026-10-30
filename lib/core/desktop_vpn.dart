@@ -379,7 +379,8 @@ rm -rf "$T"
       String? apiSecret,
       int? systemProxyPort,
       bool killSwitch = false,
-      bool keepStandby = false}) async {
+      bool keepStandby = false,
+      List<String> directPrograms = const []}) async {
     _killSwitch = killSwitch;
     _secret = apiSecret;
     final gen = ++_gen;
@@ -426,6 +427,15 @@ rm -rf "$T"
         final route = cfg['route'] as Map<String, dynamic>;
         (route['rules'] as List).insert(0, {
           'process_name': [_program('kumo-xray')],
+          'outbound': 'direct',
+        });
+        route['find_process'] = true;
+      }
+      if (directPrograms.isNotEmpty) {
+        // OpenVPN talks to its server itself: that traffic must not loop into the tunnel either.
+        final route = cfg['route'] as Map<String, dynamic>;
+        (route['rules'] as List).insert(0, {
+          'process_name': [for (final p in directPrograms) _program(p)],
           'outbound': 'direct',
         });
         route['find_process'] = true;
@@ -791,6 +801,9 @@ rm -rf "$T"
 
   /// The Xray program next to the app.
   String get xrayExecutable => _exePath('kumo-xray');
+
+  /// The folder of the OpenVPN program (openvpn.exe, tapctl.exe and its libraries) next to the app.
+  String get openvpnDir => '$_exeDir${_sep}openvpn';
 
   Future<Process> spawnQuiet(String exe, List<String> args) async {
     final p = await Process.start(exe, args, workingDirectory: dataDir);

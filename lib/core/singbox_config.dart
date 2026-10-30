@@ -369,6 +369,7 @@ String buildSingBoxConfig(
   ProviderRouting? routing,
   bool localLogin = false,
   XrayAuth? xrayAuth,
+  String? ovpnInterface,
 }) {
   assert(servers.isNotEmpty);
   final o = options ?? NetOptions();
@@ -401,7 +402,10 @@ String buildSingBoxConfig(
 
   final useXray =
       viaXray || (servers.length == 1 && servers.first.needsXray);
-  if (useXray) {
+  if (ovpnInterface != null) {
+    // OpenVPN carries the traffic: what leaves sing-box as proxy is sent out through its adapter.
+    outbounds.add({'type': 'direct', 'tag': 'proxy', 'bind_interface': ovpnInterface});
+  } else if (useXray) {
     outbounds.add({
       'type': 'socks',
       'tag': 'proxy',
@@ -542,6 +546,12 @@ String buildSingBoxConfig(
     if (sets.isNotEmpty) {
       rules.add({'rule_set': sets, 'outbound': 'direct'});
     }
+  }
+  // Through OpenVPN the names are not looked up at a server: they are looked up here, last of all
+  // (after the rules that go by name), through the tunnel, so that the network's own resolver is not
+  // asked, and with no IPv6 (the adapter has no IPv6 route).
+  if (ovpnInterface != null) {
+    rules.add({'action': 'resolve', 'server': 'dns-remote', 'strategy': 'ipv4_only'});
   }
 
   final dnsRules = <Map<String, dynamic>>[

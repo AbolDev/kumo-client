@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'package:yaml/yaml.dart';
 
 import 'config_decryptor.dart' show xrayJsonToLinks;
+import 'ovpn/ovpn_profile.dart' show ovpnToLinks;
 import 'proxy_config.dart' show extractLinks, wireguardConfToLinks;
 import 'sub_surge.dart';
 
@@ -18,6 +19,9 @@ List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
   // The text of a WireGuard configuration file.
   final wireguard = wireguardConfToLinks(text);
   if (wireguard.isNotEmpty) return wireguard;
+  // The text of an OpenVPN configuration file (.ovpn) with its certificates inside.
+  final openvpn = ovpnToLinks(text);
+  if (openvpn.isNotEmpty) return openvpn;
   // The `name = type, host, port, ...` lines of Surge, Loon and Stash profiles.
   if (text.contains('=') && !text.startsWith('{') && !text.startsWith('[{')) {
     final surge = surgeLinks(text);
