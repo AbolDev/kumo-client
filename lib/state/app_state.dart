@@ -2047,7 +2047,13 @@ class AppState extends ChangeNotifier {
       _expectStop = true;
       await VpnChannel.stop();
       // On the desktop a stop with nothing running (a core that never started) gives no answer: the screen
-      // must not stay on \
+      // must not stay on "Disconnecting...".
+      if (isDesktop) {
+        Timer(const Duration(seconds: 8), () {
+          if (vpn.status == VpnStatus.stopping) _show(VpnStatus.stopped);
+        });
+      }
+      return;
     }
     final id = ++_startId;
     _preparing = true;
