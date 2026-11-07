@@ -26,12 +26,12 @@ modules:
       - install -Dm644 app.kumo.vpn.metainfo.xml /app/share/metainfo/app.kumo.vpn.metainfo.xml
     sources:
       - type: archive
-        url: https://github.com/AbolDev/kumo-client/releases/download/v1.12.0/kumo-linux-x64-portable.tar.gz
-        sha256: 0403250a4aec5bf2748ed8e09f976a74e5d91c30697868bc545825f86ac9ee45
+        url: https://github.com/AbolDev/kumo-client/releases/download/v1.12.1/kumo-linux-x64-portable.tar.gz
+        sha256: dccbd07cb225d08875d236facca1cf09b2a687be88f017d46c70c52e5de08199
         only-arches: [x86_64]
       - type: archive
-        url: https://github.com/AbolDev/kumo-client/releases/download/v1.12.0/kumo-linux-arm64-portable.tar.gz
-        sha256: 609026d922710c6dff9b976dc41aa77d99c69fdf7992bef57e0e676667403d94
+        url: https://github.com/AbolDev/kumo-client/releases/download/v1.12.1/kumo-linux-arm64-portable.tar.gz
+        sha256: 0ab36a819b6b3899dd45d5c6d45a4ccb01042602749af2a6cba27a3c2894ba94
         only-arches: [aarch64]
       - type: file
         path: app.kumo.vpn.desktop
