@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io' show gzip, zlib;
 import 'dart:typed_data';
 
@@ -222,6 +222,8 @@ List<String> xrayJsonToLinks(Object? json) {
 
 /// Configs stored as xray JSON are turned into share links, which are added below.
 String _withLinks(String text) {
+  final fromLines = v2rayLineLinks(text);
+  if (fromLines.isNotEmpty) return '$text\n${fromLines.join('\n')}';
   final body = text
       .split('\n')
       .where((l) => !l.trimLeft().startsWith('//'))
@@ -235,6 +237,33 @@ String _withLinks(String text) {
     return text;
   }
   return uris.isEmpty ? text : '$text\n${uris.join('\n')}';
+}
+
+/// Lines like `addedTime=â€¦ remarks=NAME server=HOST serverPort=443 v2rayJson={â€¦}` (newer NPV exports):
+/// the name comes from `remarks`, the server from the Xray JSON that ends the line.
+List<String> v2rayLineLinks(String text) {
+  final uris = <String>[];
+  for (final line in text.split('\n')) {
+    final at = line.indexOf(' v2rayJson=');
+    if (at < 0) continue;
+    final head = line.substring(0, at);
+    final start = head.indexOf('remarks=');
+    var remarks = '';
+    if (start >= 0) {
+      remarks = head.substring(start + 8);
+      final next = remarks.indexOf(' server=');
+      if (next >= 0) remarks = remarks.substring(0, next);
+    }
+    try {
+      final cfg = jsonDecode(line.substring(at + 11).trim());
+      if (cfg is! Map) continue;
+      if (remarks.isNotEmpty) cfg['remarks'] = remarks.trim();
+      uris.addAll(_npvtExtractFromConfig(Uint8List.fromList(utf8.encode(jsonEncode(cfg)))));
+    } catch (_) {
+      // a line that is not a config is left as text
+    }
+  }
+  return uris;
 }
 
 String decryptSlipBundle(Uint8List data, String password) {

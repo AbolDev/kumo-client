@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -49,5 +49,14 @@ void main() {
         f('tboxes_last.bin'), f('tboxes_last_v2.bin'), f('xor.bin'));
     expect(decryptNpvs(_hex(_npvsApp), '', tables: tables),
         'vless://u@h.example.com:443#nopw');
+  });
+
+  test('lines with remarks and a v2rayJson (newer NPV exports) give links named by the remarks', () {
+    const cfg = '{"outbounds":[{"protocol":"vless","tag":"proxy","settings":{"address":"h.example.com","port":"443","id":"d342d11e-d224-4463-b982-532309285094","encryption":"none"},"streamSettings":{"network":"tcp","security":"tls","tlsSettings":{"serverName":"h.example.com"}}},{"protocol":"freedom","tag":"direct"}]}';
+    final links = v2rayLineLinks('// ---- creator message ----\n\naddedTime=1 remarks=NL 4 server=h.example.com serverPort=443 v2rayJson=$cfg\n');
+    expect(links, hasLength(1));
+    expect(links.single, startsWith('vless://d342d11e-d224-4463-b982-532309285094@h.example.com:443'));
+    expect(Uri.decodeComponent(Uri.parse(links.single).fragment), 'NL 4');
+    expect(v2rayLineLinks('plain text\nvless://a@b:1#x'), isEmpty);
   });
 }
