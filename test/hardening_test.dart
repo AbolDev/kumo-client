@@ -81,6 +81,15 @@ void main() {
       expect(isNewer('1.9.0', '1.9.0'), isFalse);
       expect(isNewer('1.10.0', '1.9.9'), isTrue);
       expect(isNewer('1.8.1+3', '1.8.0+9'), isTrue);
+      // test versions of one release are told apart by their suffix
+      expect(isNewer('1.12.0-beta.10', '1.12.0-beta.9'), isTrue);
+      expect(isNewer('1.12.0-beta.9', '1.12.0-beta.10'), isFalse);
+      expect(isNewer('1.12.0-beta.10+42', '1.12.0-beta.10+41'), isFalse);
+      expect(isNewer('1.12.0-rc.1', '1.12.0-beta.10'), isTrue);
+      expect(isNewer('1.12.0', '1.12.0-beta.10'), isTrue);
+      expect(isNewer('1.12.0-beta.10', '1.12.0'), isFalse);
+      expect(isNewer('1.12.0-beta.1', '1.11.0'), isTrue);
+      expect(isNewer('1.12.0-beta.2', '1.12.0-beta'), isTrue);
     });
 
     test('the checksum is the SHA-256 of the file', () async {

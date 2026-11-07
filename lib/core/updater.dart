@@ -50,9 +50,31 @@ bool isNewer(String a, String b) {
     final p = i < x.length ? x[i] : 0, q = i < y.length ? y[i] : 0;
     if (p != q) return p > q;
   }
-  // Same numbers: the release is newer than a test version of it ("1.9.0" over "1.9.0-beta").
-  bool test(String v) => v.split('+').first.contains('-');
-  return test(b) && !test(a);
+  // Same numbers: the release is newer than a test version of it ("1.9.0" over "1.9.0-beta"), and of
+  // two test versions the one with the greater suffix is ("beta.10" over "beta.9", "rc.1" over "beta.9").
+  final pa = _suffix(a), pb = _suffix(b);
+  if (pa == null || pb == null) return pa == null && pb != null;
+  for (var i = 0; i < pa.length || i < pb.length; i++) {
+    if (i >= pa.length) return false; // fewer parts is the lower one
+    if (i >= pb.length) return true;
+    final x = int.tryParse(pa[i]), y = int.tryParse(pb[i]);
+    if (x != null && y != null) {
+      if (x != y) return x > y;
+    } else if (x != null || y != null) {
+      // a number is lower than a word
+      return x == null;
+    } else if (pa[i] != pb[i]) {
+      return pa[i].compareTo(pb[i]) > 0;
+    }
+  }
+  return false;
+}
+
+/// The parts after the "-" of a test version ("1.12.0-beta.10+42" -> [beta, 10]); null for a release.
+List<String>? _suffix(String v) {
+  final core = v.split('+').first;
+  final dash = core.indexOf('-');
+  return dash < 0 ? null : core.substring(dash + 1).split('.');
 }
 
 /// The commit this build was made from (set by the build: `--dart-define=KUMO_COMMIT=<sha>`).
