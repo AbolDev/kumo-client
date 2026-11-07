@@ -11,6 +11,7 @@ import 'core/desktop_vpn.dart';
 import 'core/platform.dart';
 import 'core/single_instance.dart';
 import 'core/vpn_channel.dart';
+import 'core/win_menu_theme.dart';
 import 'l10n/extra.dart';
 import 'l10n/strings.dart';
 import 'screens/home_page.dart';
@@ -145,6 +146,8 @@ class _KumoAppState extends State<KumoApp>
   String? _trayLang;
 
   void _refreshTrayMenu() {
+    // The tray menu is a Windows menu: dark or light with the app's theme.
+    if (Platform.isWindows) WinMenuTheme.apply(_state.themeMode);
     if (_trayLang == _lang) return;
     _trayLang = _lang;
     trayManager.setContextMenu(Menu(items: [
