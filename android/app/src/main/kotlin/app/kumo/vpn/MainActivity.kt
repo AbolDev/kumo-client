@@ -286,6 +286,29 @@ class MainActivity : FlutterActivity() {
                         null
                     },
                 )
+                // The facts the usage ping lists about the phone. Raw: the app picks and checks them.
+                "deviceInfo" -> {
+                    fun prop(name: String): String? = try {
+                        val p = ProcessBuilder("getprop", name).redirectErrorStream(true).start()
+                        val v = p.inputStream.bufferedReader().readText().trim()
+                        p.waitFor()
+                        v.ifEmpty { null }
+                    } catch (_: Exception) {
+                        null
+                    }
+                    result.success(
+                        mapOf(
+                            "brand" to Build.MANUFACTURER,
+                            "model" to Build.MODEL,
+                            "abi" to Build.SUPPORTED_ABIS.firstOrNull(),
+                            "tz" to java.util.TimeZone.getDefault().id,
+                            "oneui" to prop("ro.build.version.oneui"),
+                            "miui" to prop("ro.miui.ui.version.name"),
+                            "mios" to prop("ro.mi.os.version.name"),
+                            "oplus" to prop("ro.build.version.oplusrom"),
+                        ),
+                    )
+                }
                 "osRelease" -> result.success("${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                 // Whether Kumo may install apps, and the system screen where the user allows it.
                 "canInstall" -> result.success(

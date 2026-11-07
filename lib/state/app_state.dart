@@ -111,6 +111,7 @@ class AppState extends ChangeNotifier {
   late final usage = UsageController(
     // Desktop in proxy mode: the app's own traffic does not go through the VPN.
     tunnelUp: () => connected && (!isDesktop || net.tun),
+    appLanguage: () => languageCode, // null while the app follows the device
     fragment: () {
       final p = warp.profile;
       return p == null ? defaultFragment : (size: p.fragmentSize, delay: p.fragmentDelay);

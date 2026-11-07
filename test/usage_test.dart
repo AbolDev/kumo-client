@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/usage/usage_build.dart';
 import 'package:kumo/core/usage/usage_endpoints.dart';
 import 'package:kumo/core/usage/usage_ping.dart';
 import 'package:kumo/core/usage/usage_reporter.dart';
@@ -24,9 +25,12 @@ class Rig {
       tunnelUp: () => tunnel,
       endpoints: () => const [UsageEndpoint('a.example.com'), UsageEndpoint('b.example.com')],
       countryHint: () => 'IR',
+      facts: () async => facts,
       now: () => clock,
     );
   }
+
+  DeviceFacts facts = const DeviceFacts();
 
   final files = <String, String>{};
   final calls = <Call>[];
@@ -83,6 +87,14 @@ void main() {
       expect(b['os_version'], 'script');
     });
 
+    test('Windows 11 is told apart from 10 by its build, and the name is not said twice', () {
+      expect(windowsVersionName('"Windows 10 Pro" 10.0 (Build 26300)'), '11 Pro (Build 26300)');
+      expect(windowsVersionName('"Windows 10 Home" 10.0 (Build 22631)'), '11 Home (Build 22631)');
+      expect(windowsVersionName('"Windows 10 Pro" 10.0 (Build 19045)'), '10 Pro (Build 19045)');
+      expect(windowsVersionName('"Windows Server 2022"'), 'Windows Server 2022');
+      expect(windowsVersionName(null), isNull);
+    });
+
     test('the country goes only with a ping from inside the tunnel, and only a real one', () {
       Map<String, Object> make(bool tunnel, String? c) =>
           buildPing(event: 'ping', id: id, os: 'linux', appVersion: '1.0.0', viaTunnel: tunnel, country: c);
@@ -96,7 +108,173 @@ void main() {
     });
   });
 
+  group('the facts about the device', () {
+    final id = hashDeviceId('abc');
+    const full = DeviceFacts(
+      lang: 'zh-Hans',
+      deviceLang: 'fa_IR',
+      region: 'IR',
+      tz: 'America/Argentina/Buenos_Aires',
+      brand: 'samsung',
+      model: 'Redmi Note 12 Pro+',
+      ui: 'One UI 6.1.1',
+      arch: 'arm64',
+    );
+
+    test('known and valid facts go into the ping under the names the server uses', () {
+      final b = buildPing(event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: full);
+      expect(b['lang'], 'zh-Hans');
+      expect(b['device_lang'], 'fa_IR');
+      expect(b['region'], 'IR');
+      expect(b['tz'], 'America/Argentina/Buenos_Aires');
+      expect(b['brand'], 'samsung');
+      expect(b['model'], 'Redmi Note 12 Pro+');
+      expect(b['ui'], 'One UI 6.1.1');
+      expect(b['arch'], 'arm64');
+      expect(utf8.encode(jsonEncode(b)).length, lessThanOrEqualTo(pingMaxBytes));
+    });
+
+    test('a fact that is missing is left out, not sent empty', () {
+      final b = buildPing(event: 'ping', id: id, os: 'windows', appVersion: '1.0.0', facts: const DeviceFacts(arch: 'x64'));
+      expect(b['arch'], 'x64');
+      for (final k in ['lang', 'device_lang', 'region', 'tz', 'brand', 'model', 'ui']) {
+        expect(b.containsKey(k), isFalse, reason: k);
+      }
+    });
+
+    test('a value the server would refuse is dropped, and the rest still goes', () {
+      final bad = DeviceFacts(
+        lang: 'Farsi',
+        deviceLang: 'x',
+        region: 'XX',
+        tz: '+03:30',
+        brand: '',
+        model: '<b>',
+        ui: 'x' * 41,
+        arch: 'mips',
+      );
+      final b = buildPing(event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: bad);
+      for (final k in ['lang', 'device_lang', 'region', 'tz', 'brand', 'model', 'ui', 'arch']) {
+        expect(b.containsKey(k), isFalse, reason: k);
+      }
+      expect(b['os'], 'android');
+      const mixed = DeviceFacts(lang: 'en', tz: 'IRST', region: 'T1', model: 'SM-S911B');
+      final m = buildPing(event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: mixed);
+      expect(m['lang'], 'en');
+      expect(m['model'], 'SM-S911B');
+      expect(m['tz'], 'IRST'); // a name of letters passes the pattern; real ones come from the system
+      expect(m.containsKey('region'), isFalse);
+    });
+
+    test('the limits are the ones of the server', () {
+      Map<String, Object> make(DeviceFacts f) =>
+          buildPing(event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: f);
+      expect(make(DeviceFacts(brand: 'a' * 30)).containsKey('brand'), isTrue);
+      expect(make(DeviceFacts(brand: 'a' * 31)).containsKey('brand'), isFalse);
+      expect(make(DeviceFacts(model: 'a' * 40)).containsKey('model'), isTrue);
+      expect(make(DeviceFacts(model: 'a' * 41)).containsKey('model'), isFalse);
+      expect(make(const DeviceFacts(tz: 'Etc/GMT+3')).containsKey('tz'), isTrue);
+      expect(make(const DeviceFacts(tz: 'A/B/C/D')).containsKey('tz'), isFalse);
+      expect(make(const DeviceFacts(deviceLang: 'en-US')).containsKey('device_lang'), isTrue);
+      expect(make(const DeviceFacts(lang: 'zh-Hant')).containsKey('lang'), isTrue);
+      expect(make(const DeviceFacts(lang: 'fa-IR-x')).containsKey('lang'), isFalse);
+      for (final a in pingArches) {
+        expect(make(DeviceFacts(arch: a))['arch'], a);
+      }
+    });
+
+    test('the release file name goes in as "build", and a name the server would refuse is dropped', () {
+      Map<String, Object> make(String? b) => buildPing(
+          event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: DeviceFacts(arch: 'arm64', build: b));
+      expect(make('kumo-android-universal.apk')['build'], 'kumo-android-universal.apk');
+      expect(make('kumo-android-universal.apk')['arch'], 'arm64'); // the file is not the processor
+      expect(make('kumo-linux-arm64-portable.tar.gz')['build'], 'kumo-linux-arm64-portable.tar.gz');
+      for (final bad in [null, '', 'universal.apk', 'kumo-android', 'kumo-Android-x.apk', 'kumo-android-a b.apk', 'kumo-android-${'a' * 52}']) {
+        expect(make(bad).containsKey('build'), isFalse, reason: '$bad');
+      }
+      expect(make('kumo-android-${'a' * 51}')['build'], hasLength(64));
+    });
+
+    test('the name of the file is worked out from the build and how it is installed', () {
+      expect(buildAssetName('kumo-android-arm64-v8a.apk'), 'kumo-android-arm64-v8a.apk');
+      expect(buildAssetName('kumo-android-universal.apk'), 'kumo-android-universal.apk');
+      expect(buildAssetName('kumo-android-x86_64'), isNull);
+      expect(buildAssetName(''), isNull);
+
+      expect(buildAssetName('kumo-windows-x64'), 'kumo-windows-x64-setup.exe');
+      expect(buildAssetName('kumo-windows-x64', portable: true), 'kumo-windows-x64-portable.zip');
+      expect(buildAssetName('kumo-windows-arm64'), 'kumo-windows-arm64-setup.exe');
+      expect(buildAssetName('kumo-windows-arm64', portable: true), 'kumo-windows-arm64-portable.zip');
+
+      expect(buildAssetName('kumo-linux-x64', appImage: true), 'kumo-linux-x64.AppImage');
+      expect(buildAssetName('kumo-linux-x64', portable: true), 'kumo-linux-x64-portable.tar.gz');
+      expect(buildAssetName('kumo-linux-arm64', linuxPackage: 'deb'), 'kumo-linux-arm64.deb');
+      expect(buildAssetName('kumo-linux-arm64', linuxPackage: 'rpm'), 'kumo-linux-arm64.rpm');
+      expect(buildAssetName('kumo-linux-x64'), isNull); // installed, but which package is not known
+      expect(buildAssetName('kumo-linux-x64', linuxPackage: 'snap'), isNull);
+
+      expect(buildAssetName('kumo-macos', macVariant: 'universal'), 'kumo-macos-universal.dmg');
+      expect(buildAssetName('kumo-macos', macVariant: 'arm64', portable: true), 'kumo-macos-arm64-portable.zip');
+      expect(buildAssetName('kumo-macos', macVariant: 'x64'), 'kumo-macos-x64.dmg');
+      expect(buildAssetName('kumo-macos'), isNull);
+      expect(buildAssetName('kumo-freebsd-x64'), isNull);
+    });
+
+    test('a build made by hand sends no build name', () {
+      expect(buildFamily, isEmpty);
+      expect(installedBuildName(), isNull);
+    });
+
+    test('the last message after turning it off carries none of them', () {
+      final b = buildPing(event: 'opt_out', id: id, os: 'android', appVersion: '1.0.0', facts: full);
+      expect(b.keys.toSet(), {'v', 'event', 'id', 'os', 'app_version', 'via_tunnel'});
+    });
+
+    test('the processor is named as the server knows it', () {
+      expect(archName('arm64-v8a'), 'arm64');
+      expect(archName('armeabi-v7a'), 'armv7');
+      expect(archName('x86_64'), 'x64');
+      expect(archName('AMD64'), 'x64');
+      expect(archName('aarch64'), 'arm64');
+      expect(archName('x86'), 'x86');
+      expect(archName('riscv64'), 'riscv64');
+      expect(archName('mips64'), 'other');
+      expect(archName(null), isNull);
+      expect(archName(' '), isNull);
+    });
+
+    test('the maker interface is read only when it can be told for sure', () {
+      expect(androidUiName(brand: 'samsung', oneui: '60101'), 'One UI 6.1.1');
+      expect(androidUiName(brand: 'samsung', oneui: '60100'), 'One UI 6.1');
+      expect(androidUiName(brand: 'samsung', oneui: ''), isNull);
+      expect(androidUiName(brand: 'samsung'), isNull);
+      expect(androidUiName(brand: 'Xiaomi', miui: 'V140'), 'MIUI 14');
+      expect(androidUiName(brand: 'Xiaomi', miui: 'V125'), 'MIUI 12.5');
+      expect(androidUiName(brand: 'Xiaomi', miui: 'V140', mios: 'OS1.0.3.0'), 'HyperOS 1.0');
+      expect(androidUiName(brand: 'Xiaomi', miui: 'weird'), isNull);
+      expect(androidUiName(brand: 'OPPO', oplus: 'V14.0.0'), 'ColorOS 14.0');
+      expect(androidUiName(brand: 'Google'), isNull);
+      expect(androidUiName(brand: null), isNull);
+    });
+  });
+
   group('sending', () {
+    test('the facts go with a ping, and a refusing fact never reaches the server', () async {
+      final r = Rig()..facts = const DeviceFacts(lang: 'fa', tz: 'Asia/Tehran', brand: '');
+      await r.reporter.tick();
+      expect(r.calls.single.body['lang'], 'fa');
+      expect(r.calls.single.body['tz'], 'Asia/Tehran');
+      expect(r.calls.single.body.containsKey('brand'), isFalse);
+    });
+
+    test('the facts do not go with the opt_out', () async {
+      final r = Rig()..facts = const DeviceFacts(lang: 'fa');
+      await r.reporter.setEnabled(false);
+      await r.reporter.tick();
+      expect(r.calls.single.body['event'], 'opt_out');
+      expect(r.calls.single.body.containsKey('lang'), isFalse);
+    });
+
     test('a first ping goes out, once, and the same day it is not repeated', () async {
       final r = Rig();
       expect(await r.reporter.tick(), isTrue);

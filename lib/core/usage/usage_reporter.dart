@@ -32,6 +32,7 @@ class UsageReporter {
     required this.tunnelUp,
     required this.endpoints,
     required this.countryHint,
+    this.facts = _noFacts,
     DateTime Function()? now,
     Random? random,
     this.firstDelay = const Duration(seconds: 25),
@@ -59,6 +60,10 @@ class UsageReporter {
 
   /// The country the phone or computer says it is in (two letters), or null.
   final String? Function() countryHint;
+
+  /// The optional facts (languages, region, time zone, phone, processor); each is checked when the
+  /// ping is built and dropped when it does not fit.
+  final Future<DeviceFacts> Function() facts;
   final DateTime Function() _now;
   final Random _random;
   final Duration firstDelay;
@@ -209,6 +214,12 @@ class UsageReporter {
     final version = await appVersion();
     final osv = await osVersion().catchError((Object _) => null);
     final tunnel = tunnelUp();
+    var extra = const DeviceFacts();
+    if (event == 'ping') {
+      try {
+        extra = await facts();
+      } catch (_) {}
+    }
     final methods = [PingMethod.direct, PingMethod.fragment];
     for (final method in methods) {
       for (final endpoint in endpoints()) {
@@ -222,6 +233,7 @@ class UsageReporter {
             osVersion: osv,
             viaTunnel: tunnel,
             country: tunnel ? (_country ?? countryHint()) : null,
+            facts: extra,
           );
         } on PingException {
           return _Result.refused; // a ping the server would refuse is never sent
@@ -253,3 +265,5 @@ class UsageReporter {
 }
 
 enum _Result { sent, refused, retry }
+
+Future<DeviceFacts> _noFacts() async => const DeviceFacts();

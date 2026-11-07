@@ -15,6 +15,7 @@ class UsageController extends ChangeNotifier {
   UsageController({
     required bool Function() tunnelUp,
     required FragmentSettings Function() fragment,
+    required String? Function() appLanguage,
   }) {
     store = UsageEndpointStore(
       read: VpnChannel.readFile,
@@ -32,6 +33,7 @@ class UsageController extends ChangeNotifier {
       tunnelUp: tunnelUp,
       endpoints: () => store.current.endpoints,
       countryHint: localeCountry,
+      facts: () => readDeviceFacts(appLanguage: appLanguage()),
     );
   }
 

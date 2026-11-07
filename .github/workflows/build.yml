@@ -234,7 +234,8 @@ jobs:
           KUMO_KEYPASSWORD: ${{ secrets.KEY_PASSWORD }}
           KUMO_KEYALIAS: ${{ secrets.KEY_ALIAS }}
         run: >
-          flutter build apk --release --dart-define=KUMO_COMMIT=${{ github.sha }} ${{ matrix.args }}
+          flutter build apk --release --dart-define=KUMO_COMMIT=${{ github.sha }}
+          --dart-define=KUMO_BUILD=kumo-android-${{ matrix.name }}.apk ${{ matrix.args }}
           --obfuscate --split-debug-info=build/symbols --no-pub
 
       # What turns a crash report of the obfuscated build back into names of functions and files.
@@ -281,7 +282,7 @@ jobs:
       # sing-box, Xray and the wintun driver that the app runs next to kumo.exe.
       - run: ./tools/fetch_windows_core.ps1 -Arch ${{ matrix.arch }}
 
-      - run: flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub ${{ matrix.target }}
+      - run: flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-${{ matrix.arch }} --no-pub ${{ matrix.target }}
 
       # One installer for the whole app: the program, the cores, the driver and an uninstaller.
       - name: Build the installer
@@ -339,10 +340,10 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub --target-platform windows-arm64
+          flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-arm64 --no-pub --target-platform windows-arm64
           if ($LASTEXITCODE -ne 0) {
             Write-Host 'The target flag was refused; building for this machine'
-            flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub
+            flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-arm64 --no-pub
             if ($LASTEXITCODE -ne 0) { throw 'flutter build failed' }
           }
           Get-ChildItem build\windows -Directory | Select-Object Name
@@ -434,7 +435,7 @@ jobs:
       # sing-box, Xray and the library NaiveProxy needs, next to the program.
       - run: bash tools/fetch_unix_core.sh linux ${{ matrix.arch }}
 
-      - run: flutter build linux --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub
+      - run: flutter build linux --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-linux-${{ matrix.arch }} --no-pub
 
       - name: Package
         run: |
@@ -449,6 +450,8 @@ jobs:
           pkg="deb/kumo_${version}_${deb_arch}"
           mkdir -p "$pkg/opt/kumo" "$pkg/usr/share/applications" "$pkg/usr/share/pixmaps" "$pkg/DEBIAN"
           cp -r "$bundle/." "$pkg/opt/kumo/"
+          # Tells the app which package it came from (shown in the anonymous usage count).
+          echo deb > "$pkg/opt/kumo/package"
           install -m644 packaging/linux/kumo.desktop "$pkg/usr/share/applications/kumo.desktop"
           install -m644 linux/runner/resources/kumo.png "$pkg/usr/share/pixmaps/kumo.png"
           sed -e "s/@VERSION@/$version/" -e "s/@ARCH@/$deb_arch/" packaging/linux/control > "$pkg/DEBIAN/control"
@@ -467,6 +470,7 @@ jobs:
           sudo apt-get install -y rpm
           mkdir -p rpmsrc rpmtop
           cp -r "$bundle" rpmsrc/bundle
+          echo rpm > rpmsrc/bundle/package
           cp packaging/linux/kumo.desktop rpmsrc/kumo.desktop
           cp linux/runner/resources/kumo.png rpmsrc/kumo.png
           sed -e "s/@VERSION@/$version/" -e "s/@RPMARCH@/$rpm_arch/" packaging/linux/kumo.spec > rpmsrc/kumo.spec
@@ -538,7 +542,7 @@ jobs:
       # sing-box and Xray as universal binaries.
       - run: bash tools/fetch_unix_core.sh macos
 
-      - run: flutter build macos --release --dart-define=KUMO_COMMIT=${{ github.sha }} --no-pub
+      - run: flutter build macos --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-macos --no-pub
 
       - name: Put the cores in the app, sign it and package it
         run: |
