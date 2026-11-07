@@ -303,7 +303,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     private fun proxyNotification(): android.app.Notification {
         val open = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            Intent(this, KumoActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
             PendingIntent.FLAG_IMMUTABLE,
         )
         fun action(requestCode: Int, name: String) = PendingIntent.getService(
@@ -351,7 +351,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
         val open = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            Intent(this, KumoActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
             PendingIntent.FLAG_IMMUTABLE,
         )
         fun action(requestCode: Int, name: String) = PendingIntent.getService(

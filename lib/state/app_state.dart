@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../core/app_icon.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
 import '../core/latency_tester.dart';
@@ -237,6 +238,9 @@ class AppState extends ChangeNotifier {
   final tests = <String, GroupTest>{};
   final working = <String>{};
   ThemeMode themeMode = ThemeMode.system;
+
+  /// The app icon picked in Settings (see [AppIcon]).
+  String appIcon = AppIcon.defaultId;
 
   /// null = follow the phone, otherwise 'fa' or 'en'.
   String? languageCode;
@@ -779,6 +783,7 @@ class AppState extends ChangeNotifier {
     try {
       themeMode = ThemeMode.values.firstWhere((m) => m.name == j['theme'],
           orElse: () => ThemeMode.system);
+      appIcon = AppIcon.normalize(j['appIcon'] as String?);
       final lang = j['language'] as String?;
       languageCode = S.languageNames.containsKey(lang) ? lang : null;
       bool flag(String k, bool d) => j[k] is bool ? j[k] as bool : d;
@@ -846,6 +851,7 @@ class AppState extends ChangeNotifier {
         _settingsFile,
         jsonEncode({
           'theme': themeMode.name,
+          'appIcon': appIcon,
           'language': languageCode,
           'autoUpdateSubs': autoUpdateSubs,
           'updateOnStartup': updateOnStartup,
@@ -966,6 +972,15 @@ class AppState extends ChangeNotifier {
   void setThemeMode(ThemeMode mode) {
     themeMode = mode;
     _saveSettings();
+  }
+
+  Future<void> setAppIcon(String id) async {
+    appIcon = AppIcon.normalize(id);
+    _saveSettings();
+    notifyListeners();
+    try {
+      await AppIcon.apply(appIcon);
+    } catch (_) {}
   }
 
   void setSubInterval(int hours) {

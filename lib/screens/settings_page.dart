@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
+import '../core/app_icon.dart';
 import '../core/build_flavor.dart';
 import '../core/backup.dart';
 import '../core/win_autostart.dart';
@@ -193,6 +194,69 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _checkUpdate() => checkAndPrompt(context, silent: false);
+
+  static Widget _iconImage(String id, double size) => ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.22),
+        child: Image.asset(AppIcon.preview(id), width: size, height: size),
+      );
+
+  /// The app icons in groups; the one in use has a ring around it.
+  Future<void> _pickAppIcon() async {
+    final titles = [tr(context, 'appIconTeal'), tr(context, 'appIconColors'), tr(context, 'appIconClassic')];
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (dialog) {
+        final scheme = Theme.of(dialog).colorScheme;
+        return AlertDialog(
+          title: Text(tr(context, 'appIcon')),
+          content: SizedBox(
+            width: 360,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final (i, group) in AppIcon.groups.indexed) ...[
+                    Padding(
+                      padding: EdgeInsets.only(top: i == 0 ? 0 : 16, bottom: 8),
+                      child: Text(titles[i], style: Theme.of(dialog).textTheme.labelLarge),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final id in group)
+                          InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () => Navigator.pop(dialog, id),
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  width: 2.5,
+                                  color: id == state.appIcon ? scheme.primary : Colors.transparent,
+                                ),
+                              ),
+                              child: _iconImage(id, 52),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialog), child: Text(MaterialLocalizations.of(dialog).cancelButtonLabel)),
+          ],
+        );
+      },
+    );
+    if (picked == null || picked == state.appIcon) return;
+    await state.setAppIcon(picked);
+    if (mounted && Platform.isAndroid) toast(context, tr(context, 'appIconAndroidNote'));
+  }
 
   /// On Windows the language follows the PC, not a phone.
   String _systemLanguage(S t) =>
@@ -435,7 +499,16 @@ class _SettingsPageState extends State<SettingsPage> {
                   {null: _systemLanguage(t), ...S.languageNames},
                   state.setLanguage,
                 ),
-              ),              const Divider(height: 1),
+              ),
+              if (AppIcon.supported)
+                ListTile(
+                  leading: _iconImage(state.appIcon, 28),
+                  title: Text(tr(context, 'appIcon')),
+                  subtitle: Text(tr(context, 'appIconDesc')),
+                  trailing: const Icon(Icons.arrow_drop_down),
+                  onTap: _pickAppIcon,
+                ),
+              const Divider(height: 1),
               _switch('showSpeed', state.showSpeed, tr(context, 'notifSpeed'),
                   tr(context, 'notifSpeedDesc')),
               _switch('showVolume', state.showVolume, tr(context, 'notifVolume'),

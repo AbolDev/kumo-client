@@ -91,7 +91,7 @@ object UsageAlerts {
             }
             val open = PendingIntent.getActivity(
                 context, 0,
-                Intent(context, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+                Intent(context, KumoActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
                 PendingIntent.FLAG_IMMUTABLE,
             )
             nm.notify(

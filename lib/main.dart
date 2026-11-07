@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'core/app_icon.dart';
 import 'core/build_flavor.dart';
 import 'core/desktop_vpn.dart';
 import 'core/platform.dart';
@@ -62,6 +63,8 @@ class _KumoAppState extends State<KumoApp>
   /// Whether the tray icon was set up (without it a hidden window could not be brought back).
   var _trayOk = false;
 
+  Future<void> _trayReady = Future.value();
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     // The usage numbers are saved every half minute; leaving the app saves them at once.
@@ -76,6 +79,15 @@ class _KumoAppState extends State<KumoApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _state.init().then((_) {
+      // The icon picked in Settings. An update of the Windows app puts the default icon back on
+      // the shortcuts, so they are set again when another one was picked.
+      // (After the tray's first icon, which would otherwise replace it.)
+      if (AppIcon.supported) {
+        _trayReady
+            .then((_) => AppIcon.apply(_state.appIcon,
+                shortcuts: _state.appIcon != AppIcon.defaultId))
+            .catchError((_) {});
+      }
       _askBatteryOnce();
       // A newer stable release is offered when the app opens (not in the F-Droid build).
       if (!fdroidBuild) {
@@ -92,7 +104,7 @@ class _KumoAppState extends State<KumoApp>
     if (isDesktop) {
       windowManager.addListener(this);
       trayManager.addListener(this);
-      _setupTray();
+      _trayReady = _setupTray();
       _state.addListener(_refreshTrayMenu);
     }
   }
@@ -117,8 +129,10 @@ class _KumoAppState extends State<KumoApp>
 
   Future<void> _setupTray() async {
     try {
-      await trayManager.setIcon(
-          Platform.isWindows ? 'assets/tray_icon.ico' : 'assets/tray_icon.png');
+      // On Windows the picked app icon replaces this once the settings are read.
+      await trayManager.setIcon(Platform.isWindows
+          ? 'assets/app_icons/${AppIcon.defaultId}.ico'
+          : 'assets/tray_icon.png');
       await trayManager.setToolTip('Kumo');
       // GNOME shows no tray icons unless an extension is installed, and the icon call still
       // succeeds there: the window is then only minimized, never hidden.

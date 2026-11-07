@@ -17,7 +17,7 @@ import io.nekohasekai.libbox.Libbox
 import java.io.File
 import java.util.concurrent.Executors
 
-class MainActivity : FlutterActivity() {
+class KumoActivity : FlutterActivity() {
     private companion object {
         const val REQUEST_VPN = 1001
         const val REQUEST_NOTIFICATIONS = 1002
@@ -170,6 +170,11 @@ class MainActivity : FlutterActivity() {
                 }
                 "scheduleSubUpdates" -> {
                     if (call.argument<Boolean>("enabled") == true) SubUpdateJob.schedule(this) else SubUpdateJob.cancel(this)
+                    result.success(null)
+                }
+                "appIcon" -> result.success(AppIcons.current(this))
+                "setAppIcon" -> {
+                    AppIcons.apply(this, call.argument<String>("id") ?: AppIcons.DEFAULT)
                     result.success(null)
                 }
                 "batteryUnrestricted" ->

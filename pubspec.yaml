@@ -39,6 +39,8 @@ flutter:
     - assets/npvs/
     - assets/tray_icon.ico
     - assets/tray_icon.png
+    # The app icons the user can pick in Settings (tools/make_app_icons.py).
+    - assets/app_icons/
     # The WARP profile that is part of the app (the signed file of the repository).
     - docs/warp/profile.json
     - docs/warp/profile.json.sig

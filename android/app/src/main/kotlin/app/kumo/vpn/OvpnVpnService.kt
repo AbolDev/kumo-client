@@ -519,7 +519,7 @@ class OvpnVpnService : VpnService(), OvpnManagement.Handler {
         val text = if (connecting) getString(R.string.notif_connecting) else speedText ?: ""
         val open = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+            Intent(this, KumoActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
             PendingIntent.FLAG_IMMUTABLE,
         )
         val stop = PendingIntent.getService(
