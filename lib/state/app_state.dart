@@ -21,6 +21,7 @@ import '../core/sources.dart';
 import '../core/sub_formats.dart';
 import '../core/sub_surge.dart' show subscriptionDeepLink;
 import '../core/updater.dart' show includePrerelease;
+import '../core/vpngate.dart';
 import '../core/ovpn/ovpn_profile.dart' show ovpnLink;
 import '../core/ovpn/ovpn_runner.dart';
 import 'warp_controller.dart';
@@ -1694,6 +1695,27 @@ class AppState extends ChangeNotifier {
     }
     if (changed) _save();
   }
+
+  /// True while the VPN Gate list is being downloaded.
+  final vpnGateBusy = ValueNotifier<bool>(false);
+
+  /// Downloads the VPN Gate list (OpenVPN servers) and puts it among the servers added by hand, in
+  /// place of an earlier copy of it (the server that is chosen stays). Returns how many were added.
+  Future<int> addVpnGate() async {
+    vpnGateBusy.value = true;
+    try {
+      final parsed = parseLinks(await fetchVpnGate()).where((c) => c.isOpenVpn).toList();
+      if (parsed.isEmpty) return 0;
+      manual.configs.removeWhere((c) => c.isOpenVpn && c.name.contains(vpnGateMark) && !identical(c, selected));
+      _merge(manual, parsed);
+      _save();
+      notifyListeners();
+      return parsed.length;
+    } finally {
+      vpnGateBusy.value = false;
+    }
+  }
+
   /// Removes every config that was added by hand.
   void clearManual() {
     if (tests[manual.id]?.running ?? false) cancelPing(manual);

@@ -1,9 +1,12 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import '../l10n/extra.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import 'collector_info_page.dart';
+import 'share_sheet.dart' show toast;
 import 'warp_page.dart';
 
 /// The free ways to connect, each one on or off, with a page to manage it. The public servers are on
@@ -106,9 +109,45 @@ class FreeConnectionsPage extends StatelessWidget {
                   MaterialPageRoute<void>(builder: (_) => WarpPage(state: state)),
                 ),
               ),
+              // OpenVPN runs on Windows only for now.
+              if (Platform.isWindows) _vpnGate(context),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _vpnGate(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: state.vpnGateBusy,
+      builder: (context, busy, _) => Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: ListTile(
+          leading: busy
+              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.vpn_lock_outlined),
+          title: Text(tr(context, 'vpngateTitle'), style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text(tr(context, 'vpngateDesc')),
+          isThreeLine: true,
+          trailing: FilledButton.tonal(
+            onPressed: busy
+                ? null
+                : () async {
+                    final failed = tr(context, 'vpngateFailed');
+                    String added(int n) => tr(context, 'vpngateAdded', {'n': '$n'});
+                    String text;
+                    try {
+                      final n = await state.addVpnGate();
+                      text = n == 0 ? failed : added(n);
+                    } catch (_) {
+                      text = failed;
+                    }
+                    if (context.mounted) toast(context, text);
+                  },
+            child: Text(tr(context, 'vpngateGet')),
+          ),
+        ),
       ),
     );
   }
