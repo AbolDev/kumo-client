@@ -161,6 +161,21 @@ def main():
         img = Image.open(io.BytesIO(png)).convert("RGBA").resize((59 * 4, 41 * 4), Image.LANCZOS)
         img.save(ASSETS / f"{name}.png", optimize=True)
 
+    # The default icon for web pages (the landing page, the admin panel): vector and pixel
+    # files, a favicon, and the cloud alone without its square.
+    web = ROOT / "assets/brand"
+    web.mkdir(parents=True, exist_ok=True)
+    (web / "kumo-icon.svg").write_text(svg_full(DEFAULT), encoding="utf-8")
+    for s in (1024, 512, 192, 180, 32):
+        render(svg_full(DEFAULT), s).save(web / f"kumo-icon-{s}.png", optimize=True)
+    fav = [render(svg_full(DEFAULT), s) for s in (16, 32, 48)]
+    fav[-1].save(web / "favicon.ico", format="ICO", sizes=[(16, 16), (32, 32), (48, 48)], append_images=fav[:-1])
+    for name, icon_id in (("kumo-cloud-dark", DEFAULT), ("kumo-cloud-light", "teal_light")):
+        _, color, strength, _ = ICONS[icon_id]
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 31 59 41">'
+               f'{cloud(color, strength, "")}</svg>')
+        (web / f"{name}.svg").write_text(svg, encoding="utf-8")
+
     shutil.copyfile(ASSETS / f"{DEFAULT}.ico", win_ico)
     print(f"{len(ICONS)} icons written; default: {DEFAULT}")
 
