@@ -71,3 +71,5 @@ docs/screenshots/*
 
 # The OpenVPN programs for Android are built by tools/android_openvpn (CI builds them for the APK)
 /android/app/src/main/jniLibs/*/libopenvpn.so
+
+.kotlin/
