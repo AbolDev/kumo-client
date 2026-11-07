@@ -17,8 +17,8 @@
     <application
         android:label="Kumo"
         android:name=".App"
-        android:icon="@mipmap/ic_launcher_teal"
-        android:roundIcon="@mipmap/ic_launcher_teal"
+        android:icon="@mipmap/ic_launcher_teal_night"
+        android:roundIcon="@mipmap/ic_launcher_teal_night"
         android:banner="@mipmap/ic_launcher"
         android:allowBackup="false">
         <!-- The launcher entries are the activity-aliases below, one per icon in Settings. -->
@@ -45,7 +45,7 @@
              default keeps the name the launcher entry had before, so home screen icons stay. -->
         <activity-alias android:name=".MainActivity" android:targetActivity=".KumoActivity"
             android:exported="true" android:enabled="true"
-            android:icon="@mipmap/ic_launcher_teal" android:roundIcon="@mipmap/ic_launcher_teal">
+            android:icon="@mipmap/ic_launcher_teal_night" android:roundIcon="@mipmap/ic_launcher_teal_night">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -83,9 +83,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity-alias>
-        <activity-alias android:name=".Icon_teal_night" android:targetActivity=".KumoActivity"
+        <activity-alias android:name=".Icon_teal" android:targetActivity=".KumoActivity"
             android:exported="true" android:enabled="false"
-            android:icon="@mipmap/ic_launcher_teal_night" android:roundIcon="@mipmap/ic_launcher_teal_night">
+            android:icon="@mipmap/ic_launcher_teal" android:roundIcon="@mipmap/ic_launcher_teal">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

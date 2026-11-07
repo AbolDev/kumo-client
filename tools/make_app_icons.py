@@ -21,7 +21,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 RES = ROOT / "android/app/src/main/res"
 ASSETS = ROOT / "assets/app_icons"
-DEFAULT = "teal"
+DEFAULT = "teal_night"
 
 # The cloud, cut into facets that catch the light from the top left (a 100 x 100 drawing).
 SILHOUETTE = "24,70 23,62 27,53 35,48 40,40 48,32 58,32 66,38 69,47 76,50 80,58 78,67 72,71"
@@ -101,8 +101,12 @@ def svg_background(icon_id):
 
 
 def render(svg, size):
-    png = cairosvg.svg2png(bytestring=svg.encode(), output_width=size, output_height=size)
-    return Image.open(io.BytesIO(png)).convert("RGBA")
+    # Every size is drawn four times larger and scaled down with a high-quality filter: the edges
+    # between facets come out smooth, without the faint seams of drawing at the final size.
+    big = size * 4
+    png = cairosvg.svg2png(bytestring=svg.encode(), output_width=big, output_height=big)
+    img = Image.open(io.BytesIO(png)).convert("RGBA")
+    return img.resize((size, size), Image.LANCZOS)
 
 
 def save_webp(img, path):
@@ -111,7 +115,8 @@ def save_webp(img, path):
 
 
 DENSITIES = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
-ICO_SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256]
+# Every size Windows asks for from 100% to 300% screen scale, so none is enlarged.
+ICO_SIZES = [16, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 80, 96, 128, 256]
 
 
 def write_ico(icon_id, path):
@@ -131,7 +136,8 @@ def main():
         Image.open(RES / "mipmap-xxxhdpi/ic_launcher.webp").convert("RGBA").save(ASSETS / "classic.png")
 
     for icon_id in ICONS:
-        render(svg_full(icon_id), 192).save(ASSETS / f"{icon_id}.png", optimize=True)
+        # Large enough for the picker on a phone with a dense screen.
+        render(svg_full(icon_id), 384).save(ASSETS / f"{icon_id}.png", optimize=True)
         write_ico(icon_id, ASSETS / f"{icon_id}.ico")
         for name, scale in DENSITIES.items():
             d = RES / f"mipmap-{name}"
@@ -144,6 +150,16 @@ def main():
             f'    <background android:drawable="@mipmap/ic_launcher_{icon_id}_bg"/>\n'
             f'    <foreground android:drawable="@mipmap/ic_launcher_{icon_id}_fg"/>\n'
             '</adaptive-icon>\n', encoding="utf-8")
+
+    # The cloud alone, without its square, for the app's header: the default icon's cloud on a
+    # dark theme, the darker one of the light icon on a light theme.
+    for name, icon_id in (("mark_dark", DEFAULT), ("mark_light", "teal_light")):
+        _, color, strength, _ = ICONS[icon_id]
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 31 59 41">'
+               f'{cloud(color, strength, "")}</svg>')
+        png = cairosvg.svg2png(bytestring=svg.encode(), output_width=59 * 16, output_height=41 * 16)
+        img = Image.open(io.BytesIO(png)).convert("RGBA").resize((59 * 4, 41 * 4), Image.LANCZOS)
+        img.save(ASSETS / f"{name}.png", optimize=True)
 
     shutil.copyfile(ASSETS / f"{DEFAULT}.ico", win_ico)
     print(f"{len(ICONS)} icons written; default: {DEFAULT}")

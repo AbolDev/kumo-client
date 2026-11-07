@@ -10,10 +10,10 @@ import android.content.pm.PackageManager
  * the name the app's launcher entry had before, so icons already on a home screen keep working.
  */
 object AppIcons {
-    const val DEFAULT = "teal"
+    const val DEFAULT = "teal_night"
 
     private val ids = listOf(
-        "teal", "teal_light", "teal_solid", "teal_blue", "mint", "teal_night",
+        "teal_night", "teal", "teal_light", "teal_solid", "teal_blue", "mint",
         "blue", "sunset", "emerald", "vivid", "navy", "gold", "classic",
     )
 

@@ -1,8 +1,9 @@
+import 'dart:ffi';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
 
 /// The app icon the user picks in Settings (drawn by tools/make_app_icons.py).
 ///
@@ -10,11 +11,11 @@ import 'package:window_manager/window_manager.dart';
 /// program file keeps the default icon; the window, the taskbar button, the tray and the
 /// Start menu and desktop shortcuts take the chosen one.
 class AppIcon {
-  static const defaultId = 'teal';
+  static const defaultId = 'teal_night';
 
   /// In the app's teal, then the first set in other colours, then the icon Kumo had before.
   static const groups = <List<String>>[
-    ['teal', 'teal_light', 'teal_solid', 'teal_blue', 'mint', 'teal_night'],
+    ['teal_night', 'teal', 'teal_light', 'teal_solid', 'teal_blue', 'mint'],
     ['blue', 'sunset', 'emerald', 'vivid', 'navy', 'gold'],
     ['classic'],
   ];
@@ -39,12 +40,64 @@ class AppIcon {
     } else if (Platform.isWindows) {
       final ico = id == 'classic' ? 'assets/tray_icon.ico' : 'assets/app_icons/$id.ico';
       try {
-        await windowManager.setIcon('assets/app_icons/$id.ico');
+        _setWindowIcon(_assetPath('assets/app_icons/$id.ico'));
       } catch (_) {}
       try {
         await trayManager.setIcon(ico);
       } catch (_) {}
       if (shortcuts) await _setShortcuts(id);
+    }
+  }
+
+  static String _assetPath(String asset) =>
+      '${File(Platform.resolvedExecutable).parent.path}\\data\\flutter_assets\\${asset.replaceAll('/', '\\')}';
+
+  /// Gives the window (and so its taskbar button) the icon in [icoPath], at the sizes the
+  /// screen's scale asks for. window_manager's setIcon always loads 16 and 32 pixels, which
+  /// Windows then enlarges, blurred, on a screen set above 100%.
+  static void _setWindowIcon(String icoPath) {
+    final user = DynamicLibrary.open('user32.dll');
+    final kernel = DynamicLibrary.open('kernel32.dll');
+    final findWindow = user.lookupFunction<
+        IntPtr Function(IntPtr, IntPtr, Pointer<Utf16>, Pointer<Utf16>),
+        int Function(int, int, Pointer<Utf16>, Pointer<Utf16>)>('FindWindowExW');
+    final windowPid = user.lookupFunction<Uint32 Function(IntPtr, Pointer<Uint32>),
+        int Function(int, Pointer<Uint32>)>('GetWindowThreadProcessId');
+    final myPid = kernel.lookupFunction<Uint32 Function(), int Function()>('GetCurrentProcessId')();
+    final dpiFor =
+        user.lookupFunction<Uint32 Function(IntPtr), int Function(int)>('GetDpiForWindow');
+    final metric = user.lookupFunction<Int32 Function(Int32, Uint32), int Function(int, int)>(
+        'GetSystemMetricsForDpi');
+    final loadImage = user.lookupFunction<
+        IntPtr Function(IntPtr, Pointer<Utf16>, Uint32, Int32, Int32, Uint32),
+        int Function(int, Pointer<Utf16>, int, int, int, int)>('LoadImageW');
+    final send = user.lookupFunction<IntPtr Function(IntPtr, Uint32, IntPtr, IntPtr),
+        int Function(int, int, int, int)>('SendMessageW');
+
+    final cls = 'FLUTTER_RUNNER_WIN32_WINDOW'.toNativeUtf16();
+    final path = icoPath.toNativeUtf16();
+    final pid = calloc<Uint32>();
+    try {
+      // This app's own window (another Flutter app could have one of the same class).
+      var hwnd = 0;
+      while (true) {
+        hwnd = findWindow(0, hwnd, cls, nullptr);
+        if (hwnd == 0) return;
+        windowPid(hwnd, pid);
+        if (pid.value == myPid) break;
+      }
+      const smCxIcon = 11, smCxSmIcon = 49, imageIcon = 1, lrLoadFromFile = 0x10;
+      const wmSetIcon = 0x80, iconSmall = 0, iconBig = 1;
+      final dpi = dpiFor(hwnd);
+      final big = metric(smCxIcon, dpi), small = metric(smCxSmIcon, dpi);
+      final hBig = loadImage(0, path, imageIcon, big, big, lrLoadFromFile);
+      final hSmall = loadImage(0, path, imageIcon, small, small, lrLoadFromFile);
+      if (hSmall != 0) send(hwnd, wmSetIcon, iconSmall, hSmall);
+      if (hBig != 0) send(hwnd, wmSetIcon, iconBig, hBig);
+    } finally {
+      calloc.free(cls);
+      calloc.free(path);
+      calloc.free(pid);
     }
   }
 

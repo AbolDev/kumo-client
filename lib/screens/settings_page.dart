@@ -82,8 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   textDirection: TextDirection.ltr,
                   keyboardType: TextInputType.url,
                   onSubmitted: (_) => submit(),
-                  decoration: InputDecoration(
-                      border: const OutlineInputBorder(), errorText: error),
+                  decoration: InputDecoration(border: const OutlineInputBorder(), errorText: error),
                 ),
                 Align(
                   alignment: AlignmentDirectional.centerStart,
@@ -93,13 +92,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     onPressed: () => controller.text = defaultDelayUrl,
                   ),
                 ),
-                Text(tr(context, 'delayUrlNote'),
-                    style: Theme.of(context).textTheme.bodySmall),
+                Text(tr(context, 'delayUrlNote'), style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
             actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialog), child: Text(t.cancel)),
+              TextButton(onPressed: () => Navigator.pop(dialog), child: Text(t.cancel)),
               FilledButton(onPressed: submit, child: Text(t.save)),
             ],
           );
@@ -129,7 +126,8 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const PopScope(canPop: false, child: Center(child: CircularProgressIndicator())),
+      builder: (_) =>
+          const PopScope(canPop: false, child: Center(child: CircularProgressIndicator())),
     );
     try {
       return await job();
@@ -144,8 +142,8 @@ class _SettingsPageState extends State<SettingsPage> {
     if (password == null) return;
     final text = await _working(() => state.exportBackup(password));
     final bytes = Uint8List.fromList(utf8.encode(text));
-    final path = await FilePicker.platform.saveFile(
-        fileName: 'kumo-backup.json', bytes: bytes, type: FileType.any);
+    final path = await FilePicker.platform
+        .saveFile(fileName: 'kumo-backup.json', bytes: bytes, type: FileType.any);
     if (path != null && !Platform.isAndroid) await File(path).writeAsBytes(bytes);
     if (mounted && path != null) toast(context, tr(context, 'backupSaved'));
   }
@@ -174,7 +172,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   /// Shows only the current choice in the list; tapping it opens the other options.
-  Future<void> _choose<T>(String title, T current, Map<T, String> options, void Function(T) pick) async {
+  Future<void> _choose<T>(
+      String title, T current, Map<T, String> options, void Function(T) pick) async {
     final picked = await showDialog<({T value})>(
       context: context,
       builder: (dialog) => SimpleDialog(
@@ -197,58 +196,90 @@ class _SettingsPageState extends State<SettingsPage> {
 
   static Widget _iconImage(String id, double size) => ClipRRect(
         borderRadius: BorderRadius.circular(size * 0.22),
-        child: Image.asset(AppIcon.preview(id), width: size, height: size),
+        child: Image.asset(AppIcon.preview(id),
+            width: size, height: size, filterQuality: FilterQuality.high),
       );
+
+  /// One icon of the picker; the one in use has a ring and a check mark.
+  Widget _iconChoice(BuildContext dialog, String id, double size) {
+    final scheme = Theme.of(dialog).colorScheme;
+    final selected = id == state.appIcon;
+    return InkWell(
+      borderRadius: BorderRadius.circular(size * 0.28),
+      onTap: () => Navigator.pop(dialog, id),
+      child: Stack(clipBehavior: Clip.none, children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(size * 0.28),
+            border: Border.all(width: 2.5, color: selected ? scheme.primary : Colors.transparent),
+          ),
+          child: _iconImage(id, size - 13),
+        ),
+        if (selected)
+          PositionedDirectional(
+            end: -2,
+            bottom: -2,
+            child: Container(
+              decoration: BoxDecoration(
+                color: scheme.primary,
+                shape: BoxShape.circle,
+                border: Border.all(color: scheme.surfaceContainerHigh, width: 2),
+              ),
+              padding: const EdgeInsets.all(2),
+              child: Icon(Icons.check, size: 16, color: scheme.onPrimary),
+            ),
+          ),
+      ]),
+    );
+  }
 
   /// The app icons in groups; the one in use has a ring around it.
   Future<void> _pickAppIcon() async {
-    final titles = [tr(context, 'appIconTeal'), tr(context, 'appIconColors'), tr(context, 'appIconClassic')];
+    final titles = [
+      tr(context, 'appIconTeal'),
+      tr(context, 'appIconColors'),
+      tr(context, 'appIconClassic')
+    ];
     final picked = await showDialog<String>(
       context: context,
       builder: (dialog) {
-        final scheme = Theme.of(dialog).colorScheme;
         return AlertDialog(
           title: Text(tr(context, 'appIcon')),
-          content: SizedBox(
-            width: 360,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final (i, group) in AppIcon.groups.indexed) ...[
-                    Padding(
-                      padding: EdgeInsets.only(top: i == 0 ? 0 : 16, bottom: 8),
-                      child: Text(titles[i], style: Theme.of(dialog).textTheme.labelLarge),
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final id in group)
-                          InkWell(
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: () => Navigator.pop(dialog, id),
-                            child: Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border.all(
-                                  width: 2.5,
-                                  color: id == state.appIcon ? scheme.primary : Colors.transparent,
-                                ),
-                              ),
-                              child: _iconImage(id, 52),
-                            ),
-                          ),
-                      ],
-                    ),
+          contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          content: Builder(builder: (context) {
+            // The icons share the whole width of the dialog (the screen less the dialog's
+            // 40 margins and the 20 of padding on each side), three or more to a row.
+            final width = (MediaQuery.sizeOf(dialog).width - 120).clamp(240.0, 440.0);
+            const gap = 10.0;
+            final cols = (width / 104).floor().clamp(3, 6);
+            final size = (width - gap * (cols - 1)) / cols;
+            return SizedBox(
+              width: width,
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (final (i, group) in AppIcon.groups.indexed) ...[
+                      Padding(
+                        padding: EdgeInsets.only(top: i == 0 ? 0 : 18, bottom: 10),
+                        child: Text(titles[i], style: Theme.of(dialog).textTheme.titleSmall),
+                      ),
+                      Wrap(
+                        spacing: gap,
+                        runSpacing: gap,
+                        children: [for (final id in group) _iconChoice(dialog, id, size)],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          }),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialog), child: Text(MaterialLocalizations.of(dialog).cancelButtonLabel)),
+            TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: Text(MaterialLocalizations.of(dialog).cancelButtonLabel)),
           ],
         );
       },
@@ -259,11 +290,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   /// On Windows the language follows the PC, not a phone.
-  String _systemLanguage(S t) =>
-      isDesktop ? tr(context, 'languageDevice') : t.languageSystem;
+  String _systemLanguage(S t) => isDesktop ? tr(context, 'languageDevice') : t.languageSystem;
 
-  Widget _switch(String key, bool value, String title, String desc) =>
-      SwitchListTile(
+  Widget _switch(String key, bool value, String title, String desc) => SwitchListTile(
         value: value,
         onChanged: (v) => state.setFlag(key, v),
         title: Text(title),
@@ -302,8 +331,7 @@ class _SettingsPageState extends State<SettingsPage> {
           child: Column(children: [
             for (final (i, c) in children.indexed) ...[
               if (i > 0)
-                Divider(
-                    height: 1, indent: 16, endIndent: 16, color: scheme.outlineVariant),
+                Divider(height: 1, indent: 16, endIndent: 16, color: scheme.outlineVariant),
               c,
             ],
           ]),
@@ -350,8 +378,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         const SizedBox(height: 12),
                       if (cur.subs.isNotEmpty)
                         _group([
-                          for (final (i, sub) in cur.subs.indexed)
-                            _tile([...path, i], sub),
+                          for (final (i, sub) in cur.subs.indexed) _tile([...path, i], sub),
                         ]),
                     ]),
                   );
@@ -369,318 +396,301 @@ class _SettingsPageState extends State<SettingsPage> {
       ThemeMode.dark: (t.themeDark, Icons.dark_mode),
     };
     final flat = [
-            _section(Icons.rss_feed, t.subSettings, [
-              _switch('autoUpdateSubs', state.autoUpdateSubs, t.autoUpdateSubs,
-                  t.autoUpdateSubsDesc),
-              _switch('updateOnStartup', state.updateOnStartup,
-                  t.updateOnStartup, t.updateOnStartupDesc),
-              ListTile(
-                leading: const Icon(Icons.timer_outlined),
-                title: Text(tr(context, 'defaultInterval')),
-                subtitle: Text(tr(context, 'defaultIntervalDesc')),
-                trailing: Text(tr(context, 'hoursShort').replaceAll('{n}', '${state.subInterval}')),
-                onTap: () async {
-                  final v = await pickOption<int>(
-                      context, tr(context, 'defaultInterval'), state.subInterval, {
-                    for (final h in {1, 2, 3, 6, 12, 24, 48, 72, 168, state.subInterval}.toList()..sort())
-                      h: tr(context, 'hoursShort').replaceAll('{n}', '$h'),
-                  });
-                  if (v != null) state.setSubInterval(v);
-                },
+      _section(Icons.rss_feed, t.subSettings, [
+        _switch('autoUpdateSubs', state.autoUpdateSubs, t.autoUpdateSubs, t.autoUpdateSubsDesc),
+        _switch('updateOnStartup', state.updateOnStartup, t.updateOnStartup, t.updateOnStartupDesc),
+        ListTile(
+          leading: const Icon(Icons.timer_outlined),
+          title: Text(tr(context, 'defaultInterval')),
+          subtitle: Text(tr(context, 'defaultIntervalDesc')),
+          trailing: Text(tr(context, 'hoursShort').replaceAll('{n}', '${state.subInterval}')),
+          onTap: () async {
+            final v =
+                await pickOption<int>(context, tr(context, 'defaultInterval'), state.subInterval, {
+              for (final h in {1, 2, 3, 6, 12, 24, 48, 72, 168, state.subInterval}.toList()..sort())
+                h: tr(context, 'hoursShort').replaceAll('{n}', '$h'),
+            });
+            if (v != null) state.setSubInterval(v);
+          },
+        ),
+        _switch('measurePing', state.measurePing, tr(context, 'measurePing'),
+            tr(context, 'measurePingDesc')),
+        _switch('usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
+            tr(context, 'usageAlertsDesc')),
+        _switch('allowInsecure', state.allowInsecure, t.allowInsecure, t.allowInsecureDesc),
+        _switch('showCollector', state.showCollector, t.showCollector, t.showCollectorDesc),
+      ]),
+      _section(Icons.apps, t.appSettings, [
+        _switch('autoConnect', state.autoConnect, t.autoConnect, t.autoConnectDesc),
+        _switch('restartOnChange', state.restartOnChange, t.restartOnChange, t.restartOnChangeDesc),
+        _switch('confirmDelete', state.confirmDelete, t.confirmDelete, t.confirmDeleteDesc),
+        SwitchListTile(
+          value: state.usage.enabled,
+          onChanged: (v) => state.usage.setEnabled(v),
+          title: Text(tr(context, 'usageStats')),
+          subtitle: Text(tr(context, 'usageStatsDesc')),
+        ),
+        FutureBuilder<String>(
+          future: state.usage.code(),
+          builder: (context, snap) {
+            final id = snap.data;
+            if (id == null) return const SizedBox.shrink();
+            return ListTile(
+              leading: const Icon(Icons.fingerprint),
+              title: Text(tr(context, 'usageId')),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(tr(context, 'usageIdDesc')),
+                  const SizedBox(height: 4),
+                  Directionality(
+                    textDirection: TextDirection.ltr,
+                    child: SelectableText(id,
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                  ),
+                ],
               ),
-              _switch('measurePing', state.measurePing, tr(context, 'measurePing'),
-                  tr(context, 'measurePingDesc')),
-              _switch('usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
-                  tr(context, 'usageAlertsDesc')),
-              _switch('allowInsecure', state.allowInsecure, t.allowInsecure,
-                  t.allowInsecureDesc),
-              _switch('showCollector', state.showCollector, t.showCollector,
-                  t.showCollectorDesc),
-            ]),
-            _section(Icons.apps, t.appSettings, [
-              _switch('autoConnect', state.autoConnect, t.autoConnect,
-                  t.autoConnectDesc),
-              _switch('restartOnChange', state.restartOnChange,
-                  t.restartOnChange, t.restartOnChangeDesc),
-              _switch('confirmDelete', state.confirmDelete, t.confirmDelete,
-                  t.confirmDeleteDesc),
-              SwitchListTile(
-                value: state.usage.enabled,
-                onChanged: (v) => state.usage.setEnabled(v),
-                title: Text(tr(context, 'usageStats')),
-                subtitle: Text(tr(context, 'usageStatsDesc')),
-              ),
-              FutureBuilder<String>(
-                future: state.usage.code(),
-                builder: (context, snap) {
-                  final id = snap.data;
-                  if (id == null) return const SizedBox.shrink();
-                  return ListTile(
-                    leading: const Icon(Icons.fingerprint),
-                    title: Text(tr(context, 'usageId')),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(tr(context, 'usageIdDesc')),
-                        const SizedBox(height: 4),
-                        Directionality(
-                          textDirection: TextDirection.ltr,
-                          child: SelectableText(id,
-                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                    onTap: () async {
-                      await Clipboard.setData(ClipboardData(text: id));
-                      if (context.mounted) toast(context, t.copied);
-                    },
-                  );
-                },
-              ),
-              if (Platform.isAndroid)
-              ListTile(
-                leading: const Icon(Icons.battery_saver),
-                title: Text(t.batteryTitle),
-                onTap: () async {
-                  if (await VpnChannel.batteryUnrestricted()) {
-                    if (context.mounted) toast(context, t.batteryDone);
-                  } else {
-                    await VpnChannel.requestBatteryExemption();
-                  }
-                },
-              ),
-            ]),
-            ...networkSections(context, state, _section).cast<_Section>(),
-            if (isDesktop)
-              _section(Icons.desktop_windows, tr(context, Platform.isWindows ? 'windows' : 'desktop'), [
-                SwitchListTile(
-                  value: state.net.minimizeToTray,
-                  onChanged: (v) =>
-                      state.updateNet((o) => o.minimizeToTray = v, reconnect: false),
-                  title: Text(tr(context, 'minimizeToTray')),
-                ),
-                SwitchListTile(
-                  value: state.net.startWithWindows,
-                  onChanged: (v) async {
-                    // The switch follows what really happened, not what was asked.
-                    final done = await WinAutostart.set(v);
-                    if (!done && v) {
-                      if (context.mounted) toast(context, tr(context, 'autostartUnsafe'));
-                      return;
-                    }
-                    await state.updateNet((o) => o.startWithWindows = v, reconnect: false);
-                  },
-                  title: Text(tr(context, Platform.isWindows ? 'startWithWindows' : 'startWithSystem')),
-                  subtitle: Text(tr(context, Platform.isWindows ? 'startWithWindowsDesc' : 'startWithSystemDesc')),
-                ),
-              ]),
-            _section(Icons.palette_outlined, t.uiSettings, [
-              ListTile(
-                leading: Icon(modes[state.themeMode]!.$2),
-                title: Text(t.uiMode),
-                subtitle: Text(modes[state.themeMode]!.$1),
-                trailing: const Icon(Icons.arrow_drop_down),
-                onTap: () => _choose<ThemeMode>(
-                  t.uiMode,
-                  state.themeMode,
-                  {for (final e in modes.entries) e.key: e.value.$1},
-                  (m) => state.setThemeMode(m),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.language),
-                title: Text(t.language),
-                subtitle: Text(
-                    {null: _systemLanguage(t), ...S.languageNames}[state.languageCode] ?? ''),
-                trailing: const Icon(Icons.arrow_drop_down),
-                onTap: () => _choose<String?>(
-                  t.language,
-                  state.languageCode,
-                  {null: _systemLanguage(t), ...S.languageNames},
-                  state.setLanguage,
-                ),
-              ),
-              if (AppIcon.supported)
-                ListTile(
-                  leading: _iconImage(state.appIcon, 28),
-                  title: Text(tr(context, 'appIcon')),
-                  subtitle: Text(tr(context, 'appIconDesc')),
-                  trailing: const Icon(Icons.arrow_drop_down),
-                  onTap: _pickAppIcon,
-                ),
-              const Divider(height: 1),
-              _switch('showSpeed', state.showSpeed, tr(context, 'notifSpeed'),
-                  tr(context, 'notifSpeedDesc')),
-              _switch('showVolume', state.showVolume, tr(context, 'notifVolume'),
-                  tr(context, 'notifVolumeDesc')),
-              _switch('showName', state.showName, tr(context, 'notifName'),
-                  tr(context, 'notifNameDesc')),
-              if (Platform.isAndroid)
-                _switch('idleNotification', state.idleNotification,
-                    tr(context, 'notifIdle'), tr(context, 'notifIdleDesc')),
-            ]),
-            _section(Icons.monitor_heart_outlined, tr(context, 'liveConnections'), [
-              ListTile(
-                leading: const Icon(Icons.swap_vert),
-                title: Text(tr(context, 'liveConnections')),
-                subtitle: Text(tr(context, 'liveConnectionsDesc')),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) => ConnectionsPage(state: state)),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.bar_chart),
-                title: Text(tr(context, 'usage')),
-                subtitle: Text(tr(context, 'usageDesc')),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) => UsagePage(state: state)),
-                ),
-              ),
-            ]),
-            _section(Icons.volunteer_activism_outlined, tr(context, 'freeConnections'), [
-              ListTile(
-                leading: const Icon(Icons.volunteer_activism_outlined),
-                title: Text(tr(context, 'freeConnections')),
-                subtitle: Text(tr(context, 'freeConnectionsDesc')),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(builder: (_) => FreeConnectionsPage(state: state)),
-                ),
-              ),
-            ]),
-            _section(Icons.backup_outlined, tr(context, 'backup'), [
-              ListTile(
-                leading: const Icon(Icons.upload_file),
-                title: Text(tr(context, 'exportBackup')),
-                subtitle: Text(tr(context, 'backupDesc')),
-                onTap: _export,
-              ),
-              ListTile(
-                leading: const Icon(Icons.download),
-                title: Text(tr(context, 'importBackup')),
-                onTap: _import,
-              ),
-            ]),
-            _section(Icons.receipt_long, t.logs, [
-              ListTile(
-                leading: const Icon(Icons.list_alt),
-                title: Text(t.logs),
-                subtitle: Text(t.logsDesc),
-                trailing: Text('${state.logs.length}'),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                      builder: (_) => LogsPage(state: state)),
-                ),
-              ),
-            ]),
-            _section(Icons.info_outline, tr(context, 'about'), [
-              FutureBuilder<PackageInfo>(
-                future: PackageInfo.fromPlatform(),
-                builder: (context, snap) => ListTile(
-                  leading: Icon(fdroidBuild ? Icons.info_outline : Icons.system_update),
-                  title: Text(fdroidBuild ? 'Kumo' : tr(context, 'checkUpdate')),
-                  subtitle: Text(tr(context, 'currentVersion', {'v': snap.data?.version ?? ''})),
-                  // The F-Droid build only shows its version: the store updates it.
-                  onTap: fdroidBuild ? null : _checkUpdate,
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.code),
-                title: Text(tr(context, 'sourceCode')),
-                subtitle: const Text('github.com/AbolDev/kumo-client',
-                    textDirection: TextDirection.ltr),
-                onTap: () => openLink('https://github.com/AbolDev/kumo-client'),
-              ),
-              ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: const Text('GitHub'),
-                subtitle: const Text('github.com/AbolDev',
-                    textDirection: TextDirection.ltr),
-                onTap: () => openLink('https://github.com/AbolDev'),
-              ),
-            ]),
-            _section(Icons.memory, t.coreSettings, [
-              ListTile(
-                leading: const Icon(Icons.speed),
-                title: Text(t.delayUrlTitle),
-                subtitle: Text(state.delayUrl,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    textDirection: TextDirection.ltr),
-                onTap: () => _editDelayUrl(t),
-              ),
-              ListTile(
-                leading: const Icon(Icons.memory),
-                title: Text(tr(context, 'coreChoice')),
-                subtitle: Text(tr(context, 'coreChoiceDesc')),
-                trailing: Text(state.net.core == 'xray' ? 'Xray' : 'sing-box'),
-                onTap: () async {
-                  final v = await pickOption<String>(
-                      context, tr(context, 'coreChoice'), state.net.core,
-                      {'singbox': 'sing-box', 'xray': 'Xray'});
-                  if (v != null) await state.updateNet((o) => o.core = v);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.verified_user_outlined),
-                title: Text(tr(context, 'certStore')),
-                subtitle: Text(tr(context, 'certStoreDesc')),
-                trailing: Text(tr(context, 'store_${state.net.certStore}')),
-                onTap: () async {
-                  final v = await pickOption<String>(
-                      context, tr(context, 'certStore'), state.net.certStore, {
-                    for (final s in certStores) s: tr(context, 'store_$s'),
-                  });
-                  if (v != null) await state.updateNet((o) => o.certStore = v);
-                },
-              ),
-              SwitchListTile(
-                secondary: const Icon(Icons.schedule),
-                value: state.net.ntp,
-                onChanged: (v) => state.updateNet((o) => o.ntp = v),
-                title: Text(tr(context, 'ntp')),
-                subtitle: Text(tr(context, 'ntpDesc')),
-              ),
-              ListTile(
-                leading: const Icon(Icons.data_object),
-                title: Text(tr(context, 'extraSingbox')),
-                subtitle: Text(tr(context, 'extraSingboxDesc')),
-                trailing: state.net.extraSingbox.isEmpty ? null : const Icon(Icons.check),
-                onTap: () async {
-                  final v = await editJson(context, tr(context, 'extraSingbox'),
-                      tr(context, 'extraSingboxDesc'), state.net.extraSingbox);
-                  if (v != null) await state.updateNet((o) => o.extraSingbox = v);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.data_object),
-                title: Text(tr(context, 'extraXray')),
-                subtitle: Text(tr(context, 'extraXrayDesc')),
-                trailing: state.net.extraXray.isEmpty ? null : const Icon(Icons.check),
-                onTap: () async {
-                  final v = await editJson(context, tr(context, 'extraXray'),
-                      tr(context, 'extraXrayDesc'), state.net.extraXray);
-                  if (v != null) await state.updateNet((o) => o.extraXray = v);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.receipt_long),
-                title: Text(tr(context, 'logLevel')),
-                subtitle: Text(tr(context, 'logLevelDesc')),
-                trailing: Text(state.net.logLevel),
-                onTap: () => _choose<String>(
-                  tr(context, 'logLevel'),
-                  state.net.logLevel,
-                  {for (final l in logLevels) l: l},
-                  (v) => state.updateNet((o) => o.logLevel = v, reconnect: false),
-                ),
-              ),
-            ]),
+              onTap: () async {
+                await Clipboard.setData(ClipboardData(text: id));
+                if (context.mounted) toast(context, t.copied);
+              },
+            );
+          },
+        ),
+        if (Platform.isAndroid)
+          ListTile(
+            leading: const Icon(Icons.battery_saver),
+            title: Text(t.batteryTitle),
+            onTap: () async {
+              if (await VpnChannel.batteryUnrestricted()) {
+                if (context.mounted) toast(context, t.batteryDone);
+              } else {
+                await VpnChannel.requestBatteryExemption();
+              }
+            },
+          ),
+      ]),
+      ...networkSections(context, state, _section).cast<_Section>(),
+      if (isDesktop)
+        _section(Icons.desktop_windows, tr(context, Platform.isWindows ? 'windows' : 'desktop'), [
+          SwitchListTile(
+            value: state.net.minimizeToTray,
+            onChanged: (v) => state.updateNet((o) => o.minimizeToTray = v, reconnect: false),
+            title: Text(tr(context, 'minimizeToTray')),
+          ),
+          SwitchListTile(
+            value: state.net.startWithWindows,
+            onChanged: (v) async {
+              // The switch follows what really happened, not what was asked.
+              final done = await WinAutostart.set(v);
+              if (!done && v) {
+                if (context.mounted) toast(context, tr(context, 'autostartUnsafe'));
+                return;
+              }
+              await state.updateNet((o) => o.startWithWindows = v, reconnect: false);
+            },
+            title: Text(tr(context, Platform.isWindows ? 'startWithWindows' : 'startWithSystem')),
+            subtitle: Text(
+                tr(context, Platform.isWindows ? 'startWithWindowsDesc' : 'startWithSystemDesc')),
+          ),
+        ]),
+      _section(Icons.palette_outlined, t.uiSettings, [
+        ListTile(
+          leading: Icon(modes[state.themeMode]!.$2),
+          title: Text(t.uiMode),
+          subtitle: Text(modes[state.themeMode]!.$1),
+          trailing: const Icon(Icons.arrow_drop_down),
+          onTap: () => _choose<ThemeMode>(
+            t.uiMode,
+            state.themeMode,
+            {for (final e in modes.entries) e.key: e.value.$1},
+            (m) => state.setThemeMode(m),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.language),
+          title: Text(t.language),
+          subtitle: Text({null: _systemLanguage(t), ...S.languageNames}[state.languageCode] ?? ''),
+          trailing: const Icon(Icons.arrow_drop_down),
+          onTap: () => _choose<String?>(
+            t.language,
+            state.languageCode,
+            {null: _systemLanguage(t), ...S.languageNames},
+            state.setLanguage,
+          ),
+        ),
+        if (AppIcon.supported)
+          ListTile(
+            leading: _iconImage(state.appIcon, 28),
+            title: Text(tr(context, 'appIcon')),
+            subtitle: Text(tr(context, 'appIconDesc')),
+            trailing: const Icon(Icons.arrow_drop_down),
+            onTap: _pickAppIcon,
+          ),
+        const Divider(height: 1),
+        _switch(
+            'showSpeed', state.showSpeed, tr(context, 'notifSpeed'), tr(context, 'notifSpeedDesc')),
+        _switch('showVolume', state.showVolume, tr(context, 'notifVolume'),
+            tr(context, 'notifVolumeDesc')),
+        _switch('showName', state.showName, tr(context, 'notifName'), tr(context, 'notifNameDesc')),
+        if (Platform.isAndroid)
+          _switch('idleNotification', state.idleNotification, tr(context, 'notifIdle'),
+              tr(context, 'notifIdleDesc')),
+      ]),
+      _section(Icons.monitor_heart_outlined, tr(context, 'liveConnections'), [
+        ListTile(
+          leading: const Icon(Icons.swap_vert),
+          title: Text(tr(context, 'liveConnections')),
+          subtitle: Text(tr(context, 'liveConnectionsDesc')),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(builder: (_) => ConnectionsPage(state: state)),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.bar_chart),
+          title: Text(tr(context, 'usage')),
+          subtitle: Text(tr(context, 'usageDesc')),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(builder: (_) => UsagePage(state: state)),
+          ),
+        ),
+      ]),
+      _section(Icons.volunteer_activism_outlined, tr(context, 'freeConnections'), [
+        ListTile(
+          leading: const Icon(Icons.volunteer_activism_outlined),
+          title: Text(tr(context, 'freeConnections')),
+          subtitle: Text(tr(context, 'freeConnectionsDesc')),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(builder: (_) => FreeConnectionsPage(state: state)),
+          ),
+        ),
+      ]),
+      _section(Icons.backup_outlined, tr(context, 'backup'), [
+        ListTile(
+          leading: const Icon(Icons.upload_file),
+          title: Text(tr(context, 'exportBackup')),
+          subtitle: Text(tr(context, 'backupDesc')),
+          onTap: _export,
+        ),
+        ListTile(
+          leading: const Icon(Icons.download),
+          title: Text(tr(context, 'importBackup')),
+          onTap: _import,
+        ),
+      ]),
+      _section(Icons.receipt_long, t.logs, [
+        ListTile(
+          leading: const Icon(Icons.list_alt),
+          title: Text(t.logs),
+          subtitle: Text(t.logsDesc),
+          trailing: Text('${state.logs.length}'),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(builder: (_) => LogsPage(state: state)),
+          ),
+        ),
+      ]),
+      _section(Icons.info_outline, tr(context, 'about'), [
+        FutureBuilder<PackageInfo>(
+          future: PackageInfo.fromPlatform(),
+          builder: (context, snap) => ListTile(
+            leading: Icon(fdroidBuild ? Icons.info_outline : Icons.system_update),
+            title: Text(fdroidBuild ? 'Kumo' : tr(context, 'checkUpdate')),
+            subtitle: Text(tr(context, 'currentVersion', {'v': snap.data?.version ?? ''})),
+            // The F-Droid build only shows its version: the store updates it.
+            onTap: fdroidBuild ? null : _checkUpdate,
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.code),
+          title: Text(tr(context, 'sourceCode')),
+          subtitle: const Text('github.com/AbolDev/kumo-client', textDirection: TextDirection.ltr),
+          onTap: () => openLink('https://github.com/AbolDev/kumo-client'),
+        ),
+        ListTile(
+          leading: const Icon(Icons.person_outline),
+          title: const Text('GitHub'),
+          subtitle: const Text('github.com/AbolDev', textDirection: TextDirection.ltr),
+          onTap: () => openLink('https://github.com/AbolDev'),
+        ),
+      ]),
+      _section(Icons.memory, t.coreSettings, [
+        ListTile(
+          leading: const Icon(Icons.speed),
+          title: Text(t.delayUrlTitle),
+          subtitle: Text(state.delayUrl,
+              maxLines: 2, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr),
+          onTap: () => _editDelayUrl(t),
+        ),
+        ListTile(
+          leading: const Icon(Icons.memory),
+          title: Text(tr(context, 'coreChoice')),
+          subtitle: Text(tr(context, 'coreChoiceDesc')),
+          trailing: Text(state.net.core == 'xray' ? 'Xray' : 'sing-box'),
+          onTap: () async {
+            final v = await pickOption<String>(context, tr(context, 'coreChoice'), state.net.core,
+                {'singbox': 'sing-box', 'xray': 'Xray'});
+            if (v != null) await state.updateNet((o) => o.core = v);
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.verified_user_outlined),
+          title: Text(tr(context, 'certStore')),
+          subtitle: Text(tr(context, 'certStoreDesc')),
+          trailing: Text(tr(context, 'store_${state.net.certStore}')),
+          onTap: () async {
+            final v =
+                await pickOption<String>(context, tr(context, 'certStore'), state.net.certStore, {
+              for (final s in certStores) s: tr(context, 'store_$s'),
+            });
+            if (v != null) await state.updateNet((o) => o.certStore = v);
+          },
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.schedule),
+          value: state.net.ntp,
+          onChanged: (v) => state.updateNet((o) => o.ntp = v),
+          title: Text(tr(context, 'ntp')),
+          subtitle: Text(tr(context, 'ntpDesc')),
+        ),
+        ListTile(
+          leading: const Icon(Icons.data_object),
+          title: Text(tr(context, 'extraSingbox')),
+          subtitle: Text(tr(context, 'extraSingboxDesc')),
+          trailing: state.net.extraSingbox.isEmpty ? null : const Icon(Icons.check),
+          onTap: () async {
+            final v = await editJson(context, tr(context, 'extraSingbox'),
+                tr(context, 'extraSingboxDesc'), state.net.extraSingbox);
+            if (v != null) await state.updateNet((o) => o.extraSingbox = v);
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.data_object),
+          title: Text(tr(context, 'extraXray')),
+          subtitle: Text(tr(context, 'extraXrayDesc')),
+          trailing: state.net.extraXray.isEmpty ? null : const Icon(Icons.check),
+          onTap: () async {
+            final v = await editJson(context, tr(context, 'extraXray'),
+                tr(context, 'extraXrayDesc'), state.net.extraXray);
+            if (v != null) await state.updateNet((o) => o.extraXray = v);
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.receipt_long),
+          title: Text(tr(context, 'logLevel')),
+          subtitle: Text(tr(context, 'logLevelDesc')),
+          trailing: Text(state.net.logLevel),
+          onTap: () => _choose<String>(
+            tr(context, 'logLevel'),
+            state.net.logLevel,
+            {for (final l in logLevels) l: l},
+            (v) => state.updateNet((o) => o.logLevel = v, reconnect: false),
+          ),
+        ),
+      ]),
     ];
     return _arrange(flat);
   }
@@ -689,11 +699,12 @@ class _SettingsPageState extends State<SettingsPage> {
   /// and the Windows options sit under App settings; DNS and the advanced options under Network;
   /// the logs under Live connections.
   List<_Section> _arrange(List<_Section> flat) {
-    _Section? by(IconData icon) =>
-        flat.where((s) => s.icon == icon).firstOrNull;
-    _Section with_(_Section? s, List<_Section?> subs) => _Section(
-        s!.icon, s.title, s.children,
-        subs: [for (final x in subs) if (x != null) x]);
+    _Section? by(IconData icon) => flat.where((s) => s.icon == icon).firstOrNull;
+    _Section with_(_Section? s, List<_Section?> subs) =>
+        _Section(s!.icon, s.title, s.children, subs: [
+          for (final x in subs)
+            if (x != null) x
+        ]);
     return [
       by(Icons.rss_feed)!,
       with_(by(Icons.apps), [
@@ -740,7 +751,9 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           if (_query.isEmpty)
-            _group([for (final (i, s) in _sections(context).indexed) _tile([i], s)])
+            _group([
+              for (final (i, s) in _sections(context).indexed) _tile([i], s)
+            ])
           else
             ..._results(context),
         ]),
@@ -791,8 +804,8 @@ class _SettingsPageState extends State<SettingsPage> {
           for (final o in others)
             if (i < o.length) o[i],
         ];
-        final all = [s.title, for (final t in twins) t.title]
-            .any((t) => t.toLowerCase().contains(_query));
+        final all =
+            [s.title, for (final t in twins) t.title].any((t) => t.toLowerCase().contains(_query));
         final hits = [
           for (final (j, c) in s.children.indexed)
             if (all ||
@@ -808,8 +821,10 @@ class _SettingsPageState extends State<SettingsPage> {
             ..add(Padding(
               padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
               child: Text(s.title,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.primary)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(color: Theme.of(context).colorScheme.primary)),
             ))
             ..add(_group(hits));
         }
