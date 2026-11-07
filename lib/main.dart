@@ -79,14 +79,11 @@ class _KumoAppState extends State<KumoApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _state.init().then((_) {
-      // The icon picked in Settings. An update of the Windows app puts the default icon back on
-      // the shortcuts, so they are set again when another one was picked.
+      // The icon picked in Settings. An update of the Windows app puts kumo.exe back on the
+      // shortcuts, so they are checked again at each start.
       // (After the tray's first icon, which would otherwise replace it.)
       if (AppIcon.supported) {
-        _trayReady
-            .then((_) => AppIcon.apply(_state.appIcon,
-                shortcuts: _state.appIcon != AppIcon.defaultId))
-            .catchError((_) {});
+        _trayReady.then((_) => AppIcon.apply(_state.appIcon)).catchError((_) {});
       }
       _askBatteryOnce();
       // A newer stable release is offered when the app opens (not in the F-Droid build).

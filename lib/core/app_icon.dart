@@ -31,9 +31,9 @@ class AppIcon {
 
   static const _control = MethodChannel('kumo/control');
 
-  /// Shows [id] where the system takes the app's icon from. [shortcuts] also changes the Windows
-  /// shortcuts (only when the user picks an icon or the installer may have put back the default).
-  static Future<void> apply(String id, {bool shortcuts = true}) async {
+  /// Shows [id] where the system takes the app's icon from: on Windows the window, the tray and
+  /// the shortcuts (which an update of the app puts back to kumo.exe, so this runs at each start).
+  static Future<void> apply(String id) async {
     id = normalize(id);
     if (Platform.isAndroid) {
       await _control.invokeMethod('setAppIcon', {'id': id});
@@ -45,7 +45,7 @@ class AppIcon {
       try {
         await trayManager.setIcon(ico);
       } catch (_) {}
-      if (shortcuts) await _setShortcuts(id);
+      await _setShortcuts(id);
     }
   }
 
@@ -102,16 +102,19 @@ class AppIcon {
   }
 
   /// Points Kumo's Start menu, desktop and pinned taskbar shortcuts at the chosen icon.
+  ///
+  /// Always at the .ico file, the default icon too: a pinned taskbar button shows its shortcut's
+  /// icon, and for a shortcut that points at kumo.exe Windows keeps showing the icon it cached for
+  /// the exe before an update. Nothing is written when the shortcuts are already right.
   static Future<void> _setShortcuts(String id) async {
     final exe = Platform.resolvedExecutable;
-    final icon = id == defaultId
-        ? '$exe,0'
-        : '${File(exe).parent.path}\\data\\flutter_assets\\assets\\app_icons\\$id.ico,0';
+    final icon = '${File(exe).parent.path}\\data\\flutter_assets\\assets\\app_icons\\$id.ico,0';
     // The paths go in through the environment, never into the script text.
     const script = r'''
 $ErrorActionPreference = 'SilentlyContinue'
 $exe = $env:KUMO_EXE
 $shell = New-Object -ComObject WScript.Shell
+$changed = $false
 $dirs = @(
   [Environment]::GetFolderPath('CommonPrograms'), [Environment]::GetFolderPath('Programs'),
   [Environment]::GetFolderPath('CommonDesktopDirectory'), [Environment]::GetFolderPath('Desktop'),
@@ -123,10 +126,12 @@ foreach ($d in $dirs) {
     if ($l.TargetPath -ieq $exe -and $l.IconLocation -ne $env:KUMO_ICON) {
       $l.IconLocation = $env:KUMO_ICON
       $l.Save()
+      $changed = $true
     }
   }
 }
-& "$env:SystemRoot\System32\ie4uinit.exe" -show
+# Makes Explorer and the taskbar drop the icons they cached.
+if ($changed) { & "$env:SystemRoot\System32\ie4uinit.exe" -show }
 ''';
     try {
       await Process.run(
