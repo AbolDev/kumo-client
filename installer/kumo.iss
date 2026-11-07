@@ -44,8 +44,10 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"
 Source: "..\build\windows\{#Arch}\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{group}\Kumo"; Filename: "{app}\kumo.exe"
-Name: "{autodesktop}\Kumo"; Filename: "{app}\kumo.exe"; Tasks: desktopicon
+; The icon file, not kumo.exe: Windows keeps showing the icon it cached for the exe before an
+; update, on the taskbar too. Kumo points these at the icon picked in its Settings when it starts.
+Name: "{group}\Kumo"; Filename: "{app}\kumo.exe"; IconFilename: "{app}\data\flutter_assets\assets\app_icons\teal_night.ico"
+Name: "{autodesktop}\Kumo"; Filename: "{app}\kumo.exe"; IconFilename: "{app}\data\flutter_assets\assets\app_icons\teal_night.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\kumo.exe"; Description: "Start Kumo"; Flags: nowait postinstall skipifsilent shellexec
