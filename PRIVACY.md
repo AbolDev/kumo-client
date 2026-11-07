@@ -1,6 +1,6 @@
 # Privacy policy
 
-Kumo does not collect, store or send any data about you to the developers. There are no accounts, no analytics, no ads and no crash reporting.
+Kumo has no accounts, no ads and no crash reporting, and it never sends your servers, links, browsing or traffic to the developers. The one thing it sends is an anonymous usage count, described below, which you can turn off.
 
 ## Network requests Kumo makes
 
@@ -15,6 +15,7 @@ Kumo talks to other servers only for the features below. Each one is started by 
 | Updating a subscription you added | The address you entered | A normal request for that address. |
 | Testing a server's real delay | `cp.cloudflare.com` (the address can be changed in Settings) | A small request sent through the server being tested. |
 | *IP and DNS leak check* (only when you tap it) | `www.cloudflare.com` | A request for `/cdn-cgi/trace`. |
+| Anonymous usage count (once a day, and when the app version changes; off in *Settings → App settings*) | `api.kumo-client.ir`, `kumo-api.kumoapp.workers.dev` | A salted hash of your device id (the raw id is never sent), your operating system and its version, the Kumo version, and your country. The server does not store your IP address. When you turn the switch off, one last message says so and nothing more is sent. |
 | Using a VPN server | The servers in your list | Your traffic, as with any VPN. |
 
 These servers (GitHub, jsDelivr, Cloudflare) see your IP address and request as any website does. Their own privacy policies apply to them.

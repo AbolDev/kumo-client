@@ -277,6 +277,16 @@ class MainActivity : FlutterActivity() {
                 }
                 // CPU types this phone can run, best first (used to pick the matching update).
                 "abis" -> result.success(Build.SUPPORTED_ABIS.toList())
+                // For the anonymous usage ping: the id Android keeps for this phone and app signing
+                // key (it is hashed before it leaves the app), and the Android version.
+                "androidId" -> result.success(
+                    try {
+                        Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                    } catch (_: Exception) {
+                        null
+                    },
+                )
+                "osRelease" -> result.success("${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                 // Whether Kumo may install apps, and the system screen where the user allows it.
                 "canInstall" -> result.success(
                     Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls(),

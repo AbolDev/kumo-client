@@ -68,7 +68,7 @@ The apps are not code-signed or on Google Play, so Play Protect, SmartScreen or 
 ## Good to know
 
 - Public servers are run by unknown people. **Do not use them for banking or anything sensitive.**
-- Kumo collects no data about you. See the [privacy policy](PRIVACY.md).
+- Kumo has no accounts and sees none of your servers, links or traffic. Once a day it sends an anonymous usage count: a random-looking code made from your device id, your system and app version, and your country (no IP address is stored). You can turn it off in *Settings → App settings*. See the [privacy policy](PRIVACY.md).
 
 ## Build from source
 

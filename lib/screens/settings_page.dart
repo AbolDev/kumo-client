@@ -339,6 +339,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   t.restartOnChange, t.restartOnChangeDesc),
               _switch('confirmDelete', state.confirmDelete, t.confirmDelete,
                   t.confirmDeleteDesc),
+              SwitchListTile(
+                value: state.usage.enabled,
+                onChanged: (v) => state.usage.setEnabled(v),
+                title: Text(tr(context, 'usageStats')),
+                subtitle: Text(tr(context, 'usageStatsDesc')),
+              ),
               if (Platform.isAndroid)
               ListTile(
                 leading: const Icon(Icons.battery_saver),

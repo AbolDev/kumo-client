@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "version": 1,
+  "issued_at": "2026-11-07T00:00:00Z",
+  "expires_at": "2027-11-07T00:00:00Z",
+  "key_id": "t1",
+  "endpoints": [
+    { "host": "kumo-api.kumoapp.workers.dev" },
+    { "host": "api.kumo-client.ir" }
+  ]
+}

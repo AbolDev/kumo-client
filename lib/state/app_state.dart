@@ -25,6 +25,8 @@ import '../core/vpngate.dart';
 import '../core/ovpn/ovpn_profile.dart' show ovpnLink;
 import '../core/ovpn/ovpn_runner.dart';
 import 'warp_controller.dart';
+import 'usage_controller.dart';
+import '../core/usage/usage_transport.dart' show defaultFragment;
 import '../core/usage_alert.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart' show trFor;
@@ -104,6 +106,16 @@ class AppState extends ChangeNotifier {
 
   /// Cloudflare WARP (see warp_controller.dart).
   late final warp = WarpController(this);
+
+  /// The anonymous usage numbers (see core/usage): once a day, on by default, off in Settings.
+  late final usage = UsageController(
+    // Desktop in proxy mode: the app's own traffic does not go through the VPN.
+    tunnelUp: () => connected && (!isDesktop || net.tun),
+    fragment: () {
+      final p = warp.profile;
+      return p == null ? defaultFragment : (size: p.fragmentSize, delay: p.fragmentDelay);
+    },
+  );
 
   /// The WARP server, in a group of its own while WARP is on. It is not saved with the servers: the
   /// controller makes it from the account it keeps.
@@ -534,6 +546,8 @@ class AppState extends ChangeNotifier {
     if (updateOnStartup) await _updateSubscriptionsOnStartup();
     warp.addListener(notifyListeners);
     unawaited(warp.startup().catchError((Object _) {}));
+    usage.addListener(notifyListeners);
+    unawaited(usage.startup().catchError((Object _) {}));
   }
 
   /// Uses what the background job downloaded while the app was closed.
