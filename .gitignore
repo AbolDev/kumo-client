@@ -68,3 +68,6 @@ configs*.txt
 # raw screenshots used to make docs/images (they show parts of real server names)
 docs/screenshots/*
 !docs/screenshots/README.md
+
+# The OpenVPN programs for Android are built by tools/android_openvpn (CI builds them for the APK)
+/android/app/src/main/jniLibs/*/libopenvpn.so

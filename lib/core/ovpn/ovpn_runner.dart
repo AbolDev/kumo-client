@@ -54,6 +54,15 @@ List<(String, String)> parseAdapters(String output) {
   return out;
 }
 
+/// The configuration of [server], with `auth-user-pass` added when the user gave a login the file does not
+/// mention: some servers want one without saying so in the file (they answer AUTH_FAILED), and OpenVPN only
+/// asks for a login when that line is there.
+String withLogin(OvpnServer server) {
+  final config = server.profile.config;
+  if (server.profile.needsLogin || (server.username ?? '').isEmpty) return config;
+  return '${config.trimRight()}\nauth-user-pass\n';
+}
+
 /// What is added to the configuration for the run (after what was read from the user's file, which
 /// holds none of these): the adapter, no routes from the server, and the management port.
 String runConfig(String config, {required int managementPort, required String passwordFile}) {
@@ -205,7 +214,7 @@ class OvpnRunner {
     final pw = File('${dir.path}${Platform.pathSeparator}mgmt.pw')..writeAsStringSync(secret);
     final cfg = File('${dir.path}${Platform.pathSeparator}run.ovpn');
     final port = await _freePort();
-    cfg.writeAsStringSync(runConfig(server.profile.config, managementPort: port, passwordFile: pw.path));
+    cfg.writeAsStringSync(runConfig(withLogin(server), managementPort: port, passwordFile: pw.path));
     _files
       ..clear()
       ..addAll([pw, cfg]);

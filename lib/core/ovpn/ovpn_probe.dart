@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -106,7 +106,8 @@ Future<int> ovpnHandshake(OvpnServer s, {required String binary, Duration timeou
     for (final stream in [process.stdout, process.stderr]) {
       stream.transform(utf8.decoder).transform(const LineSplitter()).listen((line) {
         if (done.isCompleted) return;
-        if (line.contains('Peer Connection Initiated')) {
+        // the server accepted the client and sent its settings (a refused login answers AUTH_FAILED instead)
+        if (line.contains('PUSH_REPLY')) {
           done.complete(max(1, sw.elapsedMilliseconds));
         } else if (line.contains('AUTH_FAILED') || line.contains('Exiting due to fatal error')) {
           done.complete(-1);

@@ -22,7 +22,9 @@ Future<void> showOvpnLogin(BuildContext context, AppState state, ProxyConfig con
         title: Text(tr(dialog, 'ovpnLoginTitle')),
         content: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (server.profile.needsLogin) ...[
+            // A server may want a login its file does not mention (it answers AUTH_FAILED): the fields are shown
+            // whenever there is nothing else to ask.
+            if (server.profile.needsLogin || !server.profile.needsKeyPassword) ...[
               TextField(
                 controller: user,
                 autofocus: true,

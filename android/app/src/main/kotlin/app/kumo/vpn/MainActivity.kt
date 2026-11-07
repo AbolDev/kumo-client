@@ -186,9 +186,49 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                // A connection with the OpenVPN program (see OvpnVpnService). The configuration is written for
+                // the run only and removed when it ends; the login goes with the request, not to disk.
+                "startOpenVpn" -> {
+                    val config = call.argument<String>("config")
+                    if (config.isNullOrBlank()) {
+                        result.error("bad_args", "config is empty", null)
+                        return@setMethodCallHandler
+                    }
+                    val dir = File(filesDir, "ovpn").apply { mkdirs() }
+                    val file = File(dir, "run.ovpn")
+                    file.writeText(config)
+                    runCatching { android.system.Os.chmod(file.path, 384) }
+                    val name = call.argument<String>("name") ?: ""
+                    val showSpeed = call.argument<Boolean>("showSpeed") ?: true
+                    val showVolume = call.argument<Boolean>("showVolume") ?: false
+                    val showName = call.argument<Boolean>("showName") ?: true
+                    val killSwitch = call.argument<Boolean>("killSwitch") ?: false
+                    val intent = Intent(this, OvpnVpnService::class.java)
+                        .putExtra(OvpnVpnService.EXTRA_CONFIG_PATH, file.path)
+                        .putExtra(OvpnVpnService.EXTRA_NAME, name)
+                        .putExtra(OvpnVpnService.EXTRA_USER, call.argument<String>("username"))
+                        .putExtra(OvpnVpnService.EXTRA_PASSWORD, call.argument<String>("password"))
+                        .putExtra(OvpnVpnService.EXTRA_KEY_PASSWORD, call.argument<String>("keyPassword"))
+                        .putExtra(OvpnVpnService.EXTRA_SHOW_SPEED, showSpeed)
+                        .putExtra(OvpnVpnService.EXTRA_SHOW_VOLUME, showVolume)
+                        .putExtra(OvpnVpnService.EXTRA_SHOW_NAME, showName)
+                        .putExtra(OvpnVpnService.EXTRA_KILL_SWITCH, killSwitch)
+                        .putStringArrayListExtra(OvpnVpnService.EXTRA_INCLUDE, ArrayList(call.argument<List<String>>("include") ?: emptyList()))
+                        .putStringArrayListExtra(OvpnVpnService.EXTRA_EXCLUDE, ArrayList(call.argument<List<String>>("exclude") ?: emptyList()))
+                    // Not repeated by the tile, the widget or the device-startup receiver (see VpnControl).
+                    File(filesDir, "last_start.json").writeText(JSONObject().put("engine", "openvpn").toString())
+                    try {
+                        ContextCompat.startForegroundService(this, intent)
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("start_failed", e.message, null)
+                    }
+                }
                 "stop" -> {
                     try {
-                        startService(Intent(this, BoxVpnService::class.java).setAction(BoxVpnService.ACTION_STOP))
+                        val service = if (VpnBridge.engine == "openvpn") OvpnVpnService::class.java else BoxVpnService::class.java
+                        val action = if (VpnBridge.engine == "openvpn") OvpnVpnService.ACTION_STOP else BoxVpnService.ACTION_STOP
+                        startService(Intent(this, service).setAction(action))
                     } catch (_: Exception) {
                         // The app is not allowed to start the service right now; nothing is running.
                     }

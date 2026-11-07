@@ -24,6 +24,9 @@ object VpnControl {
         if (!config.exists()) return null
 
         val last = readJson(context, "last_start.json")
+        // An OpenVPN connection holds its login and certificates only while it runs: it cannot be repeated
+        // from here (the app opens instead).
+        if (last?.optString("engine") == "openvpn") return null
         val names = ArrayList<String>()
         last?.optJSONArray("names")?.let { for (i in 0 until it.length()) names.add(it.getString(i)) }
         val start = Intent(context, BoxVpnService::class.java)
@@ -54,6 +57,10 @@ object VpnControl {
     }
 
     fun stop(context: Context) {
+        if (VpnBridge.engine == "openvpn") {
+            context.startService(Intent(context, OvpnVpnService::class.java).setAction(OvpnVpnService.ACTION_STOP))
+            return
+        }
         context.startService(Intent(context, BoxVpnService::class.java).setAction(BoxVpnService.ACTION_STOP))
     }
 

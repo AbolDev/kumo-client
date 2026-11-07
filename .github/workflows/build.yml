@@ -132,9 +132,44 @@ jobs:
           path: native-out
           compression-level: 0
 
+  # The OpenVPN program for every Android CPU (named libopenvpn.so so Android lets the app run it). The
+  # source files are checked against tools/android_openvpn/sha256.txt before anything is built.
+  native-openvpn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - id: cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: native-out
+          key: native-openvpn-${{ hashFiles('tools/android_openvpn/**') }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Build OpenVPN for arm64, arm and x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          mkdir -p src
+          get() { curl -fsSL --retry 3 -o "src/$1" "$2"; }
+          get openvpn-2.6.14.tar.gz https://github.com/OpenVPN/openvpn/releases/download/v2.6.14/openvpn-2.6.14.tar.gz
+          get openssl-3.0.15.tar.gz https://github.com/openssl/openssl/releases/download/openssl-3.0.15/openssl-3.0.15.tar.gz
+          get lzo-2.10.tar.gz https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz
+          get lz4-1.10.0.tar.gz https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz
+          tools/android_openvpn/build.sh "$ANDROID_NDK_HOME" src native-out/jniLibs
+          ls -R native-out
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-openvpn
+          path: native-out
+          compression-level: 0
+
   # The four APKs are built side by side, each on its own runner.
   apk:
-    needs: [native-box, native-xray]
+    needs: [native-box, native-xray, native-openvpn]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:

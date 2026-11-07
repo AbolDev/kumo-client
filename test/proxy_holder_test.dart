@@ -1,11 +1,11 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/proxy_holder.dart';
 
-/// A server that answers each line with "<name>:<line>".
+/// A server that answers each line with its name, a colon and the line.
 Future<ServerSocket> _echo(String name) async {
   final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
   s.listen((c) {

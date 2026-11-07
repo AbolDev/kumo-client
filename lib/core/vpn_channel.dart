@@ -105,6 +105,36 @@ class VpnChannel {
         'proxyPort': proxyPort,
       });
 
+  /// Android: a connection carried by the OpenVPN program (see OvpnVpnService.kt). [config] is the
+  /// configuration Kumo wrote from the user's file; the login goes with the request and is not saved.
+  /// [include] / [exclude] are the apps that go through it / stay out of it.
+  static Future<void> startOpenVpn({
+    required String config,
+    String? username,
+    String? password,
+    String? keyPassword,
+    String name = '',
+    bool showSpeed = true,
+    bool showVolume = false,
+    bool showName = true,
+    bool killSwitch = false,
+    List<String> include = const [],
+    List<String> exclude = const [],
+  }) =>
+      _control.invokeMethod('startOpenVpn', {
+        'config': config,
+        'username': username,
+        'password': password,
+        'keyPassword': keyPassword,
+        'name': name,
+        'showSpeed': showSpeed,
+        'showVolume': showVolume,
+        'showName': showName,
+        'killSwitch': killSwitch,
+        'include': include,
+        'exclude': exclude,
+      });
+
   /// Real delay in ms: fetches [url] through a temporary core built from [configJson]
   /// (which must hold an outbound tagged `proxy`). -1 when it fails.
   static Future<int> delay(String configJson, String url,

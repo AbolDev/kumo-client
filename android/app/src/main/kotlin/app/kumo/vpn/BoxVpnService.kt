@@ -200,6 +200,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         serverNames = intent?.getStringArrayListExtra(EXTRA_SERVER_NAMES) ?: emptyList()
         currentName = if (serverNames.size == 1) serverNames[0] else null
         speedText = null
+        VpnBridge.engine = "singbox"
         VpnBridge.update(VpnBridge.STARTING)
         showForeground()
         scope.launch {

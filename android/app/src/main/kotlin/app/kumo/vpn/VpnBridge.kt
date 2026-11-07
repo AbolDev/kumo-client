@@ -19,6 +19,10 @@ object VpnBridge {
     var lastError: String? = null
         private set
 
+    /** Which service carries the connection: "singbox" (BoxVpnService) or "openvpn" (OvpnVpnService). */
+    @Volatile
+    var engine: String = "singbox"
+
     /** True while the service keeps only the local proxy running (no tunnel). */
     @Volatile
     var standby: Boolean = false

@@ -56,6 +56,17 @@
             </intent-filter>
         </service>
 
+        <!-- A connection carried by the OpenVPN program instead of sing-box. -->
+        <service
+            android:name=".OvpnVpnService"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

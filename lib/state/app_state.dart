@@ -179,7 +179,8 @@ class AppState extends ChangeNotifier {
     if (forced != null) {
       lastDisconnect = forced;
     } else if (s.status == VpnStatus.error) {
-      lastDisconnect = (key: 'reasonError', args: {'e': s.error ?? ''});
+      final e = s.error ?? '';
+      lastDisconnect = (key: 'reasonError', args: {'e': e.startsWith('ovpn:') ? _ovpnFailed(e) : e});
     } else if (_expectStop) {
       lastDisconnect = (key: 'reasonYou', args: const <String, Object>{});
     } else if (s.error == 'revoked') {
@@ -1868,6 +1869,62 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Android: starts the OpenVPN service for [c]. It reports its state like the sing-box service does.
+  Future<void> _startOpenVpnAndroid(ProxyConfig c) async {
+    final s = c.ovpn!;
+    if (s.needsLogin || s.needsKeyPassword) {
+      _notice(s.needsLogin ? 'ovpnNeedsLogin' : 'ovpnNeedsKey');
+      ovpnLoginRequest.value = c;
+      _show(VpnStatus.stopped);
+      return;
+    }
+    try {
+      await VpnChannel.startOpenVpn(
+        config: withLogin(s),
+        username: s.username,
+        password: s.password,
+        keyPassword: s.keyPassword,
+        name: c.name,
+        showSpeed: showSpeed,
+        showVolume: showVolume,
+        showName: showName,
+        killSwitch: net.killSwitch,
+        include: net.appMode == AppMode.only ? net.apps : const [],
+        exclude: net.appMode == AppMode.except ? net.apps : const [],
+      );
+    } catch (e) {
+      log('OpenVPN: $e');
+      _notice('ovpnExited', {'detail': _short('$e')});
+      _show(VpnStatus.stopped);
+    }
+  }
+
+  /// The service's own words for why OpenVPN ended (`ovpn:kind|detail`): the user is told, and the text
+  /// for the line under the status is returned.
+  String _ovpnFailed(String error) {
+    final parts = error.substring('ovpn:'.length).split('|');
+    final blocked = parts.length > 1 && parts.last == 'blocked';
+    if (blocked) parts.removeLast();
+    final kind = parts.first;
+    final detail = _short(parts.skip(1).join('\n'));
+    switch (kind) {
+      case 'auth':
+        _notice('ovpnAuthFailed');
+        if (selected?.isOpenVpn ?? false) ovpnLoginRequest.value = selected;
+      case 'handshake':
+        _notice('ovpnHandshake');
+      case 'timeout':
+        _notice('ovpnTimeout', {'detail': detail});
+      case 'nobinary':
+        _notice('ovpnNoBinary', {'detail': 'libopenvpn.so'});
+      case 'permission':
+        message = (t) => t.vpnPermissionDenied;
+      default:
+        _notice('ovpnExited', {'detail': detail});
+    }
+    return detail.isEmpty ? kind : '$kind: $detail';
+  }
+
   /// True while OpenVPN is being started (the tap that stops a connection must stop that too).
   bool _ovpnStarting = false;
 
@@ -2127,6 +2184,11 @@ class AppState extends ChangeNotifier {
           apiSecret = _standbySecret ?? '';
           return;
         }
+      }
+      // On the phone the OpenVPN program is the whole connection (its own service, no sing-box).
+      if (Platform.isAndroid && chosen.length == 1 && chosen.first.isOpenVpn) {
+        await _startOpenVpnAndroid(chosen.first);
+        return;
       }
       // An OpenVPN server is carried by the OpenVPN program, which is started first; sing-box then sends
       // everything out through its adapter.

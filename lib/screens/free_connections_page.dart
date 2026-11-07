@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+﻿import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 
@@ -109,8 +109,8 @@ class FreeConnectionsPage extends StatelessWidget {
                   MaterialPageRoute<void>(builder: (_) => WarpPage(state: state)),
                 ),
               ),
-              // OpenVPN runs on Windows only for now.
-              if (Platform.isWindows) _vpnGate(context),
+              // OpenVPN runs on Windows and Android for now.
+              if (Platform.isWindows || Platform.isAndroid) _vpnGate(context),
             ],
           );
         },
