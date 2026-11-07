@@ -1,17 +1,17 @@
 {
-    "version": "1.11.0",
+    "version": "1.12.0",
     "description": "Free VPN client powered by sing-box and Xray",
     "homepage": "https://github.com/AbolDev/kumo-client",
     "license": "GPL-3.0-only",
     "notes": "Kumo asks for administrator rights when it starts: the tunnel needs them.",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/AbolDev/kumo-client/releases/download/v1.11.0/kumo-windows-x64-portable.zip",
-            "hash": "3dd41e7013839a1ec74cd6e99d6a868b8013677378556a415948eca6bda8f595"
+            "url": "https://github.com/AbolDev/kumo-client/releases/download/v1.12.0/kumo-windows-x64-portable.zip",
+            "hash": "0518d2c232631c779f08b2a1460f15ab4729bed1cda41c771733eac4d4a87664"
         },
         "arm64": {
-            "url": "https://github.com/AbolDev/kumo-client/releases/download/v1.11.0/kumo-windows-arm64-portable.zip",
-            "hash": "4ee991aaa154149844404040a4afd87a928942861b2381e187c0e027975f5890"
+            "url": "https://github.com/AbolDev/kumo-client/releases/download/v1.12.0/kumo-windows-arm64-portable.zip",
+            "hash": "0a000512d032a76585e3acc7e708909e93e885b90e674fcc02f89e166a69a4de"
         }
     },
     "shortcuts": [

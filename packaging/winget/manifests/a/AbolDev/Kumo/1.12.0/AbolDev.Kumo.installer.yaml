@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 PackageIdentifier: AbolDev.Kumo
-PackageVersion: 1.11.0
+PackageVersion: 1.12.0
 InstallerLocale: en-US
 InstallerType: inno
 Scope: machine
@@ -12,15 +12,15 @@ InstallerSwitches:
   Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
   SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NORESTART
 UpgradeBehavior: install
-ReleaseDate: 2026-10-29
+ReleaseDate: 2026-11-07
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/AbolDev/kumo-client/releases/download/v1.11.0/kumo-windows-x64-setup.exe
-  InstallerSha256: 85F149B1817FB19443A0419795B4CF2200CECEDE5CB9622B5CD74F0024CB8354
+  InstallerUrl: https://github.com/AbolDev/kumo-client/releases/download/v1.12.0/kumo-windows-x64-setup.exe
+  InstallerSha256: 8F83EB6D0A67838D45D7434E68E9A2EAA3B70FC83BF19FC4382A475121FE8660
   ProductCode: '{7D2C5E0A-4B1F-4C7A-9E3B-5A6F0D8C1B24}_is1'
 - Architecture: arm64
-  InstallerUrl: https://github.com/AbolDev/kumo-client/releases/download/v1.11.0/kumo-windows-arm64-setup.exe
-  InstallerSha256: F5676F4CED1E132FE07260B867165495F21714CA823B1AEF19AA90208281A1A6
+  InstallerUrl: https://github.com/AbolDev/kumo-client/releases/download/v1.12.0/kumo-windows-arm64-setup.exe
+  InstallerSha256: D2A1FEEFD8566187F4DFB2A0101A703C42A5D3D087A924ED523D5E66D7784996
   ProductCode: '{7D2C5E0A-4B1F-4C7A-9E3B-5A6F0D8C1B24}_is1'
 ManifestType: installer
 ManifestVersion: 1.6.0
