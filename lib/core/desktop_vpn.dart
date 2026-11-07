@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 
 import 'latency_tester.dart' show socksWarmDelay;
+import 'proxy_holder.dart';
 import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
 import 'win_dpapi.dart';
@@ -380,6 +381,7 @@ rm -rf "$T"
       int? systemProxyPort,
       bool killSwitch = false,
       bool keepStandby = false,
+      bool holdProxy = false,
       List<String> directPrograms = const []}) async {
     _killSwitch = killSwitch;
     _secret = apiSecret;
@@ -389,10 +391,18 @@ rm -rf "$T"
     final output = StringBuffer();
     try {
       await _ready;
+      final cfg = jsonDecode(configJson) as Map<String, dynamic>;
       // The standby proxy holds the same port, so it gives way to a core that serves the proxy too.
       // A tunnel core serves no proxy: the standby stays, and its programs are not cut.
       final withStandby = keepStandby && _sbCore != null;
-      if (!withStandby) await stopStandby();
+      // With the proxy kept, the proxy ports stay with the app and this core gets ports of its own: the
+      // standby core goes only after this one has taken over, so the port is never closed.
+      final held = holdProxy && !withStandby ? await _front(cfg) : null;
+      if (!withStandby && held == null) {
+        await stopStandby();
+        // This core listens on the proxy ports itself.
+        await _holder.release();
+      }
       await Directory(dataDir).create(recursive: true);
       if (stale()) return;
       if (xrayConfig != null && xrayPort != null) {
@@ -421,7 +431,6 @@ rm -rf "$T"
       }
 
       final api = apiPort;
-      final cfg = jsonDecode(configJson) as Map<String, dynamic>;
       if (xrayConfig != null) {
         // Xray talks to its server directly: its own traffic must not loop into the tunnel.
         final route = cfg['route'] as Map<String, dynamic>;
@@ -487,6 +496,15 @@ rm -rf "$T"
         }
         throw StateError(text.isEmpty ? 'sing-box did not start' : text);
       }
+      if (held != null) {
+        _heldRoutes = held;
+        for (final r in held) {
+          _holder.route(r.$1, r.$2);
+        }
+        // New connections are on this core now; the standby core that served until here can go.
+        await stopStandby();
+        if (stale()) return;
+      }
       if (systemProxyPort != null) {
         _sysPort = systemProxyPort;
         proxyIssue.value = !await _proxy.enable(systemProxyPort);
@@ -549,6 +567,64 @@ rm -rf "$T"
   /// that follow it do not go through the proxy (the user is told).
   final proxyIssue = ValueNotifier<bool>(false);
 
+  /// Holds the proxy ports while the proxy is kept running (see [ProxyHolder]).
+  final _holder = ProxyHolder();
+
+  /// (proxy port, port of the core) for the core of the connection and for the standby core.
+  var _heldRoutes = <(int, int)>[];
+  var _sbRoutes = <(int, int)>[];
+
+  void _unrouteHeld() {
+    for (final r in _heldRoutes) {
+      _holder.unroute(r.$1, r.$2);
+    }
+    _heldRoutes = [];
+  }
+
+  void _unrouteStandby() {
+    for (final r in _sbRoutes) {
+      _holder.unroute(r.$1, r.$2);
+    }
+    _sbRoutes = [];
+  }
+
+  /// Makes the app listen on the proxy ports of [cfg] and gives the core ports of its own (the config
+  /// is changed). Returns (proxy port, port of the core) for each, or null when a port cannot be held
+  /// (taken by another program): the core then listens on the proxy ports itself.
+  Future<List<(int, int)>?> _front(Map<String, dynamic> cfg) async {
+    final inbounds = [
+      for (final i in cfg['inbounds'] as List)
+        if (i is Map<String, dynamic> && (i['tag'] == 'mixed-in' || i['tag'] == 'lan-in')) i,
+    ];
+    if (inbounds.isEmpty) return null;
+    final fresh = <int>[];
+    for (final i in inbounds) {
+      final port = i['listen_port'] as int;
+      final had = _holder.ports.contains(port);
+      if (!await _holder.bind(port, i['tag'] == 'lan-in' ? '0.0.0.0' : '127.0.0.1')) {
+        for (final p in fresh) {
+          await _holder.close(p);
+        }
+        return null;
+      }
+      if (!had) fresh.add(port);
+    }
+    final routes = <(int, int)>[];
+    for (final i in inbounds) {
+      final own = await _freePort();
+      routes.add((i['listen_port'] as int, own));
+      i['listen'] = '127.0.0.1';
+      i['listen_port'] = own;
+    }
+    return routes;
+  }
+
+  /// The proxy is not kept any more: the ports are given back, unless a connection runs on them now.
+  Future<void> releaseProxy() async {
+    if (_heldRoutes.isNotEmpty || _sbRoutes.isNotEmpty || _adopted) return;
+    await _holder.release();
+  }
+
   Future<bool> _portOpen(int port) async {
     try {
       (await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 300)))
@@ -561,7 +637,11 @@ rm -rf "$T"
 
   /// Starts the standby proxy. Returns false when it could not (the port is taken ...).
   Future<bool> startStandby(String configJson,
-      {String? xrayConfig, int? xrayPort, required int apiPort, String? apiSecret}) async {
+      {String? xrayConfig,
+      int? xrayPort,
+      required int apiPort,
+      String? apiSecret,
+      bool holdProxy = false}) async {
     await stopStandby();
     final gen = ++_sbGen;
     bool stale() => gen != _sbGen;
@@ -586,12 +666,16 @@ rm -rf "$T"
         if (!listening) throw StateError('xray failed to start: ${output.toString().trim()}');
       }
       final file = '$dataDir${_sep}standby_config.json';
-      await _writeConfig(file, configJson);
+      // The port of the proxy stays with the app (see [ProxyHolder]); the core listens on one of its own.
+      final cfg = jsonDecode(configJson) as Map<String, dynamic>;
+      final held = holdProxy ? await _front(cfg) : null;
+      await _writeConfig(file, held == null ? configJson : jsonEncode(cfg));
       final core = _sbCore = await _spawn('kumo-core', ['run', '-c', file], output);
       var exited = false;
       core.exitCode.then((_) {
         exited = true;
         if (identical(_sbCore, core)) {
+          _unrouteStandby();
           _sbCore = null;
           _sbXray?.kill();
           _sbXray = null;
@@ -614,6 +698,12 @@ rm -rf "$T"
       }
       _sbApi = apiPort;
       _sbSecret = apiSecret;
+      if (held != null) {
+        _sbRoutes = held;
+        for (final r in held) {
+          _holder.route(r.$1, r.$2);
+        }
+      }
       standby.value = true;
       return true;
     } catch (e) {
@@ -647,6 +737,7 @@ rm -rf "$T"
     // Giving the standby core up ends a connection that is that core.
     if (_adopted) await stop();
     _sbGen++;
+    _unrouteStandby();
     final procs = [_sbCore, _sbXray].whereType<Process>().toList();
     _sbCore = null;
     _sbXray = null;
@@ -665,7 +756,7 @@ rm -rf "$T"
     proxyIssue.value = false;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        await _proxy.restore(port: _sysPort);
+        await _proxy.restore(port: _sysPort).timeout(const Duration(seconds: 6));
         break;
       } catch (_) {}
     }
@@ -686,6 +777,14 @@ rm -rf "$T"
       return;
     }
     _emit(VpnStatus.stopping);
+    final gen = _gen;
+    // A tool that never answers (the system proxy setting, a core that does not die) must not keep the
+    // screen on "Disconnecting" for good: after this wait the connection is shown as ended anyway.
+    await _teardown().timeout(const Duration(seconds: 15), onTimeout: () {});
+    if (gen == _gen) _emit(VpnStatus.stopped);
+  }
+
+  Future<void> _teardown() async {
     if (_adopted) {
       // Only the system proxy goes; the core stays, with the programs that use it.
       _adopted = false;
@@ -695,7 +794,6 @@ rm -rf "$T"
     } else {
       await _killAll();
     }
-    _emit(VpnStatus.stopped);
   }
 
   /// With [keepBlocked] the system proxy is left pointing at a dead port, so programs that follow
@@ -704,6 +802,7 @@ rm -rf "$T"
     // The proxy settings are put back while the cores are being stopped, not before: the two
     // are independent and each used to wait for the other.
     final proxy = keepBlocked ? _blockProxy() : _releaseProxy();
+    _unrouteHeld();
     _beat?.cancel();
     _beat = null;
     final wasElevated = _elevated;

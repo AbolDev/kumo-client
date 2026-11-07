@@ -1944,6 +1944,7 @@ class AppState extends ChangeNotifier {
   Future<void> _applyStandby() async {
     if (!net.keepProxy) {
       await VpnChannel.stopStandby();
+      await VpnChannel.releaseProxy();
       return;
     }
     // On the phone the service gives the proxy up by itself when a tunnel starts; on the desktop
@@ -2173,6 +2174,7 @@ class AppState extends ChangeNotifier {
           systemProxyPort: proxyPort,
           killSwitch: net.killSwitch,
           keepStandby: standbyServers != null && net.tun,
+          holdProxy: isDesktop && net.keepProxy && !net.tun,
           standbyConfig: standby?.config,
           standbyXrayConfig: standby?.xrayConfig,
           proxyPort: net.proxyPort,
@@ -2189,6 +2191,7 @@ class AppState extends ChangeNotifier {
             systemProxyPort: proxyPort,
             killSwitch: net.killSwitch,
             keepStandby: standbyServers != null && net.tun,
+            holdProxy: isDesktop && net.keepProxy && !net.tun,
             standbyConfig: standby?.config,
             proxyPort: net.proxyPort);
       }

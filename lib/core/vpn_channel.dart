@@ -77,11 +77,13 @@ class VpnChannel {
     String? standbyConfig,
     String? standbyXrayConfig,
     int? proxyPort,
+    bool holdProxy = false,
     List<String> directPrograms = const [],
   }) =>
       _win
       ? DesktopVpn.instance.start(configJson,
           directPrograms: directPrograms,
+          holdProxy: holdProxy,
           xrayConfig: xrayConfig,
           xrayPort: xrayPort,
           apiPort: apiPort ?? 9090,
@@ -137,7 +139,7 @@ class VpnChannel {
           {String? xrayConfig, int? xrayPort, required int apiPort, String? apiSecret, int? proxyPort}) =>
       _win
           ? DesktopVpn.instance.startStandby(configJson,
-              xrayConfig: xrayConfig, xrayPort: xrayPort, apiPort: apiPort, apiSecret: apiSecret)
+              xrayConfig: xrayConfig, xrayPort: xrayPort, apiPort: apiPort, apiSecret: apiSecret, holdProxy: true)
           : _control
               .invokeMethod<bool>('startStandby', {
                 'config': configJson,
@@ -151,6 +153,11 @@ class VpnChannel {
   static Future<bool> adoptStandby({required int systemProxyPort}) => _win
       ? DesktopVpn.instance.adoptStandby(systemProxyPort: systemProxyPort)
       : Future.value(false);
+
+  /// Desktop: the proxy is not kept any more, so the app gives its proxy ports back.
+  static Future<void> releaseProxy() async {
+    if (_win) await DesktopVpn.instance.releaseProxy();
+  }
 
   static Future<void> stopStandby() async {
     if (_win) {
