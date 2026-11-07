@@ -7,6 +7,9 @@ import android.content.Intent
 /** After the phone starts: brings back the background update job and, if wanted, the last connection. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // After an update: App.onCreate (which runs for this receiver) has already put the launcher
+        // entry of the picked icon back, so the app can be opened without being opened first.
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) return
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val settings = VpnControl.readJson(context, "settings.json")
         if (settings?.optBoolean("autoUpdateSubs", true) != false) SubUpdateJob.schedule(context)

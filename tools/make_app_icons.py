@@ -151,15 +151,16 @@ def main():
             f'    <foreground android:drawable="@mipmap/ic_launcher_{icon_id}_fg"/>\n'
             '</adaptive-icon>\n', encoding="utf-8")
 
-    # The cloud alone, without its square, for the app's header: the default icon's cloud on a
-    # dark theme, the darker one of the light icon on a light theme.
-    for name, icon_id in (("mark_dark", DEFAULT), ("mark_light", "teal_light")):
-        _, color, strength, _ = ICONS[icon_id]
-        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 31 59 41">'
-               f'{cloud(color, strength, "")}</svg>')
-        png = cairosvg.svg2png(bytestring=svg.encode(), output_width=59 * 16, output_height=41 * 16)
-        img = Image.open(io.BytesIO(png)).convert("RGBA").resize((59 * 4, 41 * 4), Image.LANCZOS)
-        img.save(ASSETS / f"{name}.png", optimize=True)
+    # The cloud alone, without its square, for the app's header: the theme's teal with its
+    # facets, the same on a dark and a light theme.
+    light = "".join(f'<polygon points="{p}" fill-opacity="{o * 0.55:.3f}"/>' for p, o in LIGHT)
+    shade = "".join(f'<polygon points="{p}" fill-opacity="{o * 1.2:.3f}"/>' for p, o in SHADE)
+    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 31 59 41">'
+           f'<polygon points="{SILHOUETTE}" fill="#0e9f8e"/><g fill="#fff">{light}</g>'
+           f'<g fill="#000">{shade}</g></svg>')
+    png = cairosvg.svg2png(bytestring=svg.encode(), output_width=59 * 16, output_height=41 * 16)
+    img = Image.open(io.BytesIO(png)).convert("RGBA").resize((59 * 4, 41 * 4), Image.LANCZOS)
+    img.save(ASSETS / "mark.png", optimize=True)
 
     # The default icon for web pages (the landing page, the admin panel): vector and pixel
     # files, a favicon, and the cloud alone without its square.

@@ -29,6 +29,8 @@ class App : Application() {
             }
             previous?.uncaughtException(thread, error)
         }
+        // Exactly one launcher entry (the picked icon) must be enabled, or the app cannot be opened.
+        AppIcons.ensure(this)
     }
 
     companion object {

@@ -79,14 +79,8 @@ class HomePage extends StatelessWidget {
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
           title: Row(mainAxisSize: MainAxisSize.min, children: [
-            // The app icon's crystal cloud (tools/make_app_icons.py), darker on a light theme.
-            Image.asset(
-              Theme.of(context).brightness == Brightness.dark
-                  ? 'assets/app_icons/mark_dark.png'
-                  : 'assets/app_icons/mark_light.png',
-              height: 24,
-              filterQuality: FilterQuality.high,
-            ),
+            // The app icon's crystal cloud, in the theme's teal (tools/make_app_icons.py).
+            Image.asset('assets/app_icons/mark.png', height: 24, filterQuality: FilterQuality.high),
             const SizedBox(width: 8),
             const Text('Kumo'),
           ]),
