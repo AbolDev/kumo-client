@@ -1989,7 +1989,7 @@ class AppState extends ChangeNotifier {
           : <String, String>{};
       final viaXray = chosen.length == 1 &&
           chosen.first.canXray &&
-          (chosen.first.needsXray || net.core == 'xray');
+          (chosen.first.needsXray || chosen.first.preferXray || net.core == 'xray');
       final xrayPort = viaXray ? 30000 + Random().nextInt(30000) : null;
       final parts = _standbyParts(chosen, routing, sets, xrayPort);
       // Something changed while this was being prepared.
@@ -2156,7 +2156,7 @@ class AppState extends ChangeNotifier {
       // core and can. A group of servers (automatic mode) is always sing-box.
       final viaXray = chosen.length == 1 &&
           chosen.first.canXray &&
-          (chosen.first.needsXray || net.core == 'xray');
+          (chosen.first.needsXray || chosen.first.preferXray || net.core == 'xray');
       // Xray's local port asks for a login of its own, so no other program here can use it.
       final xrayAuth = viaXray ? _newXrayAuth() : null;
       String config(int? xray) => buildSingBoxConfig(chosen,

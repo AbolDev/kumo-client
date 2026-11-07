@@ -141,6 +141,28 @@ Map<String, dynamic>? _xrayStream(
   }
   if (finalmask.isNotEmpty) stream['finalmask'] = finalmask;
 
+  // xs=: more of the server's own stream settings that no link parameter has a place for (the socket
+  // options, the timings of gRPC), kept as the export had them.
+  final xs = s('xs');
+  if (xs != null) {
+    try {
+      final extra = jsonDecode(xs);
+      if (extra is Map) {
+        final sockopt = extra['sockopt'];
+        if (sockopt is Map) stream['sockopt'] = _plainScalars(sockopt);
+        final grpc = extra['grpcSettings'];
+        final into = stream['grpcSettings'];
+        if (grpc is Map && into is Map<String, dynamic>) {
+          for (final k in const ['idle_timeout', 'health_check_timeout', 'permit_without_stream', 'initial_windows_size']) {
+            if (grpc.containsKey(k)) into[k] = _plainScalar(grpc[k]);
+          }
+        }
+      }
+    } catch (_) {
+      // unreadable extras only lose optional tuning
+    }
+  }
+
   if (security == 'tls') {
     stream['security'] = 'tls';
     final alpn = _alpn(q['alpn']);
@@ -177,6 +199,20 @@ Map<String, dynamic>? _xrayStream(
   }
   return stream;
 }
+
+/// Some exports write every number and flag as text ("250", "false"); Xray wants them as what they are.
+Object? _plainScalar(Object? v) {
+  if (v is Map) return _plainScalars(v);
+  if (v is List) return [for (final e in v) _plainScalar(e)];
+  if (v is String) {
+    if (v == 'true') return true;
+    if (v == 'false') return false;
+    if (RegExp(r'^-?\d{1,9}$').hasMatch(v)) return int.parse(v);
+  }
+  return v;
+}
+
+Map<String, dynamic> _plainScalars(Map m) => {for (final e in m.entries) '${e.key}': _plainScalar(e.value)};
 
 /// Shadowsocks over Xray (no plugins). Null for old ciphers Xray does not have.
 Map<String, dynamic>? _xrayShadowsocks(

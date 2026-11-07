@@ -28,6 +28,7 @@ class ProxyConfig {
     this.inner = const [],
     this.xrayNote = 'xhttp',
     this.ovpn,
+    this.preferXray = false,
   });
 
   final String link;
@@ -48,6 +49,10 @@ class ProxyConfig {
   /// An OpenVPN server: neither sing-box nor Xray carries it, the OpenVPN program does (it is
   /// started by the connection, see openvpn_runner.dart).
   final OvpnServer? ovpn;
+
+  /// The server's link carries a final mask (fragmenting of the TLS hello, noise) that only Xray can
+  /// apply: when this server is used on its own, Xray carries it even if sing-box could.
+  final bool preferXray;
 
   bool get isOpenVpn => ovpn != null;
 
@@ -77,6 +82,7 @@ class ProxyConfig {
         inner: inner,
         xrayNote: xrayNote,
         ovpn: ovpn,
+        preferXray: preferXray,
       )..latencyMs = latencyMs;
 
   /// Short text for lists, e.g. "vless" or "vless + xhttp".
@@ -92,7 +98,7 @@ class ProxyConfig {
       ? 'openvpn|${link.split('#').first}'
       : outbound.isEmpty
           ? 'xray|${link.split('#').first}'
-          : '$protocol|${jsonEncode([outbound, inner])}';
+          : '$protocol|${jsonEncode([outbound, inner])}${preferXray ? '|${jsonEncode(xrayOutbound!['streamSettings']?['finalmask'])}' : ''}';
 }
 
 /// Hides most of an address, keeping its start and its last part:
@@ -487,6 +493,7 @@ ProxyConfig? _make(
   Map<String, dynamic>? xray,
   List<Map<String, dynamic>> inner = const [],
   String xrayNote = 'xhttp',
+  bool preferXray = false,
 }) {
   if (host.isEmpty || port <= 0 || port > 65535) return null;
   if ((outbound == null || outbound.isEmpty) && xray == null) return null;
@@ -500,7 +507,21 @@ ProxyConfig? _make(
     xrayOutbound: xray,
     inner: inner,
     xrayNote: xrayNote,
+    // a final mask on a server that sing-box could carry too
+    preferXray: preferXray && xray != null && (outbound?.isNotEmpty ?? false),
   );
+}
+
+/// Whether the link asks for a final mask (`fm=` with a JSON object that is not empty).
+bool _hasFinalmask(Map<String, String?> q) {
+  final text = q['fm'] ?? q['finalmask'];
+  if (text == null || text.isEmpty) return false;
+  try {
+    final v = jsonDecode(text);
+    return v is Map && v.isNotEmpty;
+  } catch (_) {
+    return false;
+  }
 }
 
 ProxyConfig? _build(
@@ -597,6 +618,7 @@ ProxyConfig? _vless(String link) {
   return _make(link, 'vless', name, u.host, u.port,
       outbound: box,
       xray: xray,
+      preferXray: _hasFinalmask(q),
       xrayNote: _xrayNoteFor(type, q['headerType'], encryption: encryption));
 }
 
@@ -632,6 +654,8 @@ ProxyConfig? _vmess(String link) {
     if (_truthy('${j['allowInsecure'] ?? j['insecure'] ?? ''}')) 'insecure': '1',
     'pcs': '${j['pcs'] ?? j['pinSHA256'] ?? ''}',
     'ech': '${j['ech'] ?? ''}',
+    'fm': '${j['fm'] ?? ''}',
+    'xs': '${j['xs'] ?? ''}',
   };
   final xray = _xrayOutbound(
     'vmess',
@@ -685,7 +709,7 @@ ProxyConfig? _vmess(String link) {
     }
   }
   return _make(link, 'vmess', name, host, port,
-      outbound: box, xray: xray, xrayNote: _xrayNoteFor(type, '${j['type'] ?? ''}'));
+      outbound: box, xray: xray, preferXray: _hasFinalmask(q), xrayNote: _xrayNoteFor(type, '${j['type'] ?? ''}'));
 }
 
 ProxyConfig? _trojan(String link) {
@@ -733,7 +757,7 @@ ProxyConfig? _trojan(String link) {
     }
   }
   return _make(link, 'trojan', name, u.host, u.port,
-      outbound: box, xray: xray, xrayNote: _xrayNoteFor(type, q['headerType']));
+      outbound: box, xray: xray, preferXray: _hasFinalmask(q), xrayNote: _xrayNoteFor(type, q['headerType']));
 }
 
 ProxyConfig? _shadowsocks(String link) {

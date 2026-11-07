@@ -14,6 +14,15 @@ bool _t(Object? v) {
   return true;
 }
 
+/// A flag as an export may write it: a real true, or the text 	rue / 1 (the text alse is not a flag,
+/// whereas _t counts any text as true).
+bool _flag(Object? v) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  if (v is String) return const {'true', '1', 'yes', 'on'}.contains(v.trim().toLowerCase());
+  return false;
+}
+
 Map _m(Object? v) => v is Map ? v : const {};
 
 List _l(Object? v) => v is List ? v : const [];

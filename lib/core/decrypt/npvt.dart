@@ -112,7 +112,7 @@ Map<String, dynamic> _npvtStreamQuery(Map ss) {
   } else if (network == 'grpc') {
     final g = _m(ss['grpcSettings']);
     if (_t(g['serviceName'])) q['serviceName'] = g['serviceName'];
-    q['mode'] = _t(g['multiMode']) ? 'multi' : 'gun';
+    q['mode'] = _flag(g['multiMode']) ? 'multi' : 'gun';
     if (_t(g['authority'])) q['authority'] = g['authority'];
   } else if (network == 'kcp' || network == 'mkcp') {
     final k = _m(ss['kcpSettings']);
@@ -152,7 +152,7 @@ Map<String, dynamic> _npvtStreamQuery(Map ss) {
     if (_t(t['serverName'])) q['sni'] = t['serverName'];
     if (_t(t['fingerprint'])) q['fp'] = t['fingerprint'];
     if (_t(t['alpn'])) q['alpn'] = _npvtJoin(t['alpn']);
-    if (_t(t['allowInsecure'])) q['allowInsecure'] = '1';
+    if (_flag(t['allowInsecure'])) q['allowInsecure'] = '1';
     if (_t(t['echConfigList'])) q['ech'] = t['echConfigList'];
     final pin = _npvtJoin(_t(t['pinnedPeerCertSha256'])
             ? t['pinnedPeerCertSha256']
@@ -172,6 +172,22 @@ Map<String, dynamic> _npvtStreamQuery(Map ss) {
     if (_t(t['spiderX'])) q['spx'] = t['spiderX'];
     if (_t(t['mldsa65Verify'])) q['pqv'] = t['mldsa65Verify'];
   }
+  // What no link parameter has a place for is kept as it was: the final mask (fragmenting of the TLS
+  // hello, noise), the socket options and the timings of gRPC.
+  final fm = ss['finalmask'];
+  if (fm is Map && fm.isNotEmpty) q['fm'] = _goJson(fm);
+  final xs = <String, dynamic>{};
+  final sockopt = ss['sockopt'];
+  if (sockopt is Map && sockopt.isNotEmpty) xs['sockopt'] = sockopt;
+  if (network == 'grpc') {
+    final g = _m(ss['grpcSettings']);
+    final extra = {
+      for (final k in const ['idle_timeout', 'health_check_timeout', 'permit_without_stream', 'initial_windows_size'])
+        if (g.containsKey(k)) k: g[k],
+    };
+    if (extra.isNotEmpty) xs['grpcSettings'] = extra;
+  }
+  if (xs.isNotEmpty) q['xs'] = _goJson(xs);
   return q;
 }
 
@@ -226,7 +242,7 @@ List<String> _npvtVlessUris(Map settings, Map ss, String remarks) {
     final g = _m(ss['grpcSettings']);
     path = _str(g['serviceName']);
     host = _str(g['authority']);
-    kind = _t(g['multiMode']) ? 'multi' : 'gun';
+    kind = _flag(g['multiMode']) ? 'multi' : 'gun';
   } else if (network == 'httpupgrade') {
     final h = _m(ss['httpupgradeSettings']);
     path = _str(h['path']);
@@ -273,7 +289,7 @@ List<String> _npvtVmessUris(Map settings, Map ss, String remarks) {
     sni = _str(tm['serverName']);
     fp = _str(tm['fingerprint']);
     if (_t(tm['alpn'])) alpn = _npvtJoin(tm['alpn']);
-    insecure = _t(tm['allowInsecure']);
+    insecure = _flag(tm['allowInsecure']);
   }
   final links = <String>[];
   for (final v in _npvtServers(settings, 'vnext')) {
@@ -295,6 +311,8 @@ List<String> _npvtVmessUris(Map settings, Map ss, String remarks) {
         'fp': fp,
         'alpn': alpn,
         if (insecure) 'insecure': '1',
+        if (ss['finalmask'] is Map && (ss['finalmask'] as Map).isNotEmpty) 'fm': _goJson(ss['finalmask']),
+        if (ss['sockopt'] is Map && (ss['sockopt'] as Map).isNotEmpty) 'xs': _goJson({'sockopt': ss['sockopt']}),
       };
       links.add('vmess://${_b64Std(_goJson(obj))}');
     }

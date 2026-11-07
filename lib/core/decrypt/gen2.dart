@@ -155,9 +155,12 @@ void _gen2Group(Uint8List state, Uint8List block, int j) {
 }
 
 class _Gen2Opened {
-  _Gen2Opened(this.metadata, this.fields);
+  _Gen2Opened(this.metadata, this.fields, [this.skipped = 0]);
   final Uint8List metadata;
   final Map<int, Uint8List> fields;
+
+  /// Records of the file that did not open (they are told to the user, not dropped silently).
+  final int skipped;
 }
 
 _Gen2Opened _gen2Open(_Gen2Env env, String passphrase, NpvTables tables) {
@@ -201,6 +204,7 @@ _Gen2Opened _gen2Open(_Gen2Env env, String passphrase, NpvTables tables) {
   final count = _be(b, 36, 2);
   var off = 38;
   final fields = <int, Uint8List>{};
+  var skipped = 0;
   for (var n = 0; n < count; n++) {
     if (off + 6 > b.length) {
       throw ConfigDecryptError('npvs gen2: truncated NPF field header');
@@ -213,7 +217,10 @@ _Gen2Opened _gen2Open(_Gen2Env env, String passphrase, NpvTables tables) {
     final blob = b.sublist(off + 6, off + 6 + blobLen);
     off += 6 + blobLen;
     final ptLen = blob.length - 16;
-    if (ptLen < 0) continue;
+    if (ptLen < 0) {
+      skipped++;
+      continue;
+    }
     final key = _gen2Hkdf(dek, contentId,
         [...utf8.encode('NPV-fields-v1/field/'), ..._be16(seq)]);
     final aad = _concat([
@@ -228,7 +235,7 @@ _Gen2Opened _gen2Open(_Gen2Env env, String passphrase, NpvTables tables) {
       // the reference skips records that do not open
     }
   }
-  return _Gen2Opened(metadata, fields);
+  return _Gen2Opened(metadata, fields, skipped);
 }
 
 String _gen2FieldText(Uint8List raw) {
@@ -558,6 +565,7 @@ String decryptNpvsGen2(Uint8List data, String password, NpvTables tables) {
   final sb = StringBuffer();
   final msg = _gen2CreatorMessage(meta);
   if (msg.isNotEmpty) sb.write('// ---- creator message ----\n$msg\n\n');
+  if (opened.skipped > 0) sb.write('// WARNING: ${opened.skipped} record(s) of the file could not be opened and are not in the list\n');
   if (links.isNotEmpty) {
     sb.write(links.join('\n'));
   } else {

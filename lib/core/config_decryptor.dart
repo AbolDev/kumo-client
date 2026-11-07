@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:pointycastle/asn1.dart';
 import 'package:pointycastle/export.dart';
 
+import 'decrypt/fast_pbkdf2.dart';
+
 part 'decrypt/constants.dart';
 part 'decrypt/formats.dart';
 part 'decrypt/gen2.dart';
@@ -490,11 +492,8 @@ String _decodeSentinels(String s) {
   }
 }
 
-Uint8List _pbkdf2(String password, Uint8List salt, int iterations) {
-  final kdf = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-    ..init(Pbkdf2Parameters(salt, iterations, 32));
-  return kdf.process(Uint8List.fromList(utf8.encode(password)));
-}
+Uint8List _pbkdf2(String password, Uint8List salt, int iterations) =>
+    pbkdf2Sha256(utf8.encode(password), salt, iterations, 32);
 
 Uint8List _aesGcmOpen(
     Uint8List key, Uint8List iv, Uint8List sealed, Uint8List? aad) {
