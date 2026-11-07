@@ -17,6 +17,7 @@ import '../core/vpn_channel.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../l10n/extra.dart';
+import '../widgets/prompt_dialog.dart';
 import 'connections_page.dart';
 import 'logs_page.dart';
 import 'network_settings.dart';
@@ -111,32 +112,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<String?> _password(String title, {String? hint}) async {
-    final c = TextEditingController();
-    final r = await showDialog<String>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(title),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(
-              controller: c,
-              obscureText: true,
-              autofocus: true,
-              onSubmitted: (v) => Navigator.pop(dialog, v),
-              decoration: const InputDecoration(border: OutlineInputBorder())),
-          if (hint != null) ...[
-            const SizedBox(height: 12),
-            Text(hint, style: Theme.of(dialog).textTheme.bodySmall),
-          ],
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
-          FilledButton(
-              onPressed: () => Navigator.pop(dialog, c.text), child: const Text('OK')),
-        ],
-      ),
+    return showPrompt(
+      context,
+      icon: Icons.lock_outline,
+      title: title,
+      message: hint,
+      label: S.of(context).password,
+      secret: true,
     );
-    c.dispose();
-    return r;
   }
 
   /// Runs [job] behind a spinner that blocks the screen until it is done.

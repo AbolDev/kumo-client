@@ -10,8 +10,10 @@ import '../core/proxy_config.dart';
 import '../core/singbox_config.dart' show parseExtraJson;
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
+import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
+import '../widgets/prompt_dialog.dart';
 import 'app_routing_page.dart';
 import 'routing_rules_page.dart';
 import 'share_sheet.dart';
@@ -366,7 +368,7 @@ Future<String?> editJson(BuildContext context, String title, String description,
           ]),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
+          TextButton(onPressed: () => Navigator.pop(dialog), child: Text(S.of(dialog).cancel)),
           FilledButton(
             onPressed: () {
               final text = controller.text.trim();
@@ -376,7 +378,7 @@ Future<String?> editJson(BuildContext context, String title, String description,
               }
               Navigator.pop(dialog, text);
             },
-            child: const Text('OK'),
+            child: Text(S.of(dialog).ok),
           ),
         ],
       ),
@@ -385,28 +387,22 @@ Future<String?> editJson(BuildContext context, String title, String description,
 }
 
 Future<void> _editTimeout(BuildContext context, AppState state) async {
-  final controller = TextEditingController(text: '${state.net.connectTimeout}');
-  final seconds = await showDialog<int>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(tr(dialog, 'connectTimeout')),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(hintText: '0 – 120', border: OutlineInputBorder()),
-        onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v)),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
-        FilledButton(
-            onPressed: () => Navigator.pop(dialog, int.tryParse(controller.text)),
-            child: const Text('OK')),
-      ],
-    ),
+  final invalid = tr(context, 'invalidNumber');
+  final value = await showPrompt(
+    context,
+    icon: Icons.timer_outlined,
+    title: tr(context, 'connectTimeout'),
+    label: tr(context, 'connectTimeout'),
+    helper: '0 – 120',
+    initial: '${state.net.connectTimeout}',
+    keyboard: TextInputType.number,
+    check: (v) async {
+      final n = int.tryParse(v.trim());
+      return n == null || n < 0 || n > 120 ? invalid : null;
+    },
   );
-  controller.dispose();
-  if (seconds == null || seconds < 0 || seconds > 120) return;
+  final seconds = int.tryParse(value?.trim() ?? '');
+  if (seconds == null) return;
   await state.updateNet((o) => o.connectTimeout = seconds);
 }
 
@@ -492,32 +488,22 @@ class _LanPasswordState extends State<_LanPassword> {
 }
 
 Future<void> _editLanPort(BuildContext context, AppState state) async {
-  final controller = TextEditingController(text: '${state.net.lanPort}');
-  final port = await showDialog<int>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(tr(dialog, 'lanPort')),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(border: OutlineInputBorder()),
-        onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v)),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
-        FilledButton(
-            onPressed: () => Navigator.pop(dialog, int.tryParse(controller.text)),
-            child: const Text('OK')),
-      ],
-    ),
+  final invalid = tr(context, 'lanPortInvalid');
+  final value = await showPrompt(
+    context,
+    icon: Icons.lan_outlined,
+    title: tr(context, 'lanPort'),
+    label: tr(context, 'lanPort'),
+    helper: '1024 – 65535',
+    initial: '${state.net.lanPort}',
+    keyboard: TextInputType.number,
+    check: (v) async {
+      final n = int.tryParse(v.trim());
+      return n == null || n < 1024 || n > 65535 || n == state.net.proxyPort ? invalid : null;
+    },
   );
-  controller.dispose();
+  final port = int.tryParse(value?.trim() ?? '');
   if (port == null) return;
-  if (port < 1024 || port > 65535 || port == state.net.proxyPort) {
-    if (context.mounted) toast(context, tr(context, 'lanPortInvalid'));
-    return;
-  }
   await state.updateNet((o) => o.lanPort = port);
 }
 
@@ -645,8 +631,8 @@ Future<void> _editProxyLogin(BuildContext context, AppState state) async {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialog, false), child: const Text('✕')),
-          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: const Text('OK')),
+          TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(S.of(dialog).cancel)),
+          FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(S.of(dialog).ok)),
         ],
       ),
     ),
@@ -663,73 +649,49 @@ Future<void> _editProxyLogin(BuildContext context, AppState state) async {
   });
 }
 Future<void> _editPort(BuildContext context, AppState state) async {
-  final controller = TextEditingController(text: '${state.net.proxyPort}');
-  final port = await showDialog<int>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(tr(dialog, 'proxyPort')),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(border: OutlineInputBorder()),
-        onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v)),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
-        FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialog, int.tryParse(controller.text)),
-            child: const Text('OK')),
-      ],
-    ),
+  final invalid = tr(context, 'invalidPort');
+  final sameAsLan = tr(context, 'lanPortInvalid');
+  final busy = tr(context, 'portBusy');
+  final value = await showPrompt(
+    context,
+    icon: Icons.settings_ethernet,
+    title: tr(context, 'proxyPort'),
+    label: tr(context, 'proxyPort'),
+    helper: '1024 – 65535',
+    initial: '${state.net.proxyPort}',
+    keyboard: TextInputType.number,
+    check: (v) async {
+      final n = int.tryParse(v.trim());
+      if (n == null || n < 1024 || n > 65535) return invalid;
+      // The port of the shared connection (LAN) is another one; and a port that something else
+      // holds would stop the proxy from starting with an unclear error.
+      if (state.net.shareLan && n == state.net.lanPort) return sameAsLan;
+      if (n != state.net.proxyPort && !await _portFree(n)) return busy;
+      return null;
+    },
   );
-  controller.dispose();
+  final port = int.tryParse(value?.trim() ?? '');
   if (port == null) return;
-  if (port < 1024 || port > 65535) {
-    if (context.mounted) toast(context, tr(context, 'invalidPort'));
-    return;
-  }
-  // The port of the shared connection (LAN) is another one; and a port that something else
-  // holds would stop the proxy from starting with an unclear error.
-  if (state.net.shareLan && port == state.net.lanPort) {
-    if (context.mounted) toast(context, tr(context, 'lanPortInvalid'));
-    return;
-  }
-  if (port != state.net.proxyPort && !await _portFree(port)) {
-    if (context.mounted) toast(context, tr(context, 'portBusy'));
-    return;
-  }
   await state.updateNet((o) => o.proxyPort = port);
 }
 
 Future<void> _editMtu(BuildContext context, AppState state) async {
-  final controller = TextEditingController(text: '${state.net.mtu}');
-  final mtu = await showDialog<int>(
-    context: context,
-    builder: (dialog) => AlertDialog(
-      title: Text(tr(dialog, 'mtu')),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-            hintText: '1280 – 9000', border: OutlineInputBorder()),
-        onSubmitted: (v) => Navigator.pop(dialog, int.tryParse(v)),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(dialog), child: const Text('✕')),
-        FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialog, int.tryParse(controller.text)),
-            child: const Text('OK')),
-      ],
-    ),
+  final invalid = tr(context, 'invalidNumber');
+  final value = await showPrompt(
+    context,
+    icon: Icons.straighten,
+    title: tr(context, 'mtu'),
+    label: tr(context, 'mtu'),
+    helper: '1280 – 9000',
+    initial: '${state.net.mtu}',
+    keyboard: TextInputType.number,
+    check: (v) async {
+      final n = int.tryParse(v.trim());
+      return n == null || n < 1280 || n > 9000 ? invalid : null;
+    },
   );
-  controller.dispose();
-  if (mtu == null || mtu < 1280 || mtu > 9000) return;
+  final mtu = int.tryParse(value?.trim() ?? '');
+  if (mtu == null) return;
   await state.updateNet((o) => o.mtu = mtu);
 }
 
@@ -752,7 +714,7 @@ Future<void> _leakCheck(BuildContext context, AppState state) async {
       content: SelectableText(text),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(dialog), child: const Text('OK')),
+            onPressed: () => Navigator.pop(dialog), child: Text(S.of(dialog).ok)),
       ],
     ),
   );

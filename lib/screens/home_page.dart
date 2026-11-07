@@ -26,6 +26,7 @@ import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
 import 'free_connections_page.dart';
 import '../widgets/ovpn_login.dart';
+import '../widgets/prompt_dialog.dart';
 import 'warp_page.dart';
 import 'edit_config_page.dart';
 import '../core/platform.dart';
@@ -439,22 +440,50 @@ class HomePage extends StatelessWidget {
       toast(context, t.unsupportedFile);
       return;
     }
-    var password = '';
-    if (kind == ProtectKind.password) {
-      final entered = await _askPassword(context);
-      if (entered == null) return;
-      password = entered;
-    }
+    String? text;
+    var failed = false;
     try {
       final tables = await _loadTables();
-      final text = await compute(_decrypt, (bytes, name, password, tables));
-      if (!context.mounted) return;
-      await _import(context, text);
+      if (kind == ProtectKind.password) {
+        if (!context.mounted) return;
+        final wrong = tr(context, 'wrongPassword');
+        // The password is tried inside the dialog: a wrong one is told under the field and it can be
+        // typed again, instead of the dialog closing with an error.
+        final entered = await showPrompt(
+          context,
+          icon: Icons.lock_outline,
+          title: t.password,
+          message: tr(context, 'lockedFileMsg', {'name': name}),
+          label: t.password,
+          secret: true,
+          confirm: tr(context, 'unlockAction'),
+          check: (password) async {
+            try {
+              text = await compute(_decrypt, (bytes, name, password, tables));
+              return null;
+            } catch (e) {
+              if ('$e'.toLowerCase().contains('wrong pass')) return wrong;
+              state.log('Could not open $name: $e');
+              failed = true;
+              return null;
+            }
+          },
+        );
+        if (entered == null) return;
+      } else {
+        text = await compute(_decrypt, (bytes, name, '', tables));
+      }
     } catch (e) {
       // The raw error is for the log; the screen gets a plain sentence.
       state.log('Could not open $name: $e');
-      if (context.mounted) toast(context, tr(context, 'decryptFailed'));
+      failed = true;
     }
+    if (!context.mounted) return;
+    if (failed || text == null) {
+      toast(context, tr(context, 'decryptFailed'));
+      return;
+    }
+    await _import(context, text!);
   }
 
   Future<NpvTables> _loadTables() async {
@@ -468,33 +497,6 @@ class HomePage extends StatelessWidget {
         await load('xor.bin'),
         gen2Z: await load('gen2_tables.bin.z'),
         crypt5Json: await load('crypt5-keys.json'));
-  }
-
-  Future<String?> _askPassword(BuildContext context) {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (dialog) {
-        final t = S.of(dialog);
-        return AlertDialog(
-          title: Text(t.password),
-          content: TextField(
-            controller: controller,
-            obscureText: true,
-            autofocus: true,
-            onSubmitted: (v) => Navigator.pop(dialog, v),
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialog), child: Text(t.cancel)),
-            FilledButton(
-                onPressed: () => Navigator.pop(dialog, controller.text),
-                child: Text(t.ok)),
-          ],
-        );
-      },
-    ).whenComplete(controller.dispose);
   }
 
   Future<void> _scan(BuildContext context) async {
@@ -668,7 +670,8 @@ class _ConnectCard extends StatelessWidget {
             Semantics(
               liveRegion: true,
               child: Card(
-                margin: const EdgeInsets.only(bottom: 8),
+                // As far from the status above as from the server card below (8 here and 8 under it).
+                margin: const EdgeInsets.only(top: 16, bottom: 8),
                 color: scheme.tertiaryContainer,
                 child: ListTile(
                   dense: true,

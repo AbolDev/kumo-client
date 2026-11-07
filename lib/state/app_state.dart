@@ -1406,8 +1406,7 @@ class AppState extends ChangeNotifier {
     if (real && !_real) return;
     final key = 'ping-${g.id}';
     final gen = _begin(key);
-    // OpenVPN servers are not tested (see realDelay).
-    final list = g.configs.where((c) => !c.isOpenVpn).toList();
+    final list = g.configs.toList();
     // The old pings of this list go as the test starts, so the numbers on screen are all new.
     for (final c in list) {
       c.latencyMs = null;

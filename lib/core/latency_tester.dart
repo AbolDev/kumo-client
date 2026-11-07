@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'dart:convert';
 
+import 'desktop_vpn.dart' show DesktopVpn;
+import 'ovpn/ovpn_probe.dart';
 import 'proxy_config.dart';
 import 'singbox_config.dart' show XrayAuth, buildXrayConfig;
 import 'vpn_channel.dart';
@@ -115,8 +117,13 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) async {
 /// place: a server that fails the real delay has failed it.
 Future<int> realDelay(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 8)}) async {
-  // An OpenVPN server is not measured by a throw-away core: the answer is "skipped".
-  if (c.isOpenVpn) return -2;
+  // An OpenVPN server is measured by the OpenVPN program itself: the time until the handshake is done.
+  if (c.isOpenVpn) {
+    if (!Platform.isWindows) return -2;
+    return ovpnHandshake(c.ovpn!,
+        binary: '${DesktopVpn.instance.openvpnDir}\\openvpn.exe',
+        timeout: timeout < const Duration(seconds: 15) ? const Duration(seconds: 15) : timeout);
+  }
   if (!c.canSingBox) {
     if (!c.canXray) return -1;
     return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
@@ -361,8 +368,8 @@ final _realWorkers = Platform.isAndroid ? 4 : 6;
 /// DNS query on top of its own ping.
 Future<int> tcpLatency(ProxyConfig c,
     {Duration timeout = const Duration(seconds: 3)}) async {
-  // Most OpenVPN servers listen on UDP, where a TCP connect says nothing: skipped.
-  if (c.isOpenVpn) return -2;
+  // An OpenVPN server on UDP is asked with the first packet of the protocol instead of a TCP connect.
+  if (c.isOpenVpn) return ovpnPing(c.ovpn!, timeout: timeout);
   try {
     final address = InternetAddress.tryParse(c.host) ??
         (await InternetAddress.lookup(c.host).timeout(timeout)).first;
