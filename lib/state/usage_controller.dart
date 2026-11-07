@@ -42,6 +42,9 @@ class UsageController extends ChangeNotifier {
 
   bool get enabled => reporter.enabled;
 
+  /// The code that is sent in place of the device id (shown in Settings).
+  Future<String> code() => reporter.deviceId();
+
   /// Loads the choice and starts the background work. Returns at once.
   Future<void> startup() async {
     await reporter.load();

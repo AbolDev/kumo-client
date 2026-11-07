@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../core/build_flavor.dart';
 import '../core/backup.dart';
@@ -344,6 +345,33 @@ class _SettingsPageState extends State<SettingsPage> {
                 onChanged: (v) => state.usage.setEnabled(v),
                 title: Text(tr(context, 'usageStats')),
                 subtitle: Text(tr(context, 'usageStatsDesc')),
+              ),
+              FutureBuilder<String>(
+                future: state.usage.code(),
+                builder: (context, snap) {
+                  final id = snap.data;
+                  if (id == null) return const SizedBox.shrink();
+                  return ListTile(
+                    leading: const Icon(Icons.fingerprint),
+                    title: Text(tr(context, 'usageId')),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(tr(context, 'usageIdDesc')),
+                        const SizedBox(height: 4),
+                        Directionality(
+                          textDirection: TextDirection.ltr,
+                          child: SelectableText(id,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: id));
+                      if (context.mounted) toast(context, t.copied);
+                    },
+                  );
+                },
               ),
               if (Platform.isAndroid)
               ListTile(
