@@ -27,7 +27,11 @@ OutputDir=..\dist
 OutputBaseFilename=kumo-windows-{#Arch}-setup
 SetupIconFile=..\windows\runner\resources\app_icon.ico
 UninstallDisplayIcon={app}\kumo.exe
+#ifdef Fast
+Compression=lzma2/fast
+#else
 Compression=lzma2/max
+#endif
 SolidCompression=yes
 WizardStyle=modern
 ; Kumo and its cores are closed before their files are replaced or removed.

@@ -1,4 +1,4 @@
-﻿name: Build APK
+name: Build APK
 
 on:
   workflow_dispatch:
@@ -323,29 +323,43 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
+      # Flutter is cloned and its Dart SDK and engine files are downloaded on the first run only; after
+      # that the whole folder comes from the cache (about a minute faster).
+      - name: Cache Flutter
+        id: flutter-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~\flutter
+          key: flutter-3.44.9-windows-arm64-v1
+
       - name: Flutter from source
         shell: pwsh
         run: |
-          git clone --depth 1 --branch 3.44.9 https://github.com/flutter/flutter.git "$env:USERPROFILE\flutter"
+          if (-not (Test-Path "$env:USERPROFILE\flutter\bin\flutter.bat")) {
+            git clone --depth 1 --branch 3.44.9 https://github.com/flutter/flutter.git "$env:USERPROFILE\flutter"
+          }
           "$env:USERPROFILE\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           & "$env:USERPROFILE\flutter\bin\flutter.bat" --version
 
+      - name: Cache packages
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~\AppData\Local\Pub\Cache
+          key: pub-windows-arm64-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-windows-arm64-
+
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
-      - run: flutter doctor -v
-        continue-on-error: true
 
       - run: ./tools/fetch_windows_core.ps1 -Arch arm64
 
+      # Flutter builds Windows for the machine it runs on (the --target-platform flag is refused for
+      # Windows), so this is a plain build on the ARM64 runner.
       - name: Build
         shell: pwsh
         run: |
-          flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-arm64 --no-pub --target-platform windows-arm64
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host 'The target flag was refused; building for this machine'
-            flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-arm64 --no-pub
-            if ($LASTEXITCODE -ne 0) { throw 'flutter build failed' }
-          }
+          flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-arm64 --no-pub
+          if ($LASTEXITCODE -ne 0) { throw 'flutter build failed' }
           Get-ChildItem build\windows -Directory | Select-Object Name
 
       # Finds the program folder and refuses to go on unless kumo.exe is an ARM64 binary.
@@ -371,7 +385,8 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           $version = ((Get-Content pubspec.yaml | Select-String '^version:').Line -split '[: +]+')[1]
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=arm64" installer\kumo.iss
+          # /DFast: quicker compression (this runner is slow at it); the file is a few percent larger.
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=arm64" /DFast=1 installer\kumo.iss
           if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
