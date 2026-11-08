@@ -258,6 +258,7 @@ class _KumoAppState extends State<KumoApp>
   /// looked at every two seconds (a second copy of the program leaves it in the data folder).
   void _listenExternal() {
     VpnChannel.onExternal(_pullExternal);
+    if (Platform.isMacOS) MacExternal.onExternal(_pullExternal);
     if (isDesktop) {
       _externalTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pullExternal());
     }
@@ -274,6 +275,7 @@ class _KumoAppState extends State<KumoApp>
         got.addAll(_startupExternal);
         _startupExternal = const [];
         got.addAll(await ExternalInbox.take(DesktopVpn.instance.dataDir));
+        if (Platform.isMacOS) got.addAll(await MacExternal.take());
       }
       if (got.isEmpty) return;
       _externalQueue.addAll(got);

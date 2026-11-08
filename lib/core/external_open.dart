@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show MethodChannel;
+
 import 'sub_formats.dart' show extractSubscriptionLinks;
 import 'sub_surge.dart' show subscriptionDeepLink;
 
@@ -24,6 +26,30 @@ ExternalSummary? summarizeExternal(String text) {
   }
   final n = extractSubscriptionLinks(t).length;
   return n == 0 ? null : (host: null, servers: n);
+}
+
+/// macOS: the system hands links and files to the app through its delegate (macos/Runner/AppDelegate.swift),
+/// which keeps them until they are asked for here.
+class MacExternal {
+  static const _channel = MethodChannel('kumo/external');
+
+  /// What was handed over since the last call.
+  static Future<List<String>> take() async {
+    try {
+      final items = await _channel.invokeListMethod<String>('take');
+      return (items ?? const <String>[]).take(ExternalInbox.maxItems).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Called when something is handed over while the app runs.
+  static void onExternal(void Function() callback) {
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'external') callback();
+      return null;
+    });
+  }
 }
 
 /// How programs on a computer hand things to the running Kumo: a copy started with a link or a file

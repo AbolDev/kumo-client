@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Source of docs/images/banner.png (rendered by docs/src/render.ps1 with headless Chrome at 2x).
+<!-- Source of docs/images/banner.png and banner-dark.png (#banner-dark) (rendered by docs/src/render.ps1 with headless Chrome at 2x).
      The screenshots live in docs/screenshots (not committed); their server names and hosts are
      already masked. Only the phone's status bar is redrawn here. -->
 <html>
@@ -81,7 +81,29 @@ body { font-family: 'Roboto', 'Segoe UI', sans-serif; overflow: hidden; -webkit-
 
 .only-banner { display: none; }
 body.banner-mode .only-banner { display: block; }
-</style>
+
+/* ------------------------------------------------------------ dark (#banner-dark) */
+body.dark .window { background: #0e1513; box-shadow: 0 0 0 1.5px rgba(160, 230, 210, .14); }
+body.dark .window-wrap { filter: drop-shadow(0 22px 30px rgba(0, 0, 0, .45)) drop-shadow(0 6px 10px rgba(0, 0, 0, .3)); }
+body.dark .phone .screen { background: #000; }
+body.dark .phone { background: linear-gradient(135deg, #5c6563 0%, #23292a 18%, #4a5352 38%, #1a1f20 58%, #3f4847 80%, #1e2425 100%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.22) inset, 0 0 0 1.5px rgba(0,0,0,.7), 0 60px 100px rgba(0, 0, 0, .6), 0 18px 34px rgba(0,0,0,.4); }
+body.dark .phone::before, body.dark .phone::after { background: linear-gradient(90deg, #1e2425, #4f5958 50%, #1e2425); }
+body.dark .phone::before { box-shadow: 0 86px 0 #2f3736; }
+body.dark .sb { background: rgba(24, 45, 28, .94); }
+body.dark .sb .time { color: #eef2ef; }
+body.dark .banner { background:
+    radial-gradient(760px 520px at 8% 12%, rgba(20, 120, 100, .45), rgba(20,120,100,0) 70%),
+    radial-gradient(900px 640px at 96% 96%, rgba(80, 60, 160, .35), rgba(80,60,160,0) 72%),
+    radial-gradient(700px 500px at 62% 4%, rgba(20, 100, 120, .3), rgba(20,100,120,0) 70%),
+    linear-gradient(125deg, #07201c 0%, #0a1716 48%, #121126 100%); }
+body.dark .banner .rings { border-color: rgba(80, 210, 170, .14);
+  box-shadow: 0 0 0 100px rgba(80,210,170,.03), 0 0 0 210px rgba(80,210,170,.025), 0 0 0 330px rgba(140,130,255,.025); }
+body.dark .banner .icon { box-shadow: 0 22px 44px rgba(0, 0, 0, .5), 0 0 0 1.5px rgba(140, 230, 210, .22); }
+body.dark .banner h1 { color: #eef6f3; }
+body.dark .banner .tag { color: #c4d1cd; }
+body.dark .banner .tag2 { color: #8ea19b; }
+body.dark .banner .pill { border-color: #3cc79a; color: #7fe3bd; background: rgba(10, 40, 34, .5); }</style>
 </head>
 <body>
 
@@ -126,8 +148,14 @@ body.banner-mode .only-banner { display: block; }
 </div>
 
 <script>
+  const dark = location.hash.includes('dark');
   document.body.classList.add('banner-mode');
-  document.getElementById('banner-slot').appendChild(document.getElementById('devices').content.cloneNode(true));
-</script>
-</body>
+  if (dark) document.body.classList.add('dark');
+  const tpl = document.getElementById('devices');
+  let html = tpl.innerHTML;
+  if (dark) html = html.replaceAll('-light.', '-dark.').replaceAll('#d9efde', '#182d1c').replaceAll('#262b28', '#e6ebe7')
+    .replace('color:#fff;', 'color:#182d1c;').replace('mix-blend-mode:multiply;', 'display:none;');
+  tpl.innerHTML = html;
+  document.getElementById('banner-slot').appendChild(tpl.content.cloneNode(true));
+</script></body>
 </html>

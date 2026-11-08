@@ -18,6 +18,50 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
+	<!-- Links of servers and subscriptions open with Kumo, which asks before it adds anything. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Kumo link</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vless</string>
+				<string>vmess</string>
+				<string>trojan</string>
+				<string>ss</string>
+				<string>hysteria</string>
+				<string>hysteria2</string>
+				<string>hy2</string>
+				<string>tuic</string>
+				<string>anytls</string>
+				<string>wireguard</string>
+				<string>clash</string>
+				<string>sing-box</string>
+				<string>hiddify</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Server list</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>ovpn</string>
+				<string>json</string>
+				<string>yaml</string>
+				<string>yml</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>

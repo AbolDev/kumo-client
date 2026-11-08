@@ -16,3 +16,4 @@ function Render($mode, $w, $h, $file, $transparent) {
   & $browser @args | Out-Null
 }
 Render 'banner' 1774 887 'banner.png' $false
+Render 'banner-dark' 1774 887 'banner-dark.png' $false
