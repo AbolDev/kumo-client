@@ -137,6 +137,12 @@ class _WarpPageState extends State<WarpPage> {
                       : null,
                   onTap: warp.busy || warp.scanning ? null : warp.scan,
                 ),
+                ListTile(
+                  leading: const Icon(Icons.travel_explore),
+                  title: Text(tr(context, 'warpScanWide')),
+                  subtitle: Text(tr(context, 'warpScanWideDesc')),
+                  onTap: warp.busy || warp.scanning ? null : warp.scanWide,
+                ),
                 if (warp.scanFailed)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

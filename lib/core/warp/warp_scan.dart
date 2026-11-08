@@ -1,5 +1,31 @@
 import 'dart:math';
 
+import 'warp_profile.dart' show parseCidrV4;
+
+/// The most addresses the wider scan tries.
+const warpWideCount = 24;
+
+/// [count] different addresses drawn from [ranges] ("a.b.c.d/n"), taking turns between the ranges so
+/// that each one is looked at; the network and broadcast addresses of a range are left out. Ranges
+/// that do not read are skipped.
+List<String> pickScanAddresses(List<String> ranges, int count, Random random) {
+  final parsed = [for (final r in ranges) parseCidrV4(r)].whereType<({int base, int bits})>().toList();
+  if (parsed.isEmpty || count <= 0) return const [];
+  final out = <String>{};
+  var guard = 0;
+  while (out.length < count && guard++ < count * 40) {
+    final r = parsed[out.length % parsed.length];
+    final size = 1 << (32 - r.bits);
+    final mask = (0xFFFFFFFF << (32 - r.bits)) & 0xFFFFFFFF;
+    final base = r.base & mask;
+    // A range of one or two addresses has no "network" or "broadcast" to leave out.
+    final low = size > 2 ? 1 : 0, high = size > 2 ? size - 2 : size - 1;
+    final n = base + low + random.nextInt(high - low + 1);
+    out.add('${(n >> 24) & 255}.${(n >> 16) & 255}.${(n >> 8) & 255}.${n & 255}');
+  }
+  return out.toList();
+}
+
 /// One way of reaching WARP that answered: its place in the list of ways ([index]) and the real delay.
 class WarpScanItem {
   const WarpScanItem(this.index, this.ms);

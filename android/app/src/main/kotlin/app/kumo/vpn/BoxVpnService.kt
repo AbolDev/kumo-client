@@ -169,8 +169,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 return START_NOT_STICKY
             }
         }
-        // The Connect button of the "not connected" notification repeats the last connection.
-        val intent = if (startIntent?.action == ACTION_CONNECT) {
+        // The Connect button of the "not connected" notification repeats the last connection, and so
+        // does the system when it starts the service itself: "Always-on VPN" (after the phone starts
+        // and whenever the connection is lost) and its "Block connections without VPN" setting.
+        val intent = if (startIntent?.action == ACTION_CONNECT || startIntent?.action == VpnService.SERVICE_INTERFACE) {
             runCatching { showForeground() }
             VpnControl.lastStartIntent(this) ?: run {
                 stopForegroundAndSelf()

@@ -130,6 +130,29 @@ bool isCloudflareV4(String ip) {
   return false;
 }
 
+/// The ranges the wider scan draws endpoints from, and the ports it tries, when the profile names
+/// none (the profile may carry a "scan" part with its own).
+const defaultScanRanges = [
+  '162.159.192.0/24',
+  '162.159.193.0/24',
+  '162.159.195.0/24',
+  '188.114.96.0/24',
+  '188.114.97.0/24',
+  '188.114.98.0/24',
+  '188.114.99.0/24',
+];
+const defaultScanPorts = [2408, 500, 1701, 4500];
+
+/// "a.b.c.d/n" inside Cloudflare's ranges (n from 16 to 32), or null.
+({int base, int bits})? parseCidrV4(String text) {
+  final parts = text.split('/');
+  if (parts.length != 2) return null;
+  final base = _v4(parts[0]);
+  final bits = int.tryParse(parts[1]);
+  if (base == null || bits == null || bits < 16 || bits > 32) return null;
+  return (base: base, bits: bits);
+}
+
 class WarpEndpoint {
   const WarpEndpoint(this.ip, this.ports);
   final String ip;
@@ -173,7 +196,14 @@ class WarpProfile {
     required this.apiIps,
     required this.endpoints,
     required this.methods,
+    this.scanRanges = defaultScanRanges,
+    this.scanPorts = defaultScanPorts,
   });
+
+  /// Where the wider scan looks for endpoints besides the ones above (ranges of Cloudflare) and on
+  /// which ports.
+  final List<String> scanRanges;
+  final List<int> scanPorts;
 
   final int version;
   final DateTime issuedAt;
@@ -308,6 +338,23 @@ WarpProfile parseWarpProfile(String text) {
     endpoints.add(WarpEndpoint(ip, [for (final p in ports) _int(p, 'port', 1, 65535)]));
   }
 
+  // The ranges of the wider scan: optional, and Cloudflare's only.
+  var scanRanges = defaultScanRanges;
+  var scanPorts = defaultScanPorts;
+  final scan = j['scan'];
+  if (scan != null) {
+    if (scan is! Map<String, dynamic>) _fail('scan is not valid');
+    final ranges = scan['ranges'];
+    if (ranges is! List || ranges.isEmpty || ranges.length > 16) _fail('scan.ranges is not valid');
+    scanRanges = [
+      for (final r in ranges)
+        if (r is String && parseCidrV4(r) != null && isCloudflareV4(r.split('/').first)) r else _fail('scan.ranges holds a range outside Cloudflare'),
+    ];
+    final ports = scan['ports'];
+    if (ports is! List || ports.isEmpty || ports.length > 8) _fail('scan.ports is not valid');
+    scanPorts = [for (final p in ports) _int(p, 'scan port', 1, 65535)];
+  }
+
   final ms = j['methods'];
   if (ms is! List || ms.isEmpty || ms.length > 20) _fail('methods is not valid');
   final methods = <WarpMethod>[];
@@ -372,5 +419,7 @@ WarpProfile parseWarpProfile(String text) {
     apiIps: apiIps,
     endpoints: endpoints,
     methods: methods,
+    scanRanges: scanRanges,
+    scanPorts: scanPorts,
   );
 }

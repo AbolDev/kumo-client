@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' show Random;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -51,6 +52,10 @@ class WarpController extends ChangeNotifier {
   /// default; the second account is made when the switch is first turned on.
   WarpAccount? account2;
   bool inWarp = false;
+
+  /// An endpoint found by the wider scan (an address of Cloudflare's ranges that is not in the
+  /// profile) that is used instead of the profile's own list; null when the profile's list is used.
+  ({String method, String ip, int port})? custom;
 
   /// Whether WARP is on: its server is in the list. Off by default; turning it off takes the server
   /// out of the list but keeps the account, so that turning it on again needs no new sign-up.
@@ -135,6 +140,14 @@ class WarpController extends ChangeNotifier {
         account = WarpAccount.fromJson(j['account']);
         account2 = WarpAccount.fromJson(j['account2']);
         inWarp = j['inWarp'] == true && account2 != null;
+        final cu = j['custom'];
+        if (cu is Map && cu['method'] is String && cu['ip'] is String && cu['port'] is int) {
+          final port = cu['port'] as int;
+          // Only an address of Cloudflare is ever used.
+          if (isCloudflareV4(cu['ip'] as String) && port >= 1 && port <= 65535) {
+            custom = (method: cu['method'] as String, ip: cu['ip'] as String, port: port);
+          }
+        }
         // Saved before the switch existed: an account that was made is in use.
         enabled = j['enabled'] is bool ? j['enabled'] as bool : account != null;
         choice = j['choice'] is int ? j['choice'] as int : 0;
@@ -155,6 +168,7 @@ class WarpController extends ChangeNotifier {
         'account': account?.toJson(),
         'account2': account2?.toJson(),
         'inWarp': inWarp,
+        if (custom != null) 'custom': {'method': custom!.method, 'ip': custom!.ip, 'port': custom!.port},
         'enabled': enabled,
         'choice': choice,
         'link': link,
@@ -180,7 +194,14 @@ class WarpController extends ChangeNotifier {
     final useTwo = inWarp && account2 != null;
     final list = useTwo ? _plain(all) : all;
     if (list.isEmpty) throw StateError('no plain WireGuard method in the profile for Warp-in-Warp');
-    final c = list[choice % list.length];
+    final cu = custom;
+    // An address found by the wider scan: the method it was found with (or the best one) and that address.
+    final c = cu == null
+        ? list[choice % list.length]
+        : WarpCombo(
+            list.map((x) => x.method).where((m) => m.id == cu.method).firstOrNull ?? list.first.method,
+            WarpEndpoint(cu.ip, [cu.port]),
+            0);
     final text = warpLink(account!, c.method, c.endpoint, c.portIndex);
     var config = parseLink(text);
     if (config == null) return null;
@@ -303,6 +324,7 @@ class WarpController extends ChangeNotifier {
     if (account == null || busy) return;
     final all = await combos();
     if (all.isEmpty) return;
+    custom = null;
     choice = (choice + 1) % all.length;
     error = null;
     try {
@@ -367,7 +389,66 @@ class WarpController extends ChangeNotifier {
       if (found.isEmpty) {
         scanFailed = true;
       } else {
+        custom = null;
         choice = found.first.index;
+        await _apply();
+        await _state.reconnectIfConnected();
+      }
+    } catch (e) {
+      error = '$e'.replaceFirst('Bad state: ', '');
+    } finally {
+      scanning = false;
+      notifyListeners();
+    }
+  }
+
+  /// The wider scan: besides the profile's own list, tries addresses drawn from the ranges of
+  /// Cloudflare that the profile names (or the built-in ones) with the method now in use, and switches
+  /// to the fastest that answers. Nothing changes when none did.
+  Future<void> scanWide({Future<int> Function(ProxyConfig)? delay, Random? random}) async {
+    final p = profile;
+    if (account == null || busy || scanning || p == null) return;
+    final every = await combos();
+    final all = inWarp && account2 != null ? _plain(every) : every;
+    if (all.isEmpty) return;
+    final method = (custom == null
+            ? all[choice % all.length].method
+            : all.map((c) => c.method).where((m) => m.id == custom!.method).firstOrNull ?? all.first.method);
+    final addresses = pickScanAddresses(p.scanRanges, warpWideCount, random ?? Random());
+    if (addresses.isEmpty) return;
+    final ports = p.scanPorts;
+    scanning = true;
+    scanFailed = false;
+    scanResults = const [];
+    scanDone = 0;
+    scanTotal = addresses.length;
+    _scanCancel = false;
+    error = null;
+    notifyListeners();
+    try {
+      final test = delay ?? ((c) => realDelay(c, timeout: const Duration(seconds: 7)));
+      final found = await scanWarp(
+        count: addresses.length,
+        test: (i) {
+          final endpoint = WarpEndpoint(addresses[i], [ports[i % ports.length]]);
+          final config = parseLink(warpLink(account!, method, endpoint, 0));
+          return config == null ? Future.value(-1) : test(config);
+        },
+        onProgress: (d, t) {
+          scanDone = d;
+          notifyListeners();
+        },
+        cancelled: () => _scanCancel,
+      );
+      if (_scanCancel) return;
+      scanResults = [
+        for (final f in found.take(5)) (text: '${method.id} ${addresses[f.index]}:${ports[f.index % ports.length]}', ms: f.ms),
+      ];
+      if (found.isEmpty) {
+        scanFailed = true;
+      } else {
+        final best = found.first;
+        custom = (method: method.id, ip: addresses[best.index], port: ports[best.index % ports.length]);
         await _apply();
         await _state.reconnectIfConnected();
       }
@@ -417,6 +498,7 @@ class WarpController extends ChangeNotifier {
     account = null;
     account2 = null;
     inWarp = false;
+    custom = null;
     enabled = false;
     _state.setWarpServer(null);
     link = null;

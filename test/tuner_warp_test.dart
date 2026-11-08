@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/anti_filter_tuner.dart';
@@ -6,6 +8,7 @@ import 'package:kumo/core/latency_tester.dart' show delayConfigForTest;
 import 'package:kumo/core/net_options.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
+import 'package:kumo/core/warp/warp_profile.dart';
 import 'package:kumo/core/warp/warp_scan.dart';
 
 ProxyConfig tlsServer(String name, {int? ms, String type = 'vless', bool tls = true, bool xray = false}) =>
@@ -166,6 +169,48 @@ void main() {
       await scanWarp(count: 30, parallel: 1, test: (i) async => ++n, cancelled: () => n >= 4);
       expect(n, 4);
       expect(await scanWarp(count: 0, test: (i) async => 1), isEmpty);
+    });
+  });
+
+  group('the wider scan of WARP', () {
+    test('addresses are drawn from the ranges, different, never the network or broadcast address', () {
+      final ranges = ['162.159.192.0/24', '188.114.96.0/24'];
+      final picked = pickScanAddresses(ranges, 24, Random(1));
+      expect(picked, hasLength(24));
+      expect(picked.toSet(), hasLength(24));
+      for (final ip in picked) {
+        expect(ip.startsWith('162.159.192.') || ip.startsWith('188.114.96.'), isTrue, reason: ip);
+        final last = int.parse(ip.split('.').last);
+        expect(last, inInclusiveRange(1, 254), reason: ip);
+      }
+      // Both ranges are looked at.
+      expect(picked.any((i) => i.startsWith('162.')), isTrue);
+      expect(picked.any((i) => i.startsWith('188.')), isTrue);
+    });
+
+    test('a small range gives only what it has; bad ranges are skipped; nothing for none', () {
+      expect(pickScanAddresses(['162.159.192.0/30'], 10, Random(2)).length, lessThanOrEqualTo(2));
+      expect(pickScanAddresses(['not a range', '1.2.3.4/8'], 5, Random(3)), isEmpty);
+      expect(pickScanAddresses(const [], 5, Random(4)), isEmpty);
+      expect(pickScanAddresses(['162.159.192.0/24'], 0, Random(5)), isEmpty);
+    });
+
+    test('the profile may name its own ranges and ports, only of Cloudflare', () {
+      final base = jsonDecode(File('docs/warp/profile.json').readAsStringSync()) as Map<String, dynamic>;
+      expect(parseWarpProfile(jsonEncode(base)).scanRanges, defaultScanRanges);
+      final own = {...base, 'scan': {'ranges': ['162.159.200.0/24'], 'ports': [2408, 854]}};
+      final p = parseWarpProfile(jsonEncode(own));
+      expect(p.scanRanges, ['162.159.200.0/24']);
+      expect(p.scanPorts, [2408, 854]);
+      for (final bad in [
+        {'ranges': ['8.8.8.0/24'], 'ports': [2408]},
+        {'ranges': ['162.159.200.0/8'], 'ports': [2408]},
+        {'ranges': [], 'ports': [2408]},
+        {'ranges': ['162.159.200.0/24'], 'ports': []},
+        {'ranges': ['162.159.200.0/24'], 'ports': [0]},
+      ]) {
+        expect(() => parseWarpProfile(jsonEncode({...base, 'scan': bad})), throwsA(isA<WarpFormatException>()), reason: '$bad');
+      }
     });
   });
 
