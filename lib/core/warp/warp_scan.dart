@@ -8,8 +8,8 @@ const warpWideCount = 24;
 /// [count] different addresses drawn from [ranges] ("a.b.c.d/n"), taking turns between the ranges so
 /// that each one is looked at; the network and broadcast addresses of a range are left out. Ranges
 /// that do not read are skipped.
-List<String> pickScanAddresses(List<String> ranges, int count, Random random) {
-  final parsed = [for (final r in ranges) parseCidrV4(r)].whereType<({int base, int bits})>().toList();
+List<String> pickScanAddresses(List<String> ranges, int count, Random random, {int minBits = 16}) {
+  final parsed = [for (final r in ranges) parseCidrV4(r, minBits: minBits)].whereType<({int base, int bits})>().toList();
   if (parsed.isEmpty || count <= 0) return const [];
   final out = <String>{};
   var guard = 0;

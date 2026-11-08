@@ -86,7 +86,7 @@ WarpNoise? checkedNoise(String type, String packet, String delay) {
 }
 
 /// The addresses of Cloudflare (IPv4), the only ones the file may send the app to.
-const _cloudflare = [
+const cloudflareRanges = [
   '173.245.48.0/20',
   '103.21.244.0/22',
   '103.22.200.0/22',
@@ -120,7 +120,7 @@ int? _v4(String ip) {
 bool isCloudflareV4(String ip) {
   final n = _v4(ip);
   if (n == null) return false;
-  for (final cidr in _cloudflare) {
+  for (final cidr in cloudflareRanges) {
     final parts = cidr.split('/');
     final base = _v4(parts[0])!;
     final bits = int.parse(parts[1]);
@@ -144,12 +144,12 @@ const defaultScanRanges = [
 const defaultScanPorts = [2408, 500, 1701, 4500];
 
 /// "a.b.c.d/n" inside Cloudflare's ranges (n from 16 to 32), or null.
-({int base, int bits})? parseCidrV4(String text) {
+({int base, int bits})? parseCidrV4(String text, {int minBits = 16}) {
   final parts = text.split('/');
   if (parts.length != 2) return null;
   final base = _v4(parts[0]);
   final bits = int.tryParse(parts[1]);
-  if (base == null || bits == null || bits < 16 || bits > 32) return null;
+  if (base == null || bits == null || bits < minBits || bits > 32) return null;
   return (base: base, bits: bits);
 }
 
