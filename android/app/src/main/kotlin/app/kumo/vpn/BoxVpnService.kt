@@ -128,6 +128,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     // Kill switch: after an unexpected stop this empty VPN swallows all traffic.
     private var killSwitch = false
+
+    /** True once this connection was up; cleared when the user ends it. The kill switch only guards a connection that was up. */
+    @Volatile
+    private var everStarted = false
     private var blockFd: ParcelFileDescriptor? = null
 
     // Why the next stop happens, when it was not the user's own doing.
@@ -512,14 +516,23 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             server.startOrReloadService(content, OverrideOptions())
             if (VpnBridge.status != VpnBridge.STARTING) return // stopped meanwhile: its teardown follows
             VpnBridge.update(VpnBridge.STARTED)
+            everStarted = true
             refreshNotification()
             startStatsClient()
         } catch (e: Throwable) {
             Log.e(TAG, "start failed", e)
             teardown()
-            VpnBridge.update(VpnBridge.ERROR, e.message ?: e.toString())
-            stopForegroundAndSelf()
-            IdleNotification.show(this)
+            // A connection that was up and could not be brought back (a reconnect that failed) must not
+            // leave the traffic going out in the open: with the kill switch on, the block stays.
+            val blocked = killSwitch && everStarted && !proxyMode && engageBlock()
+            VpnBridge.update(
+                VpnBridge.ERROR,
+                (e.message ?: e.toString()) + if (blocked) ": internet blocked (kill switch)" else "",
+            )
+            if (!blocked) {
+                stopForegroundAndSelf()
+                IdleNotification.show(this)
+            }
         } finally {
             VpnBridge.openGate()
         }
@@ -544,6 +557,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             if (VpnBridge.status == VpnBridge.STOPPED) stopForegroundAndSelf()
             return
         }
+        everStarted = false // the user (or the app) ended it: nothing to guard
         VpnBridge.update(VpnBridge.STOPPING)
         scope.launch {
             lifecycle.withLock { shutDown() }
@@ -753,6 +767,24 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         runCatching { commandServer?.closeService() }
         runCatching { tunFd?.close() }
         tunFd = null
+        // The core stopped by itself while the connection was up (not a stop or a reconnect, which
+        // have another state): with the kill switch on, the traffic must not go out in the open.
+        if (killSwitch && !proxyMode && VpnBridge.status == VpnBridge.STARTED) {
+            scope.launch {
+                lifecycle.withLock {
+                    if (VpnBridge.status != VpnBridge.STARTED) return@withLock
+                    shutDown()
+                    if (engageBlock()) {
+                        // Stay up so the block holds until the user acts.
+                        VpnBridge.update(VpnBridge.ERROR, "sing-box stopped unexpectedly: internet blocked (kill switch)")
+                    } else {
+                        VpnBridge.update(VpnBridge.ERROR, "sing-box stopped unexpectedly")
+                        stopForegroundAndSelf()
+                        IdleNotification.show(this@BoxVpnService)
+                    }
+                }
+            }
+        }
     }
 
     override fun serviceReload() {

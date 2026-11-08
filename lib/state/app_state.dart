@@ -28,6 +28,7 @@ import '../core/ovpn/ovpn_runner.dart';
 import 'warp_controller.dart';
 import 'usage_controller.dart';
 import '../core/usage/usage_transport.dart' show defaultFragment;
+import '../core/server_resolver.dart';
 import '../core/usage/crash_hub.dart';
 import '../core/usage_alert.dart';
 import '../core/vpn_channel.dart';
@@ -2184,7 +2185,7 @@ class AppState extends ChangeNotifier {
           chosen.first.canXray &&
           (chosen.first.needsXray || chosen.first.preferXray || net.core == 'xray');
       final xrayPort = viaXray ? 30000 + Random().nextInt(30000) : null;
-      final parts = _standbyParts(chosen, routing, sets, xrayPort);
+      final parts = _standbyParts(chosen, routing, sets, xrayPort, resolved: await _resolveAhead(chosen));
       // Something changed while this was being prepared.
       if (!net.keepProxy || !_idle || _preparing) return;
       final ok = await VpnChannel.startStandby(parts.config,
@@ -2207,10 +2208,24 @@ class AppState extends ChangeNotifier {
       log('The proxy could not be kept running: $e');
     }
   }
+  final _nameResolver = NameResolver();
+
+  /// [chosen] with the names of the servers already looked up over encrypted DNS (and by the system's
+  /// resolver when that does not answer), or [chosen] itself when that is off or not possible.
+  Future<List<ProxyConfig>> _resolveAhead(List<ProxyConfig> chosen) async {
+    if (!net.encryptedLookup || net.strictDns) return chosen;
+    try {
+      return await resolveServers(chosen, _nameResolver);
+    } catch (_) {
+      return chosen;
+    }
+  }
+
   /// The configuration of the proxy that stays up without the tunnel: the same options without
   /// the tunnel, the kill switch and the system proxy, with the login when one is set.
   ({String config, String? xrayConfig, int api, String secret, XrayAuth? xrayAuth}) _standbyParts(List<ProxyConfig> chosen,
-      ProviderRouting? routing, Map<String, String> sets, int? xrayPort) {
+      ProviderRouting? routing, Map<String, String> sets, int? xrayPort,
+      {List<ProxyConfig>? resolved}) {
     final o = NetOptions()
       ..load(net.toJson())
       ..tun = false
@@ -2221,7 +2236,7 @@ class AppState extends ChangeNotifier {
     final api = 20000 + Random().nextInt(20000);
     final secret = _randomSecret();
     final xrayAuth = viaXray ? _newXrayAuth() : null;
-    final config = buildSingBoxConfig(chosen,
+    final config = buildSingBoxConfig(resolved ?? chosen,
         xrayPort: xrayPort,
         xrayAuth: xrayAuth,
         options: o,
@@ -2357,7 +2372,10 @@ class AppState extends ChangeNotifier {
           (chosen.first.needsXray || chosen.first.preferXray || net.core == 'xray');
       // Xray's local port asks for a login of its own, so no other program here can use it.
       final xrayAuth = viaXray ? _newXrayAuth() : null;
-      String config(int? xray) => buildSingBoxConfig(chosen,
+      // The names of the chosen servers are looked up first (encrypted DNS, then the system's).
+      final resolved = await _resolveAhead(chosen);
+      if (cancelled()) return;
+      String config(int? xray) => buildSingBoxConfig(resolved,
           xrayPort: xray,
           xrayAuth: xrayAuth,
           options: net,
@@ -2374,7 +2392,7 @@ class AppState extends ChangeNotifier {
       final xrayPortNew = viaXray ? 30000 + Random().nextInt(30000) : null;
       // The phone keeps the proxy alone after the tunnel stops; the desktop does it from here.
       final standby = !isDesktop && net.keepProxy
-          ? _standbyParts(chosen, routing, sets, viaXray ? xrayPortNew : null)
+          ? _standbyParts(chosen, routing, sets, viaXray ? xrayPortNew : null, resolved: resolved)
           : null;
       if (viaXray) {
         final port = xrayPortNew!;

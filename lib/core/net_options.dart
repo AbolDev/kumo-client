@@ -188,6 +188,12 @@ class NetOptions {
   /// would skip the tunnel's resolver is refused.
   bool strictDns = false;
 
+  /// Before a connection the names of the chosen servers are looked up over encrypted DNS (1.1.1.1,
+  /// then 8.8.8.8), and by the system's resolver when those do not answer, so that the network's
+  /// resolver is asked as little as possible and cannot hand out a wrong address. On by default;
+  /// not used with [strictDns], which never falls back to the network.
+  bool encryptedLookup = true;
+
   /// Refuse STUN, which browsers use for WebRTC and which can show the address of the network
   /// instead of the VPN's.
   bool blockStun = false;
@@ -270,6 +276,7 @@ class NetOptions {
         'blockAds': blockAds,
         'adsLevel': adsLevel,
         'strictDns': strictDns,
+        'encryptedLookup': encryptedLookup,
         'blockStun': blockStun,
         'ntp': ntp,
         'networkStrategy': networkStrategy,
@@ -336,6 +343,7 @@ class NetOptions {
     blockAds = flag('blockAds', false);
     adsLevel = adLevels.contains(j['adsLevel']) ? j['adsLevel'] as String : defaultAdLevel;
     strictDns = flag('strictDns', false);
+    encryptedLookup = flag('encryptedLookup', true);
     blockStun = flag('blockStun', false);
     ntp = flag('ntp', false);
     final timeout = j['connectTimeout'];

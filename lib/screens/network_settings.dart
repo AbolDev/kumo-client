@@ -138,6 +138,8 @@ List<Widget> networkSections(
         ),
       flag(tr(context, 'fakeIp'), tr(context, 'fakeIpDesc'), o.fakeIp,
           (v) => o.fakeIp = v),
+      flag(tr(context, 'encryptedLookup'), tr(context, 'encryptedLookupDesc'), o.encryptedLookup,
+          (v) => o.encryptedLookup = v),
       flag(tr(context, 'strictDns'), tr(context, 'strictDnsDesc'), o.strictDns,
           (v) => o.strictDns = v),
       flag(tr(context, 'blockStun'), tr(context, 'blockStunDesc'), o.blockStun,

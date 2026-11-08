@@ -10,6 +10,7 @@ import 'desktop_vpn.dart' show DesktopVpn;
 import 'ovpn/ovpn_probe.dart';
 import 'net_options.dart' show NetOptions;
 import 'proxy_config.dart';
+import 'server_resolver.dart' show resolveOutbound, systemLookup;
 import 'singbox_config.dart' show XrayAuth, buildXrayConfig, tweakLayers;
 import 'vpn_channel.dart';
 
@@ -71,55 +72,7 @@ Future<List<Map<String, dynamic>>> _resolvedLayers(ProxyConfig c) async => [
       for (final layer in c.inner) await _resolved(layer),
     ];
 
-Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) async {
-  final out = Map<String, dynamic>.of(outbound);
-  // A WireGuard endpoint keeps its server in the peer.
-  if (out['type'] == 'wireguard') {
-    final peers = out['peers'];
-    if (peers is List && peers.isNotEmpty && peers.first is Map) {
-      final peer = Map<String, dynamic>.from(peers.first as Map);
-      final host = peer['address'];
-      if (host is String && InternetAddress.tryParse(host) == null) {
-        try {
-          final found = await InternetAddress.lookup(host).timeout(const Duration(seconds: 3));
-          if (found.isNotEmpty) peer['address'] = found.first.address;
-          out['peers'] = [peer, ...peers.skip(1)];
-        } catch (_) {}
-      }
-    }
-    return out;
-  }
-  final server = out['server'];
-  if (server is! String || InternetAddress.tryParse(server) != null) return out;
-  try {
-    final found = await InternetAddress.lookup(server)
-        .timeout(const Duration(seconds: 3));
-    if (found.isEmpty) return out;
-    final ip = found.firstWhere((a) => a.type == InternetAddressType.IPv4,
-        orElse: () => found.first);
-    out['server'] = ip.address;
-    final tls = out['tls'];
-    if (tls is Map && (tls['server_name'] ?? '') == '') {
-      out['tls'] = {...tls, 'server_name': server};
-    }
-    final t = out['transport'];
-    if (t is Map) {
-      final type = t['type'];
-      if (type == 'ws' && !((t['headers'] as Map?)?.containsKey('Host') ?? false)) {
-        out['transport'] = {
-          ...t,
-          'headers': {...?(t['headers'] as Map?), 'Host': server},
-        };
-      } else if ((type == 'httpupgrade' || type == 'http') && t['host'] == null) {
-        out['transport'] = {
-          ...t,
-          'host': type == 'http' ? [server] : server,
-        };
-      }
-    }
-  } catch (_) {}
-  return out;
-}
+Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) => resolveOutbound(outbound, systemLookup);
 
 /// Real delay: time to fetch a page through the server (handshake included), -1 on failure and -2
 /// when the test was skipped (the tunnel is being started or stopped). Servers only Xray can carry
