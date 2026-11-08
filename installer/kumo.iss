@@ -39,6 +39,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"
+Name: "linkhandler"; Description: "Open vless://, vmess://, ss:// and other server links with Kumo (it asks before it adds anything)"
 
 [Files]
 Source: "..\build\windows\{#Arch}\runner\Release\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
@@ -48,6 +49,49 @@ Source: "..\build\windows\{#Arch}\runner\Release\*"; DestDir: "{app}"; Flags: re
 ; update, on the taskbar too. Kumo points these at the icon picked in its Settings when it starts.
 Name: "{group}\Kumo"; Filename: "{app}\kumo.exe"; IconFilename: "{app}\data\flutter_assets\assets\app_icons\teal_night.ico"
 Name: "{autodesktop}\Kumo"; Filename: "{app}\kumo.exe"; IconFilename: "{app}\data\flutter_assets\assets\app_icons\teal_night.ico"; Tasks: desktopicon
+
+[Registry]
+; Links of servers and subscriptions (vless://, vmess://, ...) open with Kumo. The program is started with the
+; link on its command line; a copy that already runs gets it. Kumo asks before it adds anything.
+Root: HKA; Subkey: "Software\Classes\vless"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\vless"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\vless\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\vmess"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\vmess"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\vmess\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\trojan"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\trojan"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\trojan\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\ss"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\ss"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\ss\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hysteria"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hysteria"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hysteria\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hysteria2"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hysteria2"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hysteria2\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hy2"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hy2"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hy2\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\tuic"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\tuic"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\tuic\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\anytls"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\anytls"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\anytls\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\wireguard"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\wireguard"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\wireguard\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\clash"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\clash"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\clash\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\sing-box"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\sing-box"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\sing-box\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hiddify"; ValueType: string; ValueName: ""; ValueData: "URL:Kumo link"; Flags: uninsdeletekey; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hiddify"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""; Tasks: linkhandler
+Root: HKA; Subkey: "Software\Classes\hiddify\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\kumo.exe"" ""%1"""; Tasks: linkhandler
 
 [Run]
 Filename: "{app}\kumo.exe"; Description: "Start Kumo"; Flags: nowait postinstall skipifsilent shellexec

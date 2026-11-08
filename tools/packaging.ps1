@@ -47,6 +47,9 @@ function Put($path, $text) {
 }
 
 $short = 'Free VPN client powered by sing-box and Xray'
+# The links of servers and subscriptions that Kumo opens (the .desktop files below list them).
+$schemes = 'vless', 'vmess', 'trojan', 'ss', 'hysteria', 'hysteria2', 'hy2', 'tuic', 'anytls', 'wireguard', 'clash', 'sing-box', 'hiddify'
+$mime = (($schemes | ForEach-Object { "x-scheme-handler/$_" }) -join ';') + ';'
 $long = 'Kumo connects to the servers and subscriptions you choose. It can run as a local proxy (also set as the system proxy) or tunnel the whole computer, and it supports many protocols, subscriptions, routing rules, ad blocking and more.'
 
 # ----------------------------------------------------------------------------------- winget
@@ -280,10 +283,11 @@ package() {
 Type=Application
 Name=Kumo
 Comment=$short
-Exec=/opt/kumo/kumo
+Exec=/opt/kumo/kumo %U
 Icon=kumo
 Terminal=false
 Categories=Network;
+MimeType=$mime
 EOF
 }
 "@
@@ -379,10 +383,11 @@ Put 'packaging/flatpak/app.kumo.vpn.desktop' @"
 Type=Application
 Name=Kumo
 Comment=$short
-Exec=kumo
+Exec=kumo %U
 Icon=app.kumo.vpn
 Terminal=false
 Categories=Network;
+MimeType=$mime
 "@
 Put 'packaging/flatpak/app.kumo.vpn.metainfo.xml' @"
 <?xml version="1.0" encoding="UTF-8"?>

@@ -253,6 +253,19 @@ class VpnChannel {
 
   /// Android: the usage the VPN service counted while the app's screen was closed (JSON), handed
   /// over once. Null when there is none.
+  /// Android: the link, text or file another app opened with Kumo, handed over once (null when none).
+  static Future<String?> takeExternal() =>
+      _win ? Future.value(null) : _control.invokeMethod<String>('takeExternal');
+
+  /// Android: called when another app opens something with Kumo while it runs.
+  static void onExternal(void Function() callback) {
+    if (_win) return;
+    _control.setMethodCallHandler((call) async {
+      if (call.method == 'external') callback();
+      return null;
+    });
+  }
+
   static Future<String?> takeUsage() =>
       _win ? Future.value(null) : _control.invokeMethod<String>('takeUsage');
 

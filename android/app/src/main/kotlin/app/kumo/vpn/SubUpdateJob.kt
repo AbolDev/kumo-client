@@ -88,7 +88,13 @@ class SubUpdateJob : JobService() {
             val last = maxOf(sub.optLong("updatedAt", 0L), if (cache.exists()) cache.lastModified() else 0L)
             if (System.currentTimeMillis() - last < hours * 60 * 60 * 1000L - 60_000L) continue
             try {
-                val answer = download(url, insecure)
+                // What the user set for this subscription (the app has already checked it).
+                val agent = sub.optString("userAgent").trim().replace(Regex("[\\u0000-\\u001f\\u007f]"), " ").ifBlank { "Mozilla/5.0" }
+                val extra = LinkedHashMap<String, String>()
+                sub.optJSONObject("headers")?.let { h ->
+                    h.keys().forEach { k -> h.optString(k).takeIf { v -> v.isNotBlank() }?.let { v -> extra[k] = v } }
+                }
+                val answer = download(url, insecure, agent, extra)
                 Store.write(filesDir, "subcache/$id.json", answer.toString())
                 Store.delete(filesDir, "subcache/$id.error")
                 // The numbers the provider reported: warn if the data or the time is running out.
@@ -114,21 +120,33 @@ class SubUpdateJob : JobService() {
         }
     }
 
-    private fun download(url: String, insecure: Boolean): JSONObject {
-        val conn = URL(url).openConnection() as HttpURLConnection
+    private fun download(url: String, insecure: Boolean, agent: String, extra: Map<String, String>): JSONObject {
+        var target = URL(url)
+        var conn = target.openConnection() as HttpURLConnection
         try {
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 20_000
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-            conn.setRequestProperty("Accept", "application/json, text/plain, */*")
-            if (insecure && conn is HttpsURLConnection) {
-                val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
-                    override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
-                    override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
-                    override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
-                })
-                conn.sslSocketFactory = SSLContext.getInstance("TLS").apply { init(null, trustAll, null) }.socketFactory
-                conn.hostnameVerifier = HostnameVerifier { _, _ -> true }
+            // With headers of the user's own (a key, a token) a redirect is followed here: the headers
+            // go only to the host the subscription is on, never on to another address.
+            val own = target.host
+            var hops = 0
+            while (true) {
+                conn.connectTimeout = 10_000
+                conn.readTimeout = 20_000
+                conn.setRequestProperty("User-Agent", agent)
+                conn.setRequestProperty("Accept", "application/json, text/plain, */*")
+                if (extra.isNotEmpty()) {
+                    conn.instanceFollowRedirects = false
+                    if (target.host == own) extra.forEach { (k, v) -> conn.setRequestProperty(k, v) }
+                }
+                if (insecure) trustAnyCertificate(conn)
+                val code = conn.responseCode
+                if (extra.isEmpty() || code !in 300..399) break
+                val location = conn.getHeaderField("Location") ?: break
+                require(++hops <= 5) { "Too many redirects" }
+                val next = URL(target, location)
+                require(!(target.protocol == "https" && next.protocol != "https")) { "Redirected to an unencrypted address" }
+                conn.disconnect()
+                target = next
+                conn = target.openConnection() as HttpURLConnection
             }
             require(conn.responseCode == 200) { "HTTP ${conn.responseCode}" }
             val body = conn.inputStream.bufferedReader().use { it.readText() }
@@ -146,6 +164,19 @@ class SubUpdateJob : JobService() {
                 .put("announce", conn.getHeaderField("announce"))
         } finally {
             conn.disconnect()
+        }
+    }
+
+    /** A download that accepts a certificate that does not check out (only when the user allowed it). */
+    private fun trustAnyCertificate(conn: HttpURLConnection) {
+        if (conn is HttpsURLConnection) {
+            val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+            })
+            conn.sslSocketFactory = SSLContext.getInstance("TLS").apply { init(null, trustAll, null) }.socketFactory
+            conn.hostnameVerifier = HostnameVerifier { _, _ -> true }
         }
     }
 }

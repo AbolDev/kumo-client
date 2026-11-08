@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/kumo_mark.dart';
 
 import '../core/net_options.dart' show bypassCountries;
 import '../core/platform.dart';
@@ -43,14 +44,17 @@ class _OnboardingPageState extends State<OnboardingPage> {
     }
   }
 
-  Widget _slide(IconData icon, String title, String text, [Widget? extra]) {
+  /// [icon] null: the app's own cloud.
+  Widget _slide(IconData? icon, String title, String text, [Widget? extra]) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, size: 72, color: theme.colorScheme.primary),
+          icon == null
+              ? const KumoMark(size: 72)
+              : Icon(icon, size: 72, color: theme.colorScheme.primary),
           const SizedBox(height: 24),
           Text(title,
               textAlign: TextAlign.center,
@@ -110,7 +114,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                     controller: _controller,
                     onPageChanged: (i) => setState(() => _page = i),
                     children: [
-                      _slide(Icons.cloud_outlined, tr(context, 'onbWelcomeTitle'),
+                      _slide(null, tr(context, 'onbWelcomeTitle'),
                           tr(context, 'onbWelcomeText')),
                       if (!isDesktop)
                         _slide(Icons.vpn_key_outlined, tr(context, 'onbVpnTitle'),

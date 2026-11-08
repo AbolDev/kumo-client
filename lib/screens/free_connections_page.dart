@@ -1,6 +1,7 @@
-﻿import 'dart:io' show Platform;
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import '../widgets/kumo_mark.dart';
 
 import '../l10n/extra.dart';
 import '../l10n/strings.dart';
@@ -18,7 +19,7 @@ class FreeConnectionsPage extends StatelessWidget {
 
   Widget _card({
     required BuildContext context,
-    required IconData icon,
+    required IconData? icon, // null: the app's own cloud
     required String title,
     required String description,
     required String? status,
@@ -34,7 +35,9 @@ class FreeConnectionsPage extends StatelessWidget {
         SwitchListTile(
           secondary: busy
               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(icon),
+              : icon == null
+                  ? const KumoMark(size: 24)
+                  : Icon(icon),
           title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text([description, if (status != null) status].join('\n')),
           isThreeLine: status != null,
@@ -84,12 +87,12 @@ class FreeConnectionsPage extends StatelessWidget {
                 onChanged: (v) => state.setFlag('showCollector', v),
                 onManage: () => Navigator.push(
                   context,
-                  MaterialPageRoute<void>(builder: (_) => CollectorInfoPage(state: state)),
+                  MaterialPageRoute<void>(settings: const RouteSettings(name: '/CollectorInfoPage'), builder: (_) => CollectorInfoPage(state: state)),
                 ),
               ),
               _card(
                 context: context,
-                icon: Icons.cloud_outlined,
+                icon: null,
                 title: tr(context, 'warpTitle'),
                 description: tr(context, 'freeWarpDesc'),
                 status: warp.error ??
@@ -106,7 +109,7 @@ class FreeConnectionsPage extends StatelessWidget {
                 onChanged: (v) => v ? warp.enable() : warp.disable(),
                 onManage: () => Navigator.push(
                   context,
-                  MaterialPageRoute<void>(builder: (_) => WarpPage(state: state)),
+                  MaterialPageRoute<void>(settings: const RouteSettings(name: '/WarpPage'), builder: (_) => WarpPage(state: state)),
                 ),
               ),
               // OpenVPN runs on Windows and Android for now.

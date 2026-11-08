@@ -19,23 +19,27 @@ const pingPath = '/api/v1/ping';
 /// came. Short timeouts; never throws. The address is always the endpoint's own host on port 443:
 /// the fragmenting relay is only ever pointed at it (or at the Cloudflare addresses listed with it).
 Future<int?> sendUsagePing(UsageEndpoint endpoint, Map<String, Object> body, PingMethod method,
-    {FragmentSettings Function()? fragment}) async {
+    {FragmentSettings Function()? fragment, String path = pingPath}) async {
   try {
     final payload = utf8.encode(jsonEncode(body));
     if (method == PingMethod.direct) {
       final socket = await SecureSocket.connect(endpoint.host, 443, timeout: const Duration(seconds: 6));
-      return await _post(socket, endpoint.host, payload);
+      return await _post(socket, endpoint.host, payload, path);
     }
     final f = (fragment ?? () => defaultFragment)();
     // The name first, then the addresses the list gives for it.
+    // The caller gives up after 25 seconds; no new attempt starts after 20, so nothing is left
+    // running (and sending) after it has stopped waiting.
+    final started = Stopwatch()..start();
     for (final target in [endpoint.host, ...endpoint.ips]) {
+      if (started.elapsed > const Duration(seconds: 20)) break;
       final relay = await FragmentRelay.start(target, size: f.size, delay: f.delay);
       Socket? plain;
       try {
         plain = await Socket.connect(InternetAddress.loopbackIPv4, relay.port);
         final tls = await SecureSocket.secure(plain, host: endpoint.host)
             .timeout(const Duration(seconds: 8));
-        final status = await _post(tls, endpoint.host, payload);
+        final status = await _post(tls, endpoint.host, payload, path);
         if (status != null) return status;
       } catch (_) {
         // the next target
@@ -48,10 +52,10 @@ Future<int?> sendUsagePing(UsageEndpoint endpoint, Map<String, Object> body, Pin
   return null;
 }
 
-Future<int?> _post(SecureSocket tls, String host, List<int> payload) async {
+Future<int?> _post(SecureSocket tls, String host, List<int> payload, String path) async {
   try {
     tls.add([
-      ...utf8.encode('POST $pingPath HTTP/1.1\r\nHost: $host\r\n'
+      ...utf8.encode('POST $path HTTP/1.1\r\nHost: $host\r\n'
           'Content-Type: application/json\r\nUser-Agent: Kumo\r\n'
           'Connection: close\r\nContent-Length: ${payload.length}\r\n\r\n'),
       ...payload,

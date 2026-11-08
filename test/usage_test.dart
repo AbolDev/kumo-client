@@ -149,8 +149,8 @@ void main() {
         region: 'XX',
         tz: '+03:30',
         brand: '',
-        model: '<b>',
-        ui: 'x' * 41,
+        model: '<>',
+        ui: '...',
         arch: 'mips',
       );
       final b = buildPing(event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: bad);
@@ -170,9 +170,10 @@ void main() {
       Map<String, Object> make(DeviceFacts f) =>
           buildPing(event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: f);
       expect(make(DeviceFacts(brand: 'a' * 30)).containsKey('brand'), isTrue);
-      expect(make(DeviceFacts(brand: 'a' * 31)).containsKey('brand'), isFalse);
+      expect(make(DeviceFacts(brand: 'a' * 31))['brand'], 'a' * 30); // too long: cut, not dropped
       expect(make(DeviceFacts(model: 'a' * 40)).containsKey('model'), isTrue);
-      expect(make(DeviceFacts(model: 'a' * 41)).containsKey('model'), isFalse);
+      expect(make(DeviceFacts(model: 'a' * 41))['model'], 'a' * 40);
+      expect(make(DeviceFacts(ui: 'a' * 41))['ui'], 'a' * 40);
       expect(make(const DeviceFacts(tz: 'Etc/GMT+3')).containsKey('tz'), isTrue);
       expect(make(const DeviceFacts(tz: 'A/B/C/D')).containsKey('tz'), isFalse);
       expect(make(const DeviceFacts(deviceLang: 'en-US')).containsKey('device_lang'), isTrue);
@@ -188,7 +189,15 @@ void main() {
           event: 'ping', id: id, os: 'android', appVersion: '1.0.0', facts: DeviceFacts(arch: 'arm64', build: b));
       expect(make('kumo-android-universal.apk')['build'], 'kumo-android-universal.apk');
       expect(make('kumo-android-universal.apk')['arch'], 'arm64'); // the file is not the processor
-      expect(make('kumo-linux-arm64-portable.tar.gz')['build'], 'kumo-linux-arm64-portable.tar.gz');
+      expect(make('kumo-linux-arm64-portable.tar.gz').containsKey('build'), isFalse); // not this system's file
+      expect(
+          buildPing(
+              event: 'ping',
+              id: id,
+              os: 'linux',
+              appVersion: '1.0.0',
+              facts: const DeviceFacts(build: 'kumo-linux-arm64-portable.tar.gz'))['build'],
+          'kumo-linux-arm64-portable.tar.gz');
       for (final bad in [null, '', 'universal.apk', 'kumo-android', 'kumo-Android-x.apk', 'kumo-android-a b.apk', 'kumo-android-${'a' * 52}']) {
         expect(make(bad).containsKey('build'), isFalse, reason: '$bad');
       }
@@ -255,6 +264,72 @@ void main() {
       expect(androidUiName(brand: 'OPPO', oplus: 'V14.0.0'), 'ColorOS 14.0');
       expect(androidUiName(brand: 'Google'), isNull);
       expect(androidUiName(brand: null), isNull);
+    });
+  });
+
+  group('the maker and model of the device', () {
+    test('Windows: from the BIOS key; a placeholder maker falls back to the family', () {
+      const real = r'''
+HKEY_LOCAL_MACHINE\HARDWARE\DESCRIPTION\System\BIOS
+    BIOSVendor    REG_SZ    American Megatrends Inc.
+    SystemFamily    REG_SZ    Zenbook
+    SystemManufacturer    REG_SZ    ASUSTeK COMPUTER INC.
+    SystemProductName    REG_SZ    ZenBook UX425EA_UX425EA
+    SystemSKU    REG_SZ    UX425EA
+''';
+      final n = parseWindowsBios(real);
+      expect(n.brand, 'ASUSTeK COMPUTER INC.');
+      expect(n.model, 'ZenBook UX425EA_UX425EA');
+      final custom = parseWindowsBios(r'''
+    SystemFamily    REG_SZ    My Family
+    SystemManufacturer    REG_SZ    System manufacturer
+    SystemProductName    REG_SZ    System Product Name
+''');
+      expect(custom.brand, 'My Family');
+      expect(custom.model, isNull);
+      expect(parseWindowsBios('').brand, isNull);
+    });
+
+    test('macOS: Apple and the model identifier, with its comma', () {
+      final n = parseMacModel('MacBookPro18,3\n');
+      expect(n.brand, 'Apple');
+      expect(n.model, 'MacBookPro18,3');
+      expect(parseMacModel('').brand, isNull);
+    });
+
+    test('Linux: vendor, product (family when missing) and the desktop', () {
+      var n = linuxDeviceNames(vendor: 'LENOVO\n', product: '82KB\n', family: 'Legion 5', desktop: 'ubuntu:GNOME');
+      expect((n.brand, n.model, n.ui), ('LENOVO', '82KB', 'GNOME'));
+      n = linuxDeviceNames(vendor: 'Dell Inc.', product: '', family: 'XPS', desktop: 'KDE');
+      expect((n.brand, n.model, n.ui), ('Dell Inc.', 'XPS', 'KDE'));
+      n = linuxDeviceNames(vendor: 'To be filled by O.E.M.', product: 'Default string', family: 'Unknown', desktop: null);
+      expect((n.brand, n.model, n.ui), (null, null, null));
+    });
+
+    test('placeholders go, long names are cut, characters the server refuses become spaces', () {
+      for (final p in ['To be filled by O.E.M.', 'System Product Name', 'Default string', 'Unknown', '  none ', '']) {
+        expect(cleanFact(p, max: 30), isNull, reason: p);
+      }
+      expect(cleanFact('Micro-Star International Co., Ltd.', max: 30), 'Micro-Star International Co. L');
+      expect(cleanFact('Acme Co., Ltd.', max: 30), 'Acme Co. Ltd.');
+      expect(cleanFact('A' * 50, max: 30), 'A' * 30);
+      expect(cleanFact('Model ${'x' * 60}', max: 40, model: true), hasLength(40));
+      expect(cleanFact('  Dell   Inc.  ', max: 30), 'Dell Inc.');
+      expect(cleanFact('.hidden', max: 30), isNull); // must start with a letter or digit
+      expect(cleanFact('MacBookPro18,3 (2021)', max: 40, model: true), 'MacBookPro18,3 (2021)');
+      expect(cleanFact('Gigabyte™ Aorus', max: 30), 'Gigabyte Aorus');
+    });
+
+    test('they go into the body, and a bad one never makes the ping invalid', () {
+      final body = buildPing(
+          event: 'ping',
+          id: 'a' * 64,
+          os: 'macos',
+          appVersion: '1.12.1',
+          facts: const DeviceFacts(brand: 'Apple', model: 'MacBookPro18,3', ui: '...'));
+      expect(body['brand'], 'Apple');
+      expect(body['model'], 'MacBookPro18,3');
+      expect(body.containsKey('ui'), isFalse);
     });
   });
 
@@ -347,6 +422,45 @@ void main() {
       expect(r.calls.single.body['event'], 'opt_out');
     });
 
+    test('off while offline: the opt_out waits across restarts, goes once when online, then silence', () async {
+      final r = Rig()..answer = (_, __) => null;
+      await r.reporter.tick(); // a ping that did not get through
+      await r.reporter.setEnabled(false);
+      expect(await r.reporter.tick(), isFalse); // offline: the opt_out is still pending
+      final restarted = Rig()
+        ..files.addAll(r.files)
+        ..answer = (_, __) => null;
+      expect(await restarted.reporter.tick(), isFalse); // still offline after a restart
+      expect(restarted.reporter.enabled, isFalse);
+      restarted.answer = (_, __) => 200; // online again
+      restarted.calls.clear();
+      expect(await restarted.reporter.tick(), isTrue);
+      expect(restarted.calls, hasLength(1));
+      expect(restarted.calls.single.body['event'], 'opt_out');
+      for (var i = 0; i < 3; i++) {
+        await restarted.reporter.tick();
+      }
+      final again = Rig()..files.addAll(restarted.files);
+      await again.reporter.tick();
+      expect(restarted.calls, hasLength(1));
+      expect(again.calls, isEmpty);
+    });
+
+    test('turned back on before the pending opt_out was sent: it is dropped, a normal ping follows', () async {
+      final r = Rig()..answer = (_, __) => null;
+      await r.reporter.setEnabled(false);
+      await r.reporter.tick();
+      await r.reporter.setEnabled(true);
+      r.answer = (_, __) => 200;
+      r.calls.clear();
+      await r.reporter.tick();
+      expect(r.calls.single.body['event'], 'ping');
+      await r.reporter.setEnabled(false);
+      expect(await r.reporter.tick(), isTrue);
+      expect(r.calls.last.body['event'], 'opt_out');
+      expect(r.calls, hasLength(2));
+    });
+
     test('turned on again, a ping is sent again the same day', () async {
       final r = Rig();
       await r.reporter.tick();
@@ -356,6 +470,120 @@ void main() {
       r.calls.clear();
       await r.reporter.tick();
       expect(r.calls.single.body['event'], 'ping');
+    });
+
+    test('maker, model and interface go from every system, and a build name only for its own system', () async {
+      final r = Rig()
+        ..facts = const DeviceFacts(
+            brand: 'Dell Inc.', model: 'XPS 15 9530', ui: 'GNOME', build: 'kumo-android-universal.apk', arch: 'x64');
+      await r.reporter.tick();
+      final body = r.calls.single.body;
+      expect(body['brand'], 'Dell Inc.');
+      expect(body['model'], 'XPS 15 9530');
+      expect(body['ui'], 'GNOME');
+      expect(body.containsKey('build'), isFalse); // an Android file name on a Windows body
+      expect(body['arch'], 'x64');
+      final ok = Rig()..facts = const DeviceFacts(build: 'kumo-windows-x64-setup.exe');
+      await ok.reporter.tick();
+      expect(ok.calls.single.body['build'], 'kumo-windows-x64-setup.exe');
+      expect(fitFacts('android', {'brand': 'Google', 'build': 'kumo-android-arm64-v8a.apk'}),
+          {'brand': 'Google', 'build': 'kumo-android-arm64-v8a.apk'});
+    });
+
+    test('429: one request only, no other route, and the next try is the normal one', () async {
+      final r = Rig()..answer = (_, __) => 429;
+      expect(await r.reporter.tick(), isFalse);
+      expect(r.calls, hasLength(1));
+      r.answer = (_, __) => 200;
+      await r.reporter.tick();
+      expect(r.calls, hasLength(2)); // not recorded as sent: asked again later
+    });
+
+    test('400: the ping is not sent again today, and nothing is shown or thrown', () async {
+      final logs = <String>[];
+      final r = Rig()..answer = (_, __) => 400;
+      final reporter = UsageReporter(
+        read: (n) async => r.files[n],
+        write: (n, c) async => r.files[n] = c,
+        send: (e, b, m) async {
+          r.calls.add((host: e.host, method: m, body: b));
+          return 400;
+        },
+        systemId: () async => 'x-machine-id',
+        os: 'windows',
+        osVersion: () async => null,
+        appVersion: () async => '1.12.1',
+        tunnelUp: () => false,
+        endpoints: () => const [UsageEndpoint('a.example.com'), UsageEndpoint('b.example.com')],
+        countryHint: () => null,
+        log: logs.add,
+        now: () => r.clock,
+      );
+      expect(await reporter.tick(), isTrue);
+      expect(r.calls, hasLength(1));
+      expect(await reporter.tick(), isTrue);
+      expect(r.calls, hasLength(1));
+      expect(logs.single, contains('400'));
+      expect(logs.join(), isNot(contains(hashDeviceId('x-machine-id'))));
+    });
+
+    test('a request that throws or never answers is a failure to retry later, not a crash', () async {
+      final r = Rig();
+      final reporter = UsageReporter(
+        read: (n) async => r.files[n],
+        write: (n, c) async => r.files[n] = c,
+        send: (e, b, m) async => throw const FormatException('boom'),
+        systemId: () async => 'x-machine-id',
+        os: 'linux',
+        osVersion: () async => throw StateError('no version'),
+        appVersion: () async => '1.12.1',
+        tunnelUp: () => false,
+        endpoints: () => const [UsageEndpoint('a.example.com')],
+        countryHint: () => null,
+        facts: () async => throw StateError('no facts'),
+        now: () => r.clock,
+      );
+      expect(await reporter.tick(), isFalse);
+      expect(r.files[UsageReporter.file], isNull); // nothing recorded as sent
+    });
+
+    test('turned off while a ping is being sent: no more requests of it, the opt_out follows', () async {
+      final r = Rig();
+      var first = true;
+      r.answer = (_, __) {
+        if (first) {
+          first = false;
+          r.reporter.setEnabled(false);
+        }
+        return null;
+      };
+      await r.reporter.tick();
+      expect(r.calls.where((c) => c.body['event'] == 'ping'), hasLength(1));
+      r.answer = (_, __) => 200;
+      await r.reporter.tick();
+      expect(r.calls.last.body['event'], 'opt_out');
+    });
+
+    test('the day is the UTC day: the same UTC day is one ping, whatever the local clock says', () async {
+      final r = Rig();
+      r.clock = DateTime.utc(2026, 11, 7, 23, 59);
+      await r.reporter.tick();
+      r.clock = DateTime.utc(2026, 11, 7, 23, 59, 59);
+      await r.reporter.tick();
+      expect(r.calls, hasLength(1));
+      r.clock = DateTime.utc(2026, 11, 8, 0, 0, 1);
+      await r.reporter.tick();
+      expect(r.calls, hasLength(2));
+      expect(pingDay(DateTime.parse('2026-11-08T01:30:00+03:30')), '2026-11-07');
+    });
+
+    test('app versions with a test suffix fit the server, and a bad one is never sent', () {
+      for (final v in ['1.12.1', '1.12.0-beta.12', '1.12.0-beta.12+44', '10.0.0-rc.1']) {
+        expect(isPingAppVersion(v), isTrue, reason: v);
+      }
+      for (final v in ['1.12', 'v1.12.1', '1.12.1 beta', '']) {
+        expect(isPingAppVersion(v), isFalse, reason: v);
+      }
     });
 
     test('off from the start sends nothing but the one opt_out', () async {

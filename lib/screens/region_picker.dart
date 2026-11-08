@@ -17,6 +17,7 @@ Future<Uint8List?> pickRegion(BuildContext context, Uint8List png) async {
   frame.image.dispose();
   if (!context.mounted) return null;
   return Navigator.of(context).push<Uint8List>(PageRouteBuilder(
+    settings: const RouteSettings(name: '/RegionPage'),
     opaque: true,
     pageBuilder: (_, __, ___) => _RegionPage(png: png, size: size),
   ));

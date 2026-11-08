@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import '../widgets/kumo_mark.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter/services.dart';
@@ -15,7 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/qr_decode.dart';
-import '../core/sources.dart' show SubInfo;
+import '../core/sources.dart' show SubInfo, cleanUserAgent, headerLines, parseHeaderLines;
 import '../core/config_decryptor.dart';
 import '../core/proxy_config.dart';
 import '../core/sub_formats.dart';
@@ -113,7 +114,7 @@ class HomePage extends StatelessWidget {
                 PopupMenuItem(
                   value: () => Navigator.push(
                     context,
-                    MaterialPageRoute<void>(builder: (_) => FreeConnectionsPage(state: state)),
+                    MaterialPageRoute<void>(settings: const RouteSettings(name: '/FreeConnectionsPage'), builder: (_) => FreeConnectionsPage(state: state)),
                   ),
                   child: _MenuRow(Icons.volunteer_activism_outlined, tr(context, 'freeConnections')),
                 ),
@@ -126,14 +127,14 @@ class HomePage extends StatelessWidget {
                 PopupMenuItem(
                   value: () => Navigator.push(
                     context,
-                    MaterialPageRoute<void>(builder: (_) => MyIpPage(state: state)),
+                    MaterialPageRoute<void>(settings: const RouteSettings(name: '/MyIpPage'), builder: (_) => MyIpPage(state: state)),
                   ),
                   child: _MenuRow(Icons.my_location, tr(context, 'menuMyIp')),
                 ),
                 PopupMenuItem(
                   value: () => Navigator.push(
                     context,
-                    MaterialPageRoute<void>(builder: (_) => DnsLeakPage(state: state)),
+                    MaterialPageRoute<void>(settings: const RouteSettings(name: '/DnsLeakPage'), builder: (_) => DnsLeakPage(state: state)),
                   ),
                   child: _MenuRow(Icons.dns_outlined, tr(context, 'menuDnsLeak')),
                 ),
@@ -141,7 +142,7 @@ class HomePage extends StatelessWidget {
                   value: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
-                        builder: (_) => ServiceTestPage(state: state)),
+                        settings: const RouteSettings(name: '/ServiceTestPage'), builder: (_) => ServiceTestPage(state: state)),
                   ),
                   child: _MenuRow(Icons.public, tr(context, 'menuServices')),
                 ),
@@ -149,7 +150,7 @@ class HomePage extends StatelessWidget {
                   value: () => Navigator.push(
                     context,
                     MaterialPageRoute<void>(
-                        builder: (_) => TroubleshootPage(state: state)),
+                        settings: const RouteSettings(name: '/TroubleshootPage'), builder: (_) => TroubleshootPage(state: state)),
                   ),
                   child: _MenuRow(Icons.help_outline, tr(context, 'menuTroubleshoot')),
                 ),
@@ -193,7 +194,7 @@ class HomePage extends StatelessWidget {
               onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute<void>(
-                    builder: (_) => SettingsPage(state: state)),
+                    settings: const RouteSettings(name: '/SettingsPage'), builder: (_) => SettingsPage(state: state)),
               ),
             ),
             if (Platform.isWindows) const SizedBox(width: 12),
@@ -306,41 +307,7 @@ class HomePage extends StatelessWidget {
   }
 
   /// Adds [text]; a subscription whose provider gave no name gets one from the user.
-  Future<void> _import(BuildContext context, String text) async {
-    final group = await state.importText(text);
-    if (group == null || !context.mounted) return;
-    // The name the provider or the link gave is filled in; with none, the field is empty (the
-    // address is not shown as a hint).
-    final found = group.name == Uri.tryParse(group.url ?? '')?.host ? '' : group.name;
-    final controller = TextEditingController(text: found)
-      ..selection = TextSelection(baseOffset: 0, extentOffset: found.length);
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialog) {
-        final t = S.of(dialog);
-        return AlertDialog(
-          title: Text(t.nameSubscription),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            onSubmitted: (v) => Navigator.pop(dialog, v),
-            decoration: InputDecoration(
-                labelText: t.subscriptionName,
-                border: const OutlineInputBorder()),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialog), child: Text(t.later)),
-            FilledButton(
-                onPressed: () => Navigator.pop(dialog, controller.text),
-                child: Text(t.save)),
-          ],
-        );
-      },
-    );
-    controller.dispose();
-    if (name != null) state.renameSubscription(group, name);
-  }
+  Future<void> _import(BuildContext context, String text) => importTextAndAsk(context, state, text);
 
   /// Windows: reads a QR code from a screenshot of the screen or an image on the clipboard
   /// (an image file goes through Add from file).
@@ -503,7 +470,7 @@ class HomePage extends StatelessWidget {
   Future<void> _scan(BuildContext context) async {
     final value = await Navigator.push<String>(
       context,
-      MaterialPageRoute(builder: (_) => const ScanPage()),
+      MaterialPageRoute(settings: const RouteSettings(name: '/ScanPage'), builder: (_) => const ScanPage()),
     );
     if (value != null && context.mounted) await _import(context, value);
   }
@@ -536,7 +503,7 @@ Future<bool> confirmDeletion(BuildContext context, AppState state) async {
   return ok == true;
 }
 
-/// "12 days left · 3.2 GB of 50 GB used"; unlimited parts say so.
+/// "12 days left Â· 3.2 GB of 50 GB used"; unlimited parts say so.
 String subscriptionLine(S t, SubInfo info) {
   String time;
   if (info.unlimitedTime) {
@@ -557,12 +524,12 @@ String subscriptionLine(S t, SubInfo info) {
   final String data;
   if (info.unlimitedData) {
     data = info.used > 0
-        ? '${t.usedUnlimited(_bytes(info.used))} · ${t.unlimitedData}'
+        ? '${t.usedUnlimited(_bytes(info.used))} Â· ${t.unlimitedData}'
         : t.unlimitedData;
   } else {
     data = t.usedOf(_bytes(info.used), _bytes(info.total));
   }
-  return '$time · $data';
+  return '$time Â· $data';
 }
 
 class _MenuRow extends StatelessWidget {
@@ -730,8 +697,8 @@ class _ConnectCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    '${selected == null ? '${t.autoFastest} · ' : ''}'
-                    '${ltr('${shown.label} · ${shown.maskedAddress}')}',
+                    '${selected == null ? '${t.autoFastest} Â· ' : ''}'
+                    '${ltr('${shown.label} Â· ${shown.maskedAddress}')}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:
@@ -1472,10 +1439,11 @@ class _GroupHeader extends StatelessWidget {
         GroupKind.subscription => group.name,
       };
 
-  IconData get _icon => switch (group.kind) {
+  /// The group's icon; null for WARP, which shows the app's own cloud.
+  IconData? get _icon => switch (group.kind) {
         GroupKind.collector => Icons.public,
         GroupKind.manual => Icons.edit_note,
-        GroupKind.warp => Icons.cloud_outlined,
+        GroupKind.warp => null,
         GroupKind.subscription => Icons.rss_feed,
       };
 
@@ -1499,6 +1467,7 @@ class _GroupHeader extends StatelessWidget {
         state.cancelRefresh(group);
       case _GroupAction.info:
         Navigator.of(context).push(MaterialPageRoute<void>(
+            settings: const RouteSettings(name: '/GroupInfoPage'),
             builder: (_) => switch (group.kind) {
                   GroupKind.collector => CollectorInfoPage(state: state),
                   GroupKind.warp => WarpPage(state: state),
@@ -1527,7 +1496,7 @@ class _GroupHeader extends StatelessWidget {
 
   /// "N works - P%": only the count is green, the progress keeps the normal color.
   Widget _testStat(String text, ColorScheme scheme) {
-    final i = text.indexOf(' · ');
+    final i = text.indexOf(' Â· ');
     if (i < 0) return Text(text);
     return Text.rich(TextSpan(children: [
       TextSpan(
@@ -1604,7 +1573,9 @@ class _GroupHeader extends StatelessWidget {
           CircleAvatar(
             radius: 18,
             backgroundColor: scheme.primaryContainer,
-            child: Icon(_icon, size: 20, color: scheme.onPrimaryContainer),
+            child: _icon == null
+                ? const KumoMark(size: 20)
+                : Icon(_icon, size: 20, color: scheme.onPrimaryContainer),
           ),
           if (state.working.contains(group.id))
             const SizedBox(
@@ -1924,7 +1895,7 @@ class _ConfigTile extends StatelessWidget {
       case _ConfigAction.edit:
         final result = await Navigator.push<String>(
           context,
-          MaterialPageRoute(builder: (_) => EditConfigPage(config: config)),
+          MaterialPageRoute(settings: const RouteSettings(name: '/EditConfigPage'), builder: (_) => EditConfigPage(config: config)),
         );
         if (result != null) {
           await state.editConfig(group, config, result);
@@ -1975,7 +1946,7 @@ class _ConfigTile extends StatelessWidget {
                 ),
               TextSpan(
                   text:
-                      '${ms == null ? '' : ' · '}${config.label} · ${config.maskedAddress}'),
+                      '${ms == null ? '' : ' Â· '}${config.label} Â· ${config.maskedAddress}'),
             ]),
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.start,
@@ -2040,11 +2011,53 @@ class _ConfigTile extends StatelessWidget {
   }
 }
 
+/// Adds [text] (links, a subscription address, a file's text); a subscription whose provider gave
+/// no name gets one from the user.
+Future<void> importTextAndAsk(BuildContext context, AppState state, String text) async {
+  final group = await state.importText(text);
+  if (group == null || !context.mounted) return;
+  // The name the provider or the link gave is filled in; with none, the field is empty (the
+  // address is not shown as a hint).
+  final found = group.name == Uri.tryParse(group.url ?? '')?.host ? '' : group.name;
+  final controller = TextEditingController(text: found)
+    ..selection = TextSelection(baseOffset: 0, extentOffset: found.length);
+  final name = await showDialog<String>(
+    context: context,
+    builder: (dialog) {
+      final t = S.of(dialog);
+      return AlertDialog(
+        title: Text(t.nameSubscription),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          onSubmitted: (v) => Navigator.pop(dialog, v),
+          decoration: InputDecoration(
+              labelText: t.subscriptionName,
+              border: const OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialog), child: Text(t.later)),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialog, controller.text),
+              child: Text(t.save)),
+        ],
+      );
+    },
+  );
+  controller.dispose();
+  if (name != null) state.renameSubscription(group, name);
+}
+
 Future<void> _editSubscription(
     BuildContext context, AppState state, ServerGroup group) async {
   final name = TextEditingController(text: group.name);
   final url = TextEditingController(text: group.url);
+  final agent = TextEditingController(text: group.userAgent ?? '');
+  final extra = TextEditingController(text: headerLines(group.headers));
+  Map<String, String> parsedHeaders = group.headers;
   String? error;
+  String? headersError;
   final ok = await showDialog<bool>(
     context: context,
     builder: (dialog) => StatefulBuilder(
@@ -2052,28 +2065,63 @@ Future<void> _editSubscription(
         final t = S.of(dialog);
         return AlertDialog(
           title: Text(t.editSubscriptionTitle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                decoration: InputDecoration(
-                    labelText: t.subscriptionName,
-                    border: const OutlineInputBorder()),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: url,
-                maxLines: 4,
-                minLines: 1,
-                textDirection: TextDirection.ltr,
-                decoration: InputDecoration(
-                  labelText: t.subscriptionUrl,
-                  border: const OutlineInputBorder(),
-                  errorText: error,
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: InputDecoration(
+                      labelText: t.subscriptionName,
+                      border: const OutlineInputBorder()),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: url,
+                  maxLines: 4,
+                  minLines: 1,
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(
+                    labelText: t.subscriptionUrl,
+                    border: const OutlineInputBorder(),
+                    errorText: error,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // What this provider needs to be asked with; most never need it.
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  initiallyExpanded: group.userAgent != null || group.headers.isNotEmpty,
+                  title: Text(tr(dialog, 'subAdvanced')),
+                  children: [
+                    TextField(
+                      controller: agent,
+                      textDirection: TextDirection.ltr,
+                      decoration: InputDecoration(
+                        labelText: 'User-Agent',
+                        helperText: tr(dialog, 'subUserAgentHint'),
+                        helperMaxLines: 2,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: extra,
+                      maxLines: 4,
+                      minLines: 2,
+                      textDirection: TextDirection.ltr,
+                      decoration: InputDecoration(
+                        labelText: tr(dialog, 'subHeaders'),
+                        helperText: tr(dialog, 'subHeadersHint'),
+                        helperMaxLines: 3,
+                        errorText: headersError,
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -2083,9 +2131,18 @@ Future<void> _editSubscription(
                 final u = url.text.trim();
                 if (!u.startsWith('http://') && !u.startsWith('https://')) {
                   setState(() => error = t.invalidUrl);
-                } else {
-                  Navigator.pop(dialog, true);
+                  return;
                 }
+                try {
+                  parsedHeaders = parseHeaderLines(extra.text);
+                } on FormatException catch (e) {
+                  setState(() {
+                    error = null;
+                    headersError = tr(dialog, 'subHeadersBad', {'line': '${e.source ?? e.message}'});
+                  });
+                  return;
+                }
+                Navigator.pop(dialog, true);
               },
               child: Text(t.save),
             ),
@@ -2096,7 +2153,9 @@ Future<void> _editSubscription(
   );
   if (ok == true) {
     final n = name.text.trim();
-    await state.editSubscription(
-        group, n.isEmpty ? group.name : n, url.text.trim());
+    await state.editSubscription(group, n.isEmpty ? group.name : n, url.text.trim(),
+        userAgent: cleanUserAgent(agent.text), headers: parsedHeaders);
   }
+  agent.dispose();
+  extra.dispose();
 }

@@ -213,10 +213,71 @@ Future<String> fetchText(String url,
 /// holds no servers.
 const _clients = ['Mozilla/5.0', 'v2rayN/7.0', 'clash.meta', 'sing-box'];
 
+/// Request headers that the user may not set: the connection and the length are the client's own,
+/// and the others would change what the request is.
+const _blockedHeaders = {
+  'host', 'content-length', 'connection', 'transfer-encoding', 'upgrade', 'te', 'trailer',
+  'expect', 'keep-alive', 'proxy-authorization', 'proxy-connection', 'accept-encoding',
+};
+final _headerName = RegExp(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,40}$");
+const maxSubHeaders = 10;
+
+/// A User-Agent the user typed, cleaned: one line, at most 200 characters; null when empty.
+String? cleanUserAgent(String? raw) {
+  final s = (raw ?? '').replaceAll(RegExp(r'[\x00-\x1f\x7f]'), ' ').trim();
+  if (s.isEmpty) return null;
+  return s.length > 200 ? s.substring(0, 200) : s;
+}
+
+/// The headers of one subscription as typed, one "Name: value" per line. Lines that are empty are
+/// skipped. Throws a [FormatException] naming the first line that cannot be a header (a bad name, a
+/// name the client sets itself, a value with control characters or over 500 characters, or more than
+/// [maxSubHeaders] headers).
+Map<String, String> parseHeaderLines(String text) {
+  final out = <String, String>{};
+  for (final raw in text.split(RegExp(r'\r?\n'))) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    final i = line.indexOf(':');
+    if (i <= 0) throw FormatException('Not "Name: value"', line);
+    final name = line.substring(0, i).trim();
+    final value = line.substring(i + 1).trim();
+    if (!_headerName.hasMatch(name) || _blockedHeaders.contains(name.toLowerCase()) || name.toLowerCase().startsWith('proxy-')) {
+      throw FormatException('This header cannot be set', name);
+    }
+    if (value.isEmpty || value.length > 500 || RegExp(r'[\x00-\x1f\x7f]').hasMatch(value)) {
+      throw FormatException('Bad value', name);
+    }
+    out[name] = value;
+    if (out.length > maxSubHeaders) throw const FormatException('Too many headers');
+  }
+  return out;
+}
+
+/// [parseHeaderLines] turned back into text.
+String headerLines(Map<String, String> headers) =>
+    headers.entries.map((e) => '${e.key}: ${e.value}').join('\n');
+
+/// The headers read from saved data, with anything that does not pass dropped.
+Map<String, String> cleanSavedHeaders(Object? raw) {
+  if (raw is! Map) return const {};
+  try {
+    return parseHeaderLines(
+        raw.entries.where((e) => e.key is String && e.value is String).map((e) => '${e.key}: ${e.value}').join('\n'));
+  } on FormatException {
+    return const {};
+  }
+}
+
+/// [userAgent] and [headers] are the subscription's own (set by the user). A User-Agent given
+/// replaces the list of clients that is tried one after the other. The headers go only to the
+/// subscription's own host, never to another address an answer points to.
 Future<Fetched> fetchSubscription(String url,
     {Duration timeout = const Duration(seconds: 15),
     bool allowInsecure = false,
-    bool lookupName = false}) async {
+    bool lookupName = false,
+    String? userAgent,
+    Map<String, String> headers = const {}}) async {
   Fetched? first;
   Object? error;
   // Without a name from the provider's headers, the information page may have one. This is
@@ -227,16 +288,18 @@ Future<Fetched> fetchSubscription(String url,
     return title == null ? f : Fetched(f.body, title, f.info, f.meta);
   }
 
-  for (final agent in _clients) {
+  final custom = cleanUserAgent(userAgent);
+  final agents = custom == null ? _clients : [custom];
+  for (final agent in agents) {
     try {
-      final f = await _fetchOnce(url, agent, timeout, allowInsecure);
+      final f = await _fetchOnce(url, agent, timeout, allowInsecure, headers);
       first ??= f;
       if (extractSubscriptionLinks(f.body).isNotEmpty) return named(f);
       final merged = await _followUrlList(f, timeout, allowInsecure);
       if (merged != null) return named(merged);
     } catch (e) {
       error ??= e;
-      if (first == null && agent == _clients.first && e is TimeoutException) {
+      if (first == null && agent == agents.first && e is TimeoutException) {
         break;
       }
     }
@@ -352,7 +415,8 @@ bool isPublicUrl(String url) {
 }
 
 Future<Fetched> _fetchOnce(
-    String url, String agent, Duration timeout, bool allowInsecure) async {
+    String url, String agent, Duration timeout, bool allowInsecure,
+    [Map<String, String> headers = const {}]) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
   if (allowInsecure) client.badCertificateCallback = (_, __, ___) => true;
   try {
@@ -367,6 +431,12 @@ Future<Fetched> _fetchOnce(
       req.headers
         ..set(HttpHeaders.userAgentHeader, agent)
         ..set(HttpHeaders.acceptHeader, 'application/json, text/plain, */*');
+      // The user's headers (a key, a token) only go to the host the subscription is on.
+      if (uri.host == first.host) {
+        for (final h in headers.entries) {
+          req.headers.set(h.key, h.value);
+        }
+      }
       res = await req.close().timeout(timeout);
       if (!res.isRedirect) break;
       final location = res.headers.value(HttpHeaders.locationHeader);

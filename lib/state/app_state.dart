@@ -28,6 +28,7 @@ import '../core/ovpn/ovpn_runner.dart';
 import 'warp_controller.dart';
 import 'usage_controller.dart';
 import '../core/usage/usage_transport.dart' show defaultFragment;
+import '../core/usage/crash_hub.dart';
 import '../core/usage_alert.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart' show trFor;
@@ -58,6 +59,11 @@ class ServerGroup {
 
   /// The name was taken from the link, so the subscription's own title may replace it.
   bool autoName = false;
+
+  /// What the user set for downloading this subscription: the User-Agent to ask with (null: the app
+  /// tries its usual clients one by one) and extra request headers (see core/sources.dart).
+  String? userAgent;
+  Map<String, String> headers = const {};
 
   /// Expiry and data volume the provider reported, if any.
   SubInfo? info;
@@ -113,11 +119,47 @@ class AppState extends ChangeNotifier {
     // Desktop in proxy mode: the app's own traffic does not go through the VPN.
     tunnelUp: () => connected && (!isDesktop || net.tun),
     appLanguage: () => languageCode, // null while the app follows the device
+    log: (text) => log(text),
+    screen: () => routes.current,
+    vpnState: _vpnStateName,
+    logLines: _recentLogLines,
+    hosts: _secretHosts,
     fragment: () {
       final p = warp.profile;
       return p == null ? defaultFragment : (size: p.fragmentSize, delay: p.fragmentDelay);
     },
   );
+
+  /// The page the user is on (given to the navigator; used in crash reports).
+  final routes = RouteTracker();
+
+  /// The VPN state under the names a crash report uses.
+  String _vpnStateName() => switch (vpn.status) {
+        VpnStatus.stopped => 'disconnected',
+        VpnStatus.starting => 'connecting',
+        VpnStatus.started => 'connected',
+        VpnStatus.stopping => 'disconnecting',
+        VpnStatus.error => 'error',
+      };
+
+  /// The last lines of the app's own log, with their time, for a crash report.
+  List<String> _recentLogLines() {
+    final from = logs.length > 40 ? logs.length - 40 : 0;
+    return [
+      for (final e in logs.sublist(from)) '${e.time.toIso8601String().substring(11, 19)} ${e.text.replaceAll('\n', ' ')}',
+    ];
+  }
+
+  /// The names and addresses of the user's servers and subscriptions, removed from crash reports.
+  Iterable<String> _secretHosts() sync* {
+    for (final c in all) {
+      yield c.host;
+    }
+    for (final g in groups) {
+      final h = Uri.tryParse(g.url ?? '')?.host;
+      if (h != null && h.isNotEmpty) yield h;
+    }
+  }
 
   /// The WARP server, in a group of its own while WARP is on. It is not saved with the servers: the
   /// controller makes it from the account it keeps.
@@ -275,6 +317,38 @@ class AppState extends ChangeNotifier {
   bool restartOnChange = true;
   bool confirmDelete = true;
   bool batteryAsked = false;
+
+  /// The request to star the project on GitHub: when the app was first used (ms), how many times it
+  /// was opened, how many times the request was shown, when it may be shown next (ms), and whether
+  /// it is over for good (starred, or "don't ask again").
+  int starSince = 0;
+  int starOpens = 0;
+  int starAsked = 0;
+  int starNext = 0;
+  bool starDone = false;
+
+  /// True when the request to star the project should be shown now: after a week of use and ten
+  /// openings, at most twice (the second time a month after the first), never again once answered.
+  bool get starDue {
+    if (!onboarded || starDone || starAsked >= 2 || starSince == 0) return false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return starOpens >= 10 && now - starSince >= 7 * 86400000 && now >= starNext;
+  }
+
+  /// Counts one opening of the app (and notes the first day of use).
+  void noteOpen() {
+    if (starSince == 0) starSince = DateTime.now().millisecondsSinceEpoch;
+    starOpens++;
+    _saveSettings();
+  }
+
+  /// The answer to the request: [done] when the user starred or asked not to be asked again.
+  void answerStar({required bool done}) {
+    starAsked++;
+    starDone = done;
+    starNext = DateTime.now().millisecondsSinceEpoch + 30 * 86400000;
+    _saveSettings();
+  }
 
   /// False until the first-run guide has been finished; people who already had settings skip it.
   bool onboarded = false;
@@ -468,6 +542,13 @@ class AppState extends ChangeNotifier {
               before == VpnStatus.starting ||
               before == VpnStatus.stopping)) {
         _noteDisconnect(s);
+        // The core stopped on its own or did not start: a report of it (the server and the link
+        // are removed from the text; "revoked" is the user taking the VPN away, not a fault).
+        if (s.status == VpnStatus.error && s.error != 'revoked') {
+          final reason = (s.error ?? '').trim().isEmpty ? 'no reason given' : s.error!;
+          CrashHub.report(StateError(reason), null,
+              kind: before == VpnStatus.starting ? 'core_start_failed' : 'core_exit', message: reason);
+        }
       }
       _preparing = false;
       if (s.status != VpnStatus.started) {
@@ -801,6 +882,11 @@ class AppState extends ChangeNotifier {
       restartOnChange = flag('restartOnChange', true);
       confirmDelete = flag('confirmDelete', true);
       batteryAsked = flag('batteryAsked', false);
+      starSince = (j['starSince'] as num?)?.toInt() ?? 0;
+      starOpens = (j['starOpens'] as num?)?.toInt() ?? 0;
+      starAsked = (j['starAsked'] as num?)?.toInt() ?? 0;
+      starNext = (j['starNext'] as num?)?.toInt() ?? 0;
+      starDone = flag('starDone', false);
       onboarded = flag('onboarded', true);
       homeCountry = j['homeCountry'] is String ? j['homeCountry'] as String : '';
       showCollector = flag('showCollector', true);
@@ -864,6 +950,11 @@ class AppState extends ChangeNotifier {
           'restartOnChange': restartOnChange,
           'confirmDelete': confirmDelete,
           'batteryAsked': batteryAsked,
+          'starSince': starSince,
+          'starOpens': starOpens,
+          'starAsked': starAsked,
+          'starNext': starNext,
+          'starDone': starDone,
           'onboarded': onboarded,
           'homeCountry': homeCountry,
           'showCollector': showCollector,
@@ -1029,6 +1120,8 @@ class AppState extends ChangeNotifier {
           final g = ServerGroup(m['id'] as String, GroupKind.subscription,
               name: m['name'] as String? ?? '', url: m['url'] as String?)
             ..autoName = m['auto'] == true
+            ..userAgent = cleanUserAgent(m['userAgent'] as String?)
+            ..headers = cleanSavedHeaders(m['headers'])
             ..info = SubInfo.fromJson(m['info'])
             ..updatedAt = (m['updatedAt'] as num?)?.toInt() ?? 0
             ..providerInterval = (m['providerInterval'] as num?)?.toInt()
@@ -1370,6 +1463,8 @@ class AppState extends ChangeNotifier {
             'name': g.name,
             'url': g.url,
             'auto': g.autoName,
+            if (g.userAgent != null) 'userAgent': g.userAgent,
+            if (g.headers.isNotEmpty) 'headers': g.headers,
             'info': g.info?.toJson(),
             'updatedAt': g.updatedAt,
             'providerInterval': g.providerInterval,
@@ -1616,7 +1711,11 @@ class AppState extends ChangeNotifier {
     await _job((t) => t.fetchingList, () async {
       try {
         final fetched = await Future.any(<Future<Fetched?>>[
-          fetchSubscription(g.url!, allowInsecure: allowInsecure, lookupName: naming),
+          fetchSubscription(g.url!,
+              allowInsecure: allowInsecure,
+              lookupName: naming,
+              userAgent: g.userAgent,
+              headers: g.headers),
           cancel.future.then((_) => null),
         ]);
         if (fetched == null || _stale(key, gen)) return;
@@ -1648,15 +1747,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> editSubscription(ServerGroup g, String name, String url) async {
-    final changed = g.url != url;
+  Future<void> editSubscription(ServerGroup g, String name, String url,
+      {String? userAgent, Map<String, String> headers = const {}}) async {
+    final ua = cleanUserAgent(userAgent);
+    final changed = g.url != url || g.userAgent != ua || !_sameHeaders(g.headers, headers);
     if (name != g.name) g.autoName = false;
     g.name = name;
     g.url = url;
+    g.userAgent = ua;
+    g.headers = Map.unmodifiable(headers);
     _save();
     notifyListeners();
     if (changed) await refreshSubscription(g);
   }
+
+  static bool _sameHeaders(Map<String, String> a, Map<String, String> b) =>
+      a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
 
   void removeSubscription(ServerGroup g) {
     // A download that is still going must not bring the list back, and the copy the background job

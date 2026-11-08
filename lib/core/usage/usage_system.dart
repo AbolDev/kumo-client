@@ -123,8 +123,8 @@ String? _desktopArch() {
 }
 
 /// The facts the ping lists besides the version: the app's language when the user chose one
-/// ([appLanguage]), the device's language and region, the time zone, the processor, and on Android
-/// the phone's maker, model and interface. Each is null when it cannot be read. Never throws.
+/// ([appLanguage]), the device's language and region, the time zone, the processor, and the maker and
+/// model of the device (on Android also the maker's interface, on Linux the desktop). Each is null when it cannot be read. Never throws.
 Future<DeviceFacts> readDeviceFacts({String? appLanguage}) async {
   String? brand, model, ui, arch, tz;
   try {
@@ -147,6 +147,37 @@ Future<DeviceFacts> readDeviceFacts({String? appLanguage}) async {
       tz = await _readTimeZone();
     }
   } catch (_) {}
+  // The maker and model of a computer (names only: no serial number, no host name, no id).
+  if (!Platform.isAndroid) {
+    try {
+      if (Platform.isWindows) {
+        final r = await Process.run('reg', ['query', r'HKLM\HARDWARE\DESCRIPTION\System\BIOS']);
+        final n = parseWindowsBios('${r.stdout}');
+        brand = n.brand;
+        model = n.model;
+      } else if (Platform.isMacOS) {
+        final r = await Process.run('/usr/sbin/sysctl', ['-n', 'hw.model']);
+        final n = parseMacModel('${r.stdout}');
+        brand = n.brand;
+        model = n.model;
+      } else if (Platform.isLinux) {
+        Future<String?> dmi(String name) async {
+          final f = File('/sys/class/dmi/id/$name');
+          return await f.exists() ? await f.readAsString() : null;
+        }
+
+        final n = linuxDeviceNames(
+          vendor: await dmi('sys_vendor'),
+          product: await dmi('product_name'),
+          family: await dmi('product_family'),
+          desktop: Platform.environment['XDG_CURRENT_DESKTOP'],
+        );
+        brand = n.brand;
+        model = n.model;
+        ui = n.ui;
+      }
+    } catch (_) {}
+  }
   return DeviceFacts(
     lang: appLanguage,
     deviceLang: Platform.localeName,

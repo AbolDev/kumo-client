@@ -4,10 +4,13 @@ import 'dart:io';
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import 'desktop_vpn.dart' show DesktopVpn;
 import 'ovpn/ovpn_probe.dart';
+import 'net_options.dart' show NetOptions;
 import 'proxy_config.dart';
-import 'singbox_config.dart' show XrayAuth, buildXrayConfig;
+import 'singbox_config.dart' show XrayAuth, buildXrayConfig, tweakLayers;
 import 'vpn_channel.dart';
 
 /// Page fetched through the proxy to measure the real delay. Plain HTTP on purpose: HTTPS adds a
@@ -27,6 +30,8 @@ const _udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
 /// throw-away test core. WireGuard is an endpoint there, everything else an outbound.
 String _delayConfig(List<Map<String, dynamic>> layers) {
   final wireguard = layers.first['type'] == 'wireguard';
+  // Two WireGuard tunnels (Warp-in-Warp): the first is dialled through the second.
+  final two = wireguard && layers.length > 1 && layers[1]['type'] == 'wireguard';
   return jsonEncode({
     'log': {'level': 'error'},
     'dns': {
@@ -46,11 +51,16 @@ String _delayConfig(List<Map<String, dynamic>> layers) {
       ],
     if (wireguard)
       'endpoints': [
-        {...layers.first, 'tag': 'proxy'},
+        {...layers.first, 'tag': 'proxy', if (two) 'detour': 'proxy-l1'},
+        if (two) {...layers[1], 'tag': 'proxy-l1'},
       ],
     'route': {'default_domain_resolver': 'dns'},
   });
 }
+
+/// [_delayConfig] for the tests.
+@visibleForTesting
+String delayConfigForTest(List<Map<String, dynamic>> layers) => _delayConfig(layers);
 
 /// The server and the layers under it with their names already resolved by the system resolver.
 /// Resolving them inside the throw-away core went through a fixed public DNS server, which is slow
@@ -115,8 +125,11 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) async {
 /// when the test was skipped (the tunnel is being started or stopped). Servers only Xray can carry
 /// (XHTTP ...) are measured with a throw-away Xray the same way. A TCP connect is never put in its
 /// place: a server that fails the real delay has failed it.
+///
+/// With [options] the server is tried with those advanced options (fragmenting, a fingerprint, mux)
+/// instead of a plain outbound; this is for servers sing-box carries.
 Future<int> realDelay(ProxyConfig c,
-    {Duration timeout = const Duration(seconds: 8)}) async {
+    {Duration timeout = const Duration(seconds: 8), NetOptions? options}) async {
   // An OpenVPN server is measured by the OpenVPN program itself: the time until the handshake is done.
   if (c.isOpenVpn) {
     if (!Platform.isWindows) return -2;
@@ -130,8 +143,9 @@ Future<int> realDelay(ProxyConfig c,
     return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
         timeoutMs: timeout.inMilliseconds);
   }
-  return VpnChannel.delay(_delayConfig(await _resolvedLayers(c)), delayTestUrl,
-      timeoutMs: timeout.inMilliseconds);
+  var layers = await _resolvedLayers(c);
+  if (options != null) layers = tweakLayers(layers, options);
+  return VpnChannel.delay(_delayConfig(layers), delayTestUrl, timeoutMs: timeout.inMilliseconds);
 }
 
 /// Delay of fetching [delayTestUrl] while the VPN is up, in ms, -1 on failure. The request

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/kumo_mark.dart';
 
 import '../core/usage_stats.dart' show formatBytes;
 import '../core/warp/warp_store.dart';
@@ -84,7 +85,7 @@ class _WarpPageState extends State<WarpPage> {
                   onPressed: warp.busy || p == null ? null : warp.setUp,
                   icon: warp.busy
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.cloud_outlined),
+                      : const KumoMark(size: 20),
                   label: Text(tr(context, warp.busy ? 'warpSettingUp' : 'warpSetUp')),
                 )
               else ...[
@@ -118,7 +119,40 @@ class _WarpPageState extends State<WarpPage> {
                   leading: const Icon(Icons.swap_horiz),
                   title: Text(tr(context, 'warpTryNext')),
                   subtitle: Text(tr(context, 'warpTryNextDesc')),
-                  onTap: warp.busy ? null : warp.nextMethod,
+                  onTap: warp.busy || warp.scanning ? null : warp.nextMethod,
+                ),
+                // The scan: every way of reaching WARP is tried, the fastest one that answers is used.
+                ListTile(
+                  leading: warp.scanning
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.radar),
+                  title: Text(warp.scanning
+                      ? tr(context, 'warpScanning', {'done': warp.scanDone, 'total': warp.scanTotal})
+                      : tr(context, 'warpScan')),
+                  subtitle: Text(tr(context, 'warpScanDesc')),
+                  trailing: warp.scanning
+                      ? TextButton(
+                          onPressed: warp.cancelScan,
+                          child: Text(MaterialLocalizations.of(context).cancelButtonLabel))
+                      : null,
+                  onTap: warp.busy || warp.scanning ? null : warp.scan,
+                ),
+                if (warp.scanFailed)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(tr(context, 'warpScanNone'), style: TextStyle(color: scheme.error)),
+                  ),
+                for (final r in warp.scanResults)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(72, 0, 16, 4),
+                    child: Text('${r.text}  ${r.ms} ms', textDirection: TextDirection.ltr),
+                  ),
+                SwitchListTile(
+                  secondary: const Icon(Icons.layers_outlined),
+                  title: Text(tr(context, 'warpInWarp')),
+                  subtitle: Text(tr(context, 'warpInWarpDesc')),
+                  value: warp.inWarp,
+                  onChanged: warp.busy || warp.scanning ? null : warp.setInWarp,
                 ),
               ],
               if (warp.error != null)

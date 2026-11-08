@@ -76,7 +76,7 @@ List<Widget> networkSections(
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute<void>(
-              builder: (_) => AppRoutingPage(state: state)),
+              settings: const RouteSettings(name: '/AppRoutingPage'), builder: (_) => AppRoutingPage(state: state)),
         ),
       ),
       ListTile(
@@ -96,7 +96,7 @@ List<Widget> networkSections(
             : Text('${o.directRules.length + o.proxyRules.length + o.blockRules.length}'),
         onTap: () => Navigator.push(
           context,
-          MaterialPageRoute<void>(builder: (_) => RoutingRulesPage(state: state)),
+          MaterialPageRoute<void>(settings: const RouteSettings(name: '/RoutingRulesPage'), builder: (_) => RoutingRulesPage(state: state)),
         ),
       ),
       flag(tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),

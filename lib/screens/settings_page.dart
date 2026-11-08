@@ -364,6 +364,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onTap: () => Navigator.push(
             tileContext,
             MaterialPageRoute<void>(
+              settings: const RouteSettings(name: '/SettingsSection'),
               // The page is built again on every change (state, theme, language), so the title,
               // the switches and the colours all follow it.
               builder: (_) => ListenableBuilder(
@@ -544,7 +545,7 @@ class _SettingsPageState extends State<SettingsPage> {
           subtitle: Text(tr(context, 'liveConnectionsDesc')),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute<void>(builder: (_) => ConnectionsPage(state: state)),
+            MaterialPageRoute<void>(settings: const RouteSettings(name: '/ConnectionsPage'), builder: (_) => ConnectionsPage(state: state)),
           ),
         ),
         ListTile(
@@ -553,7 +554,7 @@ class _SettingsPageState extends State<SettingsPage> {
           subtitle: Text(tr(context, 'usageDesc')),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute<void>(builder: (_) => UsagePage(state: state)),
+            MaterialPageRoute<void>(settings: const RouteSettings(name: '/UsagePage'), builder: (_) => UsagePage(state: state)),
           ),
         ),
       ]),
@@ -564,7 +565,7 @@ class _SettingsPageState extends State<SettingsPage> {
           subtitle: Text(tr(context, 'freeConnectionsDesc')),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute<void>(builder: (_) => FreeConnectionsPage(state: state)),
+            MaterialPageRoute<void>(settings: const RouteSettings(name: '/FreeConnectionsPage'), builder: (_) => FreeConnectionsPage(state: state)),
           ),
         ),
       ]),
@@ -589,7 +590,7 @@ class _SettingsPageState extends State<SettingsPage> {
           trailing: Text('${state.logs.length}'),
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute<void>(builder: (_) => LogsPage(state: state)),
+            MaterialPageRoute<void>(settings: const RouteSettings(name: '/LogsPage'), builder: (_) => LogsPage(state: state)),
           ),
         ),
       ]),

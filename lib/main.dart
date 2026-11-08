@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:io' show Platform, exit;
+import 'dart:isolate' show Isolate, RawReceivePort;
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -9,7 +12,9 @@ import 'core/app_icon.dart';
 import 'core/build_flavor.dart';
 import 'core/desktop_vpn.dart';
 import 'core/platform.dart';
+import 'core/external_open.dart';
 import 'core/single_instance.dart';
+import 'core/usage/crash_hub.dart';
 import 'core/vpn_channel.dart';
 import 'core/win_menu_theme.dart';
 import 'l10n/extra.dart';
@@ -20,12 +25,42 @@ import 'screens/update_dialog.dart';
 import 'widgets/title_bar.dart';
 import 'state/app_state.dart';
 
-Future<void> main(List<String> args) async {
+/// Links and files that this copy was started with (desktop); asked about once the app is up.
+List<String> _startupExternal = const [];
+
+void main(List<String> args) {
+  // Errors nobody caught are handed to the crash report (it does nothing while the usage-count
+  // switch is off, and never shows anything). The framework's own printing stays as it was.
+  final printed = FlutterError.onError;
+  FlutterError.onError = (details) {
+    printed?.call(details);
+    CrashHub.report(details.exception, details.stack, kind: 'FlutterError', message: details.exceptionAsString());
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    CrashHub.report(error, stack);
+    return true;
+  };
+  try {
+    Isolate.current.addErrorListener(RawReceivePort((dynamic pair) {
+      final list = pair as List<dynamic>;
+      CrashHub.report(StateError('${list.first}'), StackTrace.fromString('${list.last}'), kind: 'IsolateError');
+    }).sendPort);
+  } catch (_) {}
+  runZonedGuarded(() => _start(args), (error, stack) => CrashHub.report(error, stack));
+}
+
+Future<void> _start(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (isDesktop) {
     // A second copy would stop the first one's cores and fight over the proxy; it shows the first
     // copy's window and ends.
-    if (!await SingleInstance.acquire(DesktopVpn.instance.dataDir)) exit(0);
+    final handed = await ExternalInbox.fromArgs(args);
+    if (!await SingleInstance.acquire(DesktopVpn.instance.dataDir)) {
+      // A link or a file opened with Kumo while it already runs goes to the running copy.
+      await ExternalInbox.send(DesktopVpn.instance.dataDir, handed);
+      exit(0);
+    }
+    _startupExternal = handed;
     await windowManager.ensureInitialized();
     await windowManager.waitUntilReadyToShow(
       WindowOptions(
@@ -87,6 +122,9 @@ class _KumoAppState extends State<KumoApp>
         _trayReady.then((_) => AppIcon.apply(_state.appIcon)).catchError((_) {});
       }
       _askBatteryOnce();
+      _listenExternal();
+      _state.noteOpen();
+      _askStarLater();
       // A newer stable release is offered when the app opens (not in the F-Droid build).
       if (!fdroidBuild) {
         Future<void>.delayed(const Duration(seconds: 3), () {
@@ -109,6 +147,7 @@ class _KumoAppState extends State<KumoApp>
 
   @override
   void dispose() {
+    _externalTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     if (isDesktop) {
       windowManager.removeListener(this);
@@ -209,6 +248,122 @@ class _KumoAppState extends State<KumoApp>
   }
 
   /// Offers once to lift Android's battery restriction, which can stop the VPN in the background.
+  // ---- links and files other programs open with Kumo
+
+  final _externalQueue = <String>[];
+  var _askingExternal = false;
+  Timer? _externalTimer;
+
+  /// Starts listening: the phone tells the app when something was opened with it, a computer is
+  /// looked at every two seconds (a second copy of the program leaves it in the data folder).
+  void _listenExternal() {
+    VpnChannel.onExternal(_pullExternal);
+    if (isDesktop) {
+      _externalTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pullExternal());
+    }
+    _pullExternal();
+  }
+
+  Future<void> _pullExternal() async {
+    try {
+      final got = <String>[];
+      if (Platform.isAndroid) {
+        final text = await VpnChannel.takeExternal();
+        if (text != null && text.trim().isNotEmpty) got.add(text);
+      } else {
+        got.addAll(_startupExternal);
+        _startupExternal = const [];
+        got.addAll(await ExternalInbox.take(DesktopVpn.instance.dataDir));
+      }
+      if (got.isEmpty) return;
+      _externalQueue.addAll(got);
+      if (isDesktop) {
+        await windowManager.show();
+        await windowManager.focus();
+      }
+      unawaited(_drainExternal());
+    } catch (_) {}
+  }
+
+  /// Asks about each thing in turn. Nothing is added without a yes: a link in a web page or a chat
+  /// can come from anybody.
+  Future<void> _drainExternal() async {
+    if (_askingExternal) return;
+    _askingExternal = true;
+    try {
+      while (_externalQueue.isNotEmpty) {
+        final context = _navigator.currentContext;
+        if (context == null || !context.mounted || !_state.settingsLoaded || !_state.onboarded) {
+          // The app is still starting: look again in a moment.
+          Timer(const Duration(seconds: 1), _drainExternal);
+          return;
+        }
+        final text = _externalQueue.removeAt(0);
+        final what = summarizeExternal(text);
+        final yes = await showDialog<bool>(
+          context: context,
+          builder: (dialog) => AlertDialog(
+            icon: const Icon(Icons.download_for_offline_outlined),
+            title: Text(tr(dialog, 'openTitle')),
+            content: Text(what == null
+                ? tr(dialog, 'openNone')
+                : [
+                    what.host != null
+                        ? tr(dialog, 'openSubscription', {'host': ltr(what.host!)})
+                        : tr(dialog, 'openServers', {'n': what.servers}),
+                    tr(dialog, 'openAsk'),
+                  ].join('\n\n')),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialog, false),
+                  child: Text(what == null ? MaterialLocalizations.of(dialog).okButtonLabel : S.of(dialog).cancel)),
+              if (what != null)
+                FilledButton(
+                    onPressed: () => Navigator.pop(dialog, true), child: Text(tr(dialog, 'openAdd'))),
+            ],
+          ),
+        );
+        if (yes == true && context.mounted) await importTextAndAsk(context, _state, text);
+      }
+    } catch (_) {
+    } finally {
+      _askingExternal = false;
+    }
+  }
+
+  /// After a while of use, asks once (twice at most) for a star on GitHub. It waits for the other
+  /// start-up questions and shows nothing while another window is open.
+  void _askStarLater() {
+    if (!_state.starDue) return;
+    Future<void>.delayed(const Duration(seconds: 45), () async {
+      final context = _navigator.currentContext;
+      if (context == null || !context.mounted || !_state.starDue) return;
+      if (ModalRoute.of(context)?.isCurrent == false) return;
+      final answer = await showDialog<String>(
+        context: context,
+        builder: (dialog) => AlertDialog(
+          icon: const Icon(Icons.star_rounded),
+          title: Text(tr(dialog, 'starTitle')),
+          content: Text(tr(dialog, 'starMessage')),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialog, 'never'),
+                child: Text(tr(dialog, 'starNever'))),
+            TextButton(
+                onPressed: () => Navigator.pop(dialog, 'later'),
+                child: Text(S.of(dialog).later)),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialog, 'star'),
+                child: Text(tr(dialog, 'starOpen'))),
+          ],
+        ),
+      );
+      if (answer == null) return;
+      _state.answerStar(done: answer != 'later');
+      if (answer == 'star') await openLink('https://github.com/AbolDev/kumo-client');
+    });
+  }
+
   Future<void> _askBatteryOnce() async {
     if (_state.batteryAsked || !_state.onboarded) return;
     final context = _navigator.currentContext;
@@ -262,6 +417,7 @@ class _KumoAppState extends State<KumoApp>
       builder: (context, _) => MaterialApp(
         title: 'Kumo',
         navigatorKey: _navigator,
+        navigatorObservers: [_state.routes],
         // A very wide desktop window keeps its content in the middle, on the same background.
         builder: (context, child) => isDesktop
             ? ColoredBox(
@@ -291,6 +447,7 @@ class _KumoAppState extends State<KumoApp>
         theme: _theme(Brightness.light),
         darkTheme: _theme(Brightness.dark),
         themeMode: _state.themeMode,
+        // (The first route is "/", set by Flutter.)
         home: !_state.settingsLoaded
             ? const Scaffold()
             : _state.onboarded

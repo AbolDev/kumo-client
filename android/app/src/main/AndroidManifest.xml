@@ -19,7 +19,7 @@
         android:name=".App"
         android:icon="@mipmap/ic_launcher_teal_night"
         android:roundIcon="@mipmap/ic_launcher_teal_night"
-        android:banner="@mipmap/ic_launcher"
+        android:banner="@drawable/tv_banner"
         android:allowBackup="false">
         <!-- The launcher entries are the activity-aliases below, one per icon in Settings. -->
         <activity
@@ -38,6 +38,49 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Links of servers and subscriptions, shared text and files that other apps open with Kumo.
+             It has no screen: it passes them on to KumoActivity, which asks the user first. -->
+        <activity
+            android:name=".ExternalOpenActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="vless"/>
+                <data android:scheme="vmess"/>
+                <data android:scheme="trojan"/>
+                <data android:scheme="ss"/>
+                <data android:scheme="hysteria"/>
+                <data android:scheme="hysteria2"/>
+                <data android:scheme="hy2"/>
+                <data android:scheme="tuic"/>
+                <data android:scheme="anytls"/>
+                <data android:scheme="wireguard"/>
+                <data android:scheme="clash"/>
+                <data android:scheme="sing-box"/>
+                <data android:scheme="hiddify"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:mimeType="application/json"/>
+                <data android:mimeType="application/x-yaml"/>
+                <data android:mimeType="text/yaml"/>
+                <data android:mimeType="application/x-openvpn-profile"/>
             </intent-filter>
         </activity>
 

@@ -6,9 +6,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../core/latency_tester.dart' show realDelay;
 import '../core/proxy_config.dart';
 import '../core/vpn_channel.dart';
 import '../core/warp/warp_link.dart';
+import '../core/warp/warp_scan.dart';
 import '../core/warp/warp_profile.dart';
 import '../core/warp/warp_register.dart';
 import '../core/warp/warp_store.dart';
@@ -44,6 +46,11 @@ class WarpController extends ChangeNotifier {
   );
 
   WarpAccount? account;
+
+  /// Warp-in-Warp (experimental): a second account whose tunnel carries the first one's. Off by
+  /// default; the second account is made when the switch is first turned on.
+  WarpAccount? account2;
+  bool inWarp = false;
 
   /// Whether WARP is on: its server is in the list. Off by default; turning it off takes the server
   /// out of the list but keeps the account, so that turning it on again needs no new sign-up.
@@ -126,6 +133,8 @@ class WarpController extends ChangeNotifier {
       final j = text == null ? null : jsonDecode(text);
       if (j is Map) {
         account = WarpAccount.fromJson(j['account']);
+        account2 = WarpAccount.fromJson(j['account2']);
+        inWarp = j['inWarp'] == true && account2 != null;
         // Saved before the switch existed: an account that was made is in use.
         enabled = j['enabled'] is bool ? j['enabled'] as bool : account != null;
         choice = j['choice'] is int ? j['choice'] as int : 0;
@@ -144,6 +153,8 @@ class WarpController extends ChangeNotifier {
       _file,
       jsonEncode({
         'account': account?.toJson(),
+        'account2': account2?.toJson(),
+        'inWarp': inWarp,
         'enabled': enabled,
         'choice': choice,
         'link': link,
@@ -160,16 +171,66 @@ class WarpController extends ChangeNotifier {
     await updateProfile(silent: true);
   }
 
+  /// The ways Warp-in-Warp can use: plain WireGuard ones (a method with noise goes through Xray,
+  /// which does not carry one tunnel inside another).
+  List<WarpCombo> _plain(List<WarpCombo> all) => all.where((c) => c.method.kind != 'wg-noise').toList();
+
   Future<ProxyConfig?> _configFor(List<WarpCombo> all) async {
     if (account == null || all.isEmpty) return null;
-    final c = all[choice % all.length];
+    final useTwo = inWarp && account2 != null;
+    final list = useTwo ? _plain(all) : all;
+    if (list.isEmpty) throw StateError('no plain WireGuard method in the profile for Warp-in-Warp');
+    final c = list[choice % list.length];
     final text = warpLink(account!, c.method, c.endpoint, c.portIndex);
-    final config = parseLink(text);
+    var config = parseLink(text);
     if (config == null) return null;
+    if (useTwo) {
+      final inner = parseLink(warpLink(account2!, c.method, c.endpoint, c.portIndex, name: 'WARP inner'));
+      if (inner == null || inner.outbound.isEmpty) return null;
+      // The first account's tunnel is dialled through the second account's tunnel.
+      config = ProxyConfig(
+        link: text,
+        protocol: config.protocol,
+        name: 'WARP in WARP',
+        host: config.host,
+        port: config.port,
+        outbound: config.outbound,
+        inner: [inner.outbound],
+      );
+    }
     link = text;
-    currentMethod = c.method.id;
+    currentMethod = useTwo ? '${c.method.id} x2' : c.method.id;
     currentAddress = '${c.endpoint.ip}:${c.port}';
     return config;
+  }
+
+  /// Turns Warp-in-Warp on or off. The second account is made the first time it is turned on.
+  Future<void> setInWarp(bool on) async {
+    if (account == null || busy) return;
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      await load();
+      if (on && account2 == null) {
+        final p = store.profile;
+        if (p == null) throw StateError('no WARP profile is available');
+        account2 = await registerWarp(p);
+      }
+      inWarp = on;
+      choice = 0;
+      await _apply();
+      await _state.reconnectIfConnected();
+    } catch (e) {
+      inWarp = false;
+      error = '$e'.replaceFirst('Bad state: ', '');
+      try {
+        await _apply();
+      } catch (_) {}
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
   }
 
   /// Puts the server for the current choice in the list, in place of the one made before.
@@ -253,6 +314,71 @@ class WarpController extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---- the scan: which way of reaching WARP works best on this network
+
+  bool scanning = false;
+  int scanDone = 0, scanTotal = 0;
+  bool _scanCancel = false;
+
+  /// The ways that answered in the last scan, the fastest first (the text shown and the delay).
+  List<({String text, int ms})> scanResults = const [];
+
+  /// True after a scan in which nothing answered.
+  bool scanFailed = false;
+
+  void cancelScan() => _scanCancel = true;
+
+  /// Tries every way of reaching WARP (a method of the profile, an endpoint, a port) with the real
+  /// delay test, and switches to the fastest one that answered. Nothing changes when none did.
+  Future<void> scan({Future<int> Function(ProxyConfig)? delay}) async {
+    if (account == null || busy || scanning) return;
+    // The same list the server is made from (with Warp-in-Warp only the plain WireGuard ways).
+    final every = await combos();
+    final all = inWarp && account2 != null ? _plain(every) : every;
+    if (all.isEmpty) return;
+    scanning = true;
+    scanFailed = false;
+    scanResults = const [];
+    scanDone = 0;
+    scanTotal = all.length < warpScanLimit ? all.length : warpScanLimit;
+    _scanCancel = false;
+    error = null;
+    notifyListeners();
+    try {
+      final test = delay ?? ((c) => realDelay(c, timeout: const Duration(seconds: 7)));
+      final found = await scanWarp(
+        count: all.length,
+        test: (i) {
+          final c = all[i];
+          final config = parseLink(warpLink(account!, c.method, c.endpoint, c.portIndex));
+          return config == null ? Future.value(-1) : test(config);
+        },
+        onProgress: (d, t) {
+          scanDone = d;
+          notifyListeners();
+        },
+        cancelled: () => _scanCancel,
+      );
+      if (_scanCancel) return;
+      scanResults = [
+        for (final f in found.take(5))
+          (text: '${all[f.index].method.id} ${all[f.index].endpoint.ip}:${all[f.index].port}', ms: f.ms),
+      ];
+      if (found.isEmpty) {
+        scanFailed = true;
+      } else {
+        choice = found.first.index;
+        await _apply();
+        await _state.reconnectIfConnected();
+      }
+    } catch (e) {
+      error = '$e'.replaceFirst('Bad state: ', '');
+    } finally {
+      scanning = false;
+      notifyListeners();
+    }
+  }
+
   /// Downloads the newest profile; when it changed and an account exists, the server is rebuilt.
   Future<void> updateProfile({bool silent = false}) async {
     if (busy) return;
@@ -289,6 +415,8 @@ class WarpController extends ChangeNotifier {
   /// Takes the WARP server out of the list and forgets the account.
   Future<void> remove() async {
     account = null;
+    account2 = null;
+    inWarp = false;
     enabled = false;
     _state.setWarpServer(null);
     link = null;
@@ -310,7 +438,8 @@ class WarpController extends ChangeNotifier {
     await load();
     final l = link;
     if (!enabled || account == null || l == null) return;
-    final config = parseLink(l);
+    // With Warp-in-Warp the server has the second tunnel under it: it is made again, not read from the link.
+    final config = inWarp && account2 != null ? await _configFor(await combos()) : parseLink(l);
     if (config != null) _state.restoreWarpServer(config);
   }
 }

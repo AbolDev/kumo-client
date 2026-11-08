@@ -26,7 +26,79 @@ final _langRe = RegExp(r'^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$');
 final _deviceLangRe = RegExp(r'^[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]{2,8}){0,2}$');
 final _tzRe = RegExp(r'^[A-Za-z][A-Za-z0-9_+-]*(?:/[A-Za-z0-9_+-]+){0,2}$');
 final _brandRe = RegExp(r'^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,29}$');
-final _modelRe = RegExp(r'^[A-Za-z0-9][A-Za-z0-9 ._+()/-]{0,39}$');
+final _modelRe = RegExp(r'^[A-Za-z0-9][A-Za-z0-9 ._+()/,-]{0,39}$');
+
+/// What a maker, model or interface name may hold, for [cleanFact].
+final _nameChars = RegExp(r'[^A-Za-z0-9 ._+-]');
+final _modelChars = RegExp(r'[^A-Za-z0-9 ._+()/,-]');
+
+/// Texts that firmware leaves in place of a real name; they say nothing about the device.
+const _placeholders = {
+  'to be filled by o.e.m.',
+  'to be filled by oem',
+  'system product name',
+  'system manufacturer',
+  'system version',
+  'system family',
+  'default string',
+  'default',
+  'unknown',
+  'not specified',
+  'not applicable',
+  'n/a',
+  'none',
+  'o.e.m.',
+  'oem',
+  'type1productconfigid',
+  'undefined',
+  'invalid',
+};
+
+/// A maker, model or interface name made fit for the server: characters it does not take become
+/// spaces, runs of spaces become one, the text is cut to [max] characters (a long name is shortened,
+/// not dropped), and null is returned for a placeholder, an empty text, or one that still does not
+/// fit (it must start with a letter or digit).
+String? cleanFact(String? raw, {required int max, bool model = false}) {
+  if (raw == null) return null;
+  var s = raw.replaceAll(model ? _modelChars : _nameChars, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (_placeholders.contains(s.toLowerCase())) return null;
+  if (s.length > max) s = s.substring(0, max).trim();
+  if (s.isEmpty) return null;
+  return (model ? _modelRe : max <= 30 ? _brandRe : _uiRe).hasMatch(s) ? s : null;
+}
+
+/// Windows: the maker and model from the text of `reg query HKLM\HARDWARE\DESCRIPTION\System\BIOS`.
+/// The maker is SystemManufacturer, or SystemFamily when that is a placeholder.
+({String? brand, String? model}) parseWindowsBios(String regOutput) {
+  String? value(String name) =>
+      RegExp('^\\s*$name\\s+REG_SZ\\s+(.*)\$', multiLine: true).firstMatch(regOutput)?[1]?.trim();
+  return (
+    brand: cleanFact(value('SystemManufacturer'), max: 30) ?? cleanFact(value('SystemFamily'), max: 30),
+    model: cleanFact(value('SystemProductName'), max: 40, model: true),
+  );
+}
+
+/// macOS: the model identifier from `sysctl -n hw.model` ("MacBookPro18,3"). The maker is Apple.
+({String? brand, String? model}) parseMacModel(String sysctlOutput) {
+  final model = cleanFact(sysctlOutput, max: 40, model: true);
+  return (brand: model == null ? null : 'Apple', model: model);
+}
+
+/// Linux: the maker and model from the files of /sys/class/dmi/id, and the desktop from
+/// XDG_CURRENT_DESKTOP ("ubuntu:GNOME" gives "GNOME"). Whatever is missing or a placeholder is null.
+({String? brand, String? model, String? ui}) linuxDeviceNames({
+  String? vendor,
+  String? product,
+  String? family,
+  String? desktop,
+}) {
+  final parts = (desktop ?? '').split(':').map((p) => p.trim()).where((p) => p.isNotEmpty).toList();
+  return (
+    brand: cleanFact(vendor, max: 30),
+    model: cleanFact(product, max: 40, model: true) ?? cleanFact(family, max: 40, model: true),
+    ui: parts.isEmpty ? null : cleanFact(parts.last, max: 40),
+  );
+}
 final _uiRe = RegExp(r'^[A-Za-z0-9][A-Za-z0-9 ._+-]{0,39}$');
 const pingArches = {'arm64', 'armv7', 'x64', 'x86', 'riscv64', 'other'};
 final _buildRe = RegExp(r'^kumo-[a-z0-9]+-[A-Za-z0-9._-]+$');
@@ -83,9 +155,9 @@ class DeviceFacts {
       'device_lang': ok(deviceLang, _deviceLangRe, 20),
       'region': isCountry(region) ? region : null,
       'tz': ok(tz, _tzRe, 40),
-      'brand': ok(brand, _brandRe, 30),
-      'model': ok(model, _modelRe, 40),
-      'ui': ok(ui, _uiRe, 40),
+      'brand': cleanFact(brand, max: 30),
+      'model': cleanFact(model, max: 40, model: true),
+      'ui': cleanFact(ui, max: 40),
       'arch': arch != null && pingArches.contains(arch) ? arch : null,
       'build': isBuildName(build) ? build : null,
     };
@@ -208,6 +280,13 @@ class PingException implements FormatException {
   String toString() => 'ping: $message';
 }
 
+/// The facts that go together with [os]: a build name only when it starts with "kumo-" + the system
+/// + "-". (The maker, model and interface go from every system.)
+Map<String, String> fitFacts(String os, Map<String, String> facts) => {
+      for (final e in facts.entries)
+        if (e.key != 'build' || e.value.startsWith('kumo-$os-')) e.key: e.value,
+    };
+
 /// The body of a ping, checked. Throws [PingException] when the server would refuse it.
 /// [country] is only for a ping that left from inside the tunnel (the server then cannot use what
 /// Cloudflare sees); for a direct one it is left out and the server reads it itself.
@@ -236,7 +315,7 @@ Map<String, Object> buildPing({
     'via_tunnel': viaTunnel,
     if (viaTunnel && isCountry(country)) 'country': country!,
     // Only with a ping, not with the last message after the user turned it off.
-    if (event == 'ping') ...facts.toJson(),
+    if (event == 'ping') ...fitFacts(os, facts.toJson()),
   };
   if (utf8.encode(jsonEncode(body)).length > pingMaxBytes) throw PingException('too_big');
   return body;

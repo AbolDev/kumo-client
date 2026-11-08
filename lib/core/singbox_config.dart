@@ -219,6 +219,13 @@ String buildXrayConfig(ProxyConfig server, int port,
 /// Protocols that run over TLS on TCP, where uTLS and fragmenting apply.
 const _tlsTcp = {'vless', 'vmess', 'trojan'};
 
+/// [layers] (a server and the outbounds it is dialled through, the server first) with the advanced
+/// options applied the way a connection applies them; for tests that try other options.
+List<Map<String, dynamic>> tweakLayers(List<Map<String, dynamic>> layers, NetOptions o) => [
+      for (var i = 0; i < layers.length; i++)
+        _tweak(layers[i], o, dials: i == layers.length - 1, first: i == 0),
+    ];
+
 /// Applies the advanced options to one outbound. [dials] is true for the outbound that opens the
 /// connection to the network (the last one of a chain), which gets the socket options.
 Map<String, dynamic> _tweak(Map<String, dynamic> source, NetOptions o,
@@ -382,9 +389,14 @@ String buildSingBoxConfig(
   void addServer(ProxyConfig s, String tag) {
     final layers = [s.outbound, ...s.inner];
     if (layers.first['type'] == 'wireguard') {
-      // WireGuard is an endpoint in sing-box, usable like an outbound by its tag.
+      // WireGuard is an endpoint in sing-box, usable like an outbound by its tag. A second WireGuard
+      // under it (Warp-in-Warp) is another endpoint that this one is dialled through.
+      final two = layers.length > 1 && layers[1]['type'] == 'wireguard';
       endpoints.add(_tweak({...layers.first, 'tag': tag}, o,
-          detour: detour, first: false));
+          detour: two ? '$tag-l1' : detour, first: false));
+      if (two) {
+        endpoints.add(_tweak({...layers[1], 'tag': '$tag-l1'}, o, detour: detour, first: false));
+      }
       return;
     }
     for (var i = 0; i < layers.length; i++) {

@@ -33,6 +33,7 @@ class UsageReporter {
     required this.endpoints,
     required this.countryHint,
     this.facts = _noFacts,
+    this.log,
     DateTime Function()? now,
     Random? random,
     this.firstDelay = const Duration(seconds: 25),
@@ -64,6 +65,10 @@ class UsageReporter {
   /// The optional facts (languages, region, time zone, phone, processor); each is checked when the
   /// ping is built and dropped when it does not fit.
   final Future<DeviceFacts> Function() facts;
+
+  /// Where a short note goes (the app's own log, never sent anywhere). Only reasons and status codes,
+  /// never the id or the body.
+  final void Function(String message)? log;
   final DateTime Function() _now;
   final Random _random;
   final Duration firstDelay;
@@ -78,15 +83,30 @@ class UsageReporter {
   String? _country;
   String? _fallbackId;
   bool _busy = false;
+
+  /// The switch was changed while a delivery was running: look again soon after it ends.
+  bool _rerun = false;
   int _failures = 0;
   Timer? _timer;
 
   /// Sending is on unless the user turned it off.
   bool get enabled => _enabled;
 
+  /// True once the saved choice has been read (before that the switch is not known).
+  bool get ready => _ready;
+  bool _ready = false;
+
   Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
+    try {
+      await _read();
+    } finally {
+      _ready = true;
+    }
+  }
+
+  Future<void> _read() async {
     try {
       final text = await read(file);
       if (text == null) return;
@@ -134,7 +154,10 @@ class UsageReporter {
     try {
       done = await tick();
     } catch (_) {}
-    if (done) {
+    if (_rerun) {
+      _rerun = false;
+      _schedule(const Duration(seconds: 2));
+    } else if (done) {
       _failures = 0;
       _schedule(recheck);
     } else {
@@ -156,15 +179,23 @@ class UsageReporter {
     }
     await _save();
     _failures = 0;
-    _schedule(const Duration(seconds: 2));
+    if (_busy) {
+      _rerun = true; // the running delivery ends first, then this is looked at
+    } else {
+      _schedule(const Duration(seconds: 2));
+    }
   }
+
+  /// [f] with a limit, so a call that never comes back (a program that hangs while the system id is
+  /// read) cannot hold the reporter for good.
+  Future<T> _within<T>(Future<T> f) => f.timeout(const Duration(seconds: 15));
 
   /// The id sent: the salted hash of the system id. When the system id cannot be read, a random one
   /// kept in the app's own storage stands in (it does not survive a reinstall, the system id does).
-  Future<String> deviceId() async {
+  Future<String> deviceId({bool limit = true}) async {
     String? sys;
     try {
-      sys = await systemId();
+      sys = await (limit ? _within(systemId()) : systemId());
     } catch (_) {}
     if (sys != null && sys.trim().length >= 8) return hashDeviceId(sys);
     if (_fallbackId == null || !RegExp(r'^[0-9a-f]{64}$').hasMatch(_fallbackId!)) {
@@ -184,16 +215,18 @@ class UsageReporter {
       if (!_enabled) {
         if (_optOutSent) return true;
         final r = await _deliver('opt_out');
-        if (r != _Result.retry) {
+        if (r != _Result.retry && !_enabled) {
           _optOutSent = true;
           await _save();
         }
         return r != _Result.retry;
       }
-      final version = await appVersion();
+      final version = await _within(appVersion());
       final today = pingDay(_now());
       if (_day == today && _version == version) return true;
       final r = await _deliver('ping');
+      // Turned off while it was being sent: nothing is kept, the "opt_out" is next.
+      if (!_enabled) return true;
       if (r != _Result.retry) {
         // Also when the server refused the ping itself: asking again the same way would not change
         // the answer, so it waits for tomorrow (or the next version).
@@ -211,18 +244,24 @@ class UsageReporter {
 
   Future<_Result> _deliver(String event) async {
     final id = await deviceId();
-    final version = await appVersion();
-    final osv = await osVersion().catchError((Object _) => null);
-    final tunnel = tunnelUp();
+    final version = await _within(appVersion());
+    String? osv;
+    try {
+      osv = await _within(osVersion());
+    } catch (_) {}
     var extra = const DeviceFacts();
     if (event == 'ping') {
       try {
-        extra = await facts();
+        extra = await _within(facts());
       } catch (_) {}
     }
     final methods = [PingMethod.direct, PingMethod.fragment];
     for (final method in methods) {
       for (final endpoint in endpoints()) {
+        // Turned off meanwhile: no further request of a ping.
+        if (event == 'ping' && !_enabled) return _Result.retry;
+        // Read for each request: the VPN can come up or go down while the routes are tried.
+        final tunnel = tunnelUp();
         final Map<String, Object> body;
         try {
           body = buildPing(
@@ -235,7 +274,8 @@ class UsageReporter {
             country: tunnel ? (_country ?? countryHint()) : null,
             facts: extra,
           );
-        } on PingException {
+        } on PingException catch (e) {
+          log?.call('Usage count not sent: $e');
           return _Result.refused; // a ping the server would refuse is never sent
         }
         int? status;
@@ -254,8 +294,15 @@ class UsageReporter {
           }
           return _Result.sent;
         }
+        // Too many requests from this address: no other route is tried now (that would only make it
+        // worse); the next try follows the normal retry pause.
+        if (status == 429) {
+          log?.call('Usage count: the server asked to slow down (429)');
+          return _Result.retry;
+        }
         // The server read it and said no: another route will not change that.
-        if (status != null && status >= 400 && status < 500 && status != 429 && status != 408) {
+        if (status != null && status >= 400 && status < 500 && status != 408) {
+          log?.call('Usage count refused by the server ($status), not sent again today');
           return _Result.refused;
         }
       }

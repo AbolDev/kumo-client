@@ -2,7 +2,8 @@
 Type=Application
 Name=Kumo
 Comment=Free VPN client powered by sing-box and Xray
-Exec=kumo
+Exec=kumo %U
 Icon=kumo
 Terminal=false
 Categories=Network;
+MimeType=x-scheme-handler/vless;x-scheme-handler/vmess;x-scheme-handler/trojan;x-scheme-handler/ss;x-scheme-handler/hysteria;x-scheme-handler/hysteria2;x-scheme-handler/hy2;x-scheme-handler/tuic;x-scheme-handler/anytls;x-scheme-handler/wireguard;x-scheme-handler/clash;x-scheme-handler/sing-box;x-scheme-handler/hiddify;

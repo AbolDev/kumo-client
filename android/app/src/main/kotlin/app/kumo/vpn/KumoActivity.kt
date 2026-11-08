@@ -24,6 +24,13 @@ class KumoActivity : FlutterActivity() {
     }
 
     private var pendingPrepare: MethodChannel.Result? = null
+    private var control: MethodChannel? = null
+
+    /** A link or file was handed to the app while it was running: the Dart side is told to ask for it. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (ExternalInbox.pending != null) control?.invokeMethod("external", null)
+    }
 
     // Each delay test starts its own core, so only a few run at once.
     private val delayPool = Executors.newFixedThreadPool(12)
@@ -38,8 +45,11 @@ class KumoActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
 
-        MethodChannel(messenger, "kumo/control").setMethodCallHandler { call, result ->
+        control = MethodChannel(messenger, "kumo/control")
+        control!!.setMethodCallHandler { call, result ->
             when (call.method) {
+                // The link or file another app handed over, once (null when there is none).
+                "takeExternal" -> result.success(ExternalInbox.take())
                 // Asks for the system VPN consent dialog (and notification permission on 13+).
                 "prepare" -> prepare(result)
                 "start" -> {

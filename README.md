@@ -68,7 +68,7 @@ The apps are not code-signed or on Google Play, so Play Protect, SmartScreen or 
 ## Good to know
 
 - Public servers are run by unknown people. **Do not use them for banking or anything sensitive.**
-- Kumo has no accounts and sees none of your servers, links or traffic. Once a day it sends an anonymous usage count: a random-looking code made from your device id, plus your system and app version, the app's language and your device's language and country setting, your time zone, your processor, the name of the file you installed (such as `kumo-android-universal.apk`), and on Android the phone's maker, model and interface (no IP address is stored). You can turn it off in *Settings → App settings*. See the [privacy policy](PRIVACY.md).
+- Kumo has no accounts and sees none of your servers, links or traffic. Once a day it sends an anonymous usage count: a random-looking code made from your device id, plus your system and app version, the app's language and your device's language and country setting, your time zone, your processor, the maker and model of your device (such as *Dell XPS 15*), the name of the file you installed (such as `kumo-android-universal.apk`), and on Android the phone's interface and on Linux the desktop (no IP address, serial number or computer name is stored). If something breaks, Kumo can also send a crash report with the same switch: the error and where it happened in the code, the Kumo and system version, the device maker and model, the page you were on, the VPN state and the last lines of the app's own log, with links, addresses, passwords and user names removed. You can turn both off in *Settings → App settings*. See the [privacy policy](PRIVACY.md).
 
 ## Build from source
 
