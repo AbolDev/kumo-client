@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Monochrome version of the faceted app-icon cloud (tools/make_app_icons.py SILHOUETTE, scaled to
-     fill 24dp). Android tints status-bar icons, so it is one colour; the facets show as thin gaps. -->
+<!-- The app icon's cloud for the status bar (tools/make_app_icons.py: SILHOUETTE, LIGHT and SHADE).
+     Android uses only the alpha of a notification icon, so each facet is white with its own alpha: the
+     light facets are nearly solid and the shaded ones at the bottom right are fainter, with a clear
+     step between them. The cloud fills the whole 24 dp width, and its lowest edge is on a whole dp so
+     that it stays sharp on every screen density. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -8,6 +11,70 @@
     android:viewportHeight="24">
     <path
         android:fillColor="#FFFFFFFF"
-        android:fillType="evenOdd"
-        android:pathData="M1.39,19.14 L1,16.05 L2.54,12.58 L5.63,10.65 L7.56,7.56 L10.65,4.47 L14.51,4.47 L17.6,6.79 L18.75,10.26 L21.46,11.42 L23,14.51 L22.23,17.98 L19.91,19.53Z M13.16,11.07 L8.53,13.54 L8.91,14.24 L13.54,11.77Z M13.39,11.02 L7.22,10.41 L7.14,11.2 L13.31,11.82Z M13.57,11.09 L8.94,8 L8.5,8.67 L13.13,11.75Z M13.72,11.28 L11.56,5.72 L10.82,6.01 L12.98,11.57Z M13.75,11.49 L14.67,5.93 L13.88,5.8 L12.96,11.36Z M13.65,11.69 L17.04,7.99 L16.45,7.45 L13.06,11.15Z M13.43,11.81 L17.76,10.89 L17.59,10.1 L13.27,11.03Z M13.01,11.62 L15.17,15.33 L15.86,14.92 L13.7,11.22Z" />
+        android:fillAlpha="0.89"
+        android:pathData="M0.42,19.58 L0.00,16.21 L7.16,14.53Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.93"
+        android:pathData="M0.00,16.21 L1.68,12.42 L7.16,14.53Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.96"
+        android:pathData="M1.68,12.42 L5.05,10.32 L7.16,14.53Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.99"
+        android:pathData="M5.05,10.32 L7.16,6.95 L13.47,11.16Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.94"
+        android:pathData="M5.05,10.32 L13.47,11.16 L7.16,14.53Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.98"
+        android:pathData="M7.16,6.95 L10.53,3.58 L13.47,11.16Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.95"
+        android:pathData="M10.53,3.58 L14.74,3.58 L13.47,11.16Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.90"
+        android:pathData="M14.74,3.58 L18.11,6.11 L13.47,11.16Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.86"
+        android:pathData="M18.11,6.11 L19.37,9.89 L13.47,11.16Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.83"
+        android:pathData="M19.37,9.89 L16.42,16.21 L13.47,11.16Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.88"
+        android:pathData="M19.37,9.89 L22.32,11.16 L16.42,16.21Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.83"
+        android:pathData="M22.32,11.16 L24.00,14.53 L16.42,16.21Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.92"
+        android:pathData="M7.16,14.53 L13.47,11.16 L16.42,16.21Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.87"
+        android:pathData="M0.42,19.58 L7.16,14.53 L16.42,16.21Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.46"
+        android:pathData="M24.00,14.53 L23.16,18.32 L16.42,16.21Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.37"
+        android:pathData="M23.16,18.32 L20.63,20.00 L16.42,16.21Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:fillAlpha="0.44"
+        android:pathData="M0.42,19.58 L16.42,16.21 L20.63,20.00Z" />
 </vector>
