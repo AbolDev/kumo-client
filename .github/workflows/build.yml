@@ -323,31 +323,29 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
-      # Flutter is cloned and its Dart SDK and engine files are downloaded on the first run only; after
-      # that the whole folder comes from the cache (about a minute faster).
-      - name: Cache Flutter
-        id: flutter-cache
+      # The framework is cloned fresh (shallow, quick); what takes long is the Dart SDK and the engine
+      # files it downloads on the first run, so only that folder (bin\cache) is cached. One small folder
+      # restores faster than the whole checkout with its fifteen thousand files.
+      - name: Cache Flutter's downloads
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ~\flutter
-          key: flutter-3.44.9-windows-arm64-v1
+          path: ~\flutter\bin\cache
+          key: flutter-cache-3.44.9-windows-arm64-v2
 
       - name: Flutter from source
         shell: pwsh
         run: |
-          if (-not (Test-Path "$env:USERPROFILE\flutter\bin\flutter.bat")) {
-            git clone --depth 1 --branch 3.44.9 https://github.com/flutter/flutter.git "$env:USERPROFILE\flutter"
+          $flutter = "$env:USERPROFILE\flutter"
+          $saved = "$env:USERPROFILE\flutter-cache"
+          # The restored cache sits where the clone goes: set it aside, clone, put it back.
+          if (Test-Path "$flutter\bin\cache") {
+            Move-Item "$flutter\bin\cache" $saved
+            Remove-Item $flutter -Recurse -Force
           }
-          "$env:USERPROFILE\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          & "$env:USERPROFILE\flutter\bin\flutter.bat" --version
-
-      - name: Cache packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~\AppData\Local\Pub\Cache
-          key: pub-windows-arm64-${{ hashFiles('pubspec.lock') }}
-          restore-keys: pub-windows-arm64-
-
+          git clone --depth 1 --branch 3.44.9 https://github.com/flutter/flutter.git $flutter
+          if (Test-Path $saved) { Move-Item $saved "$flutter\bin\cache" -Force }
+          "$flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "$flutter\bin\flutter.bat" --version
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
 

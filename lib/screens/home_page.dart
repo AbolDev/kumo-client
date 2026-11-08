@@ -503,7 +503,7 @@ Future<bool> confirmDeletion(BuildContext context, AppState state) async {
   return ok == true;
 }
 
-/// "12 days left Â· 3.2 GB of 50 GB used"; unlimited parts say so.
+/// "12 days left · 3.2 GB of 50 GB used"; unlimited parts say so.
 String subscriptionLine(S t, SubInfo info) {
   String time;
   if (info.unlimitedTime) {
@@ -524,12 +524,12 @@ String subscriptionLine(S t, SubInfo info) {
   final String data;
   if (info.unlimitedData) {
     data = info.used > 0
-        ? '${t.usedUnlimited(_bytes(info.used))} Â· ${t.unlimitedData}'
+        ? '${t.usedUnlimited(_bytes(info.used))} · ${t.unlimitedData}'
         : t.unlimitedData;
   } else {
     data = t.usedOf(_bytes(info.used), _bytes(info.total));
   }
-  return '$time Â· $data';
+  return '$time · $data';
 }
 
 class _MenuRow extends StatelessWidget {
@@ -697,8 +697,8 @@ class _ConnectCard extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    '${selected == null ? '${t.autoFastest} Â· ' : ''}'
-                    '${ltr('${shown.label} Â· ${shown.maskedAddress}')}',
+                    '${selected == null ? '${t.autoFastest} · ' : ''}'
+                    '${ltr('${shown.label} · ${shown.maskedAddress}')}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:
@@ -1496,7 +1496,7 @@ class _GroupHeader extends StatelessWidget {
 
   /// "N works - P%": only the count is green, the progress keeps the normal color.
   Widget _testStat(String text, ColorScheme scheme) {
-    final i = text.indexOf(' Â· ');
+    final i = text.indexOf(' · ');
     if (i < 0) return Text(text);
     return Text.rich(TextSpan(children: [
       TextSpan(
@@ -1946,7 +1946,7 @@ class _ConfigTile extends StatelessWidget {
                 ),
               TextSpan(
                   text:
-                      '${ms == null ? '' : ' Â· '}${config.label} Â· ${config.maskedAddress}'),
+                      '${ms == null ? '' : ' · '}${config.label} · ${config.maskedAddress}'),
             ]),
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.start,
