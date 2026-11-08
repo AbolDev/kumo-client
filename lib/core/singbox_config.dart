@@ -513,8 +513,23 @@ String buildSingBoxConfig(
             if (k.startsWith(adTagPrefix)) k,
         ]
       : <String>[];
-  final adsStrong = o.blockAds && o.adsLevel == 'strong';
-  final builtIn = o.blockAds ? builtInAdDomains : const <String>[];
+  final adsStrong = o.blockAds && (o.adsLevel == 'strong' || o.adsLevel == 'max');
+  // Names the user never wants blocked: every ad rule leaves them out.
+  final allow = o.blockAds ? cleanAllowList(o.adAllow) : const <String>[];
+  Map<String, dynamic> adRule(Map<String, dynamic> match, Map<String, dynamic> action) => allow.isEmpty
+      ? {...match, ...action}
+      : {
+          'type': 'logical',
+          'mode': 'and',
+          'rules': [
+            match,
+            {'domain_suffix': allow, 'invert': true},
+          ],
+          ...action,
+        };
+  final builtIn = o.blockAds
+      ? [...builtInAdDomains, if (o.blockCookieBanners) ...cookieBannerDomains, if (o.blockAffiliate) ...affiliateDomains]
+      : const <String>[];
   final strict = o.strictDns;
   final iran = o.bypass.isNotEmpty;
   final suffixes = [for (final c in o.bypass) '.$c'];
@@ -532,12 +547,16 @@ String buildSingBoxConfig(
     ...block.rules({'action': 'reject'}),
     // Ads and trackers: the built-in names first (they need no download), then the lists.
     if (builtIn.isNotEmpty) ...[
-      {'domain_suffix': builtIn, 'action': 'reject'},
-      {'domain_keyword': adKeywords, 'action': 'reject'},
+      adRule({'domain_suffix': builtIn}, {'action': 'reject'}),
+      adRule({'domain_keyword': adKeywords}, {'action': 'reject'}),
     ],
-    if (adSets.isNotEmpty) {'rule_set': adSets, 'action': 'reject'},
-    // Public encrypted-DNS servers: an app that uses one hides the ad names it asks for.
-    if (adsStrong) {'domain_suffix': encryptedDnsDomains, 'action': 'reject'},
+    if (adSets.isNotEmpty) adRule({'rule_set': adSets}, {'action': 'reject'}),
+    // Public encrypted-DNS servers: an app that uses one hides the ad names it asks for. By name,
+    // and by address on their encrypted ports for apps that ask them by address.
+    if (adsStrong) ...[
+      adRule({'domain_suffix': encryptedDnsDomains}, {'action': 'reject'}),
+      {'ip_cidr': encryptedDnsIps, 'port': [443, 853], 'action': 'reject'},
+    ],
     // WebRTC would show the network's own address; DNS over TLS would skip the resolver above.
     if (o.blockStun) {'protocol': 'stun', 'action': 'reject'},
     if (strict) {'port': 853, 'network': 'tcp', 'action': 'reject'},
@@ -571,10 +590,10 @@ String buildSingBoxConfig(
     ...block.rules({'action': 'reject'}, domainsOnly: true),
     // The name of an ad server does not exist: the app gives up at once instead of trying again.
     if (builtIn.isNotEmpty) ...[
-      {'domain_suffix': builtIn, 'action': 'predefined', 'rcode': 'NXDOMAIN'},
-      {'domain_keyword': adKeywords, 'action': 'predefined', 'rcode': 'NXDOMAIN'},
+      adRule({'domain_suffix': builtIn}, {'action': 'predefined', 'rcode': 'NXDOMAIN'}),
+      adRule({'domain_keyword': adKeywords}, {'action': 'predefined', 'rcode': 'NXDOMAIN'}),
     ],
-    if (adSets.isNotEmpty) {'rule_set': adSets, 'action': 'predefined', 'rcode': 'NXDOMAIN'},
+    if (adSets.isNotEmpty) adRule({'rule_set': adSets}, {'action': 'predefined', 'rcode': 'NXDOMAIN'}),
     // names the user sends direct are also looked up locally, not through the VPN
     ...direct.rules({'server': 'dns-local'}, domainsOnly: true),
     if (provider != null) ...provider.dns,

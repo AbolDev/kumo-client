@@ -72,7 +72,7 @@ The apps are not code-signed or on Google Play, so Play Protect, SmartScreen or 
 
 ## Build from source
 
-Flutter 3.27 (Dart 3.6): lutter pub get, lutter test. The sing-box and Xray cores are not in the repository: 	ools/fetch_unix_core.sh (Linux, macOS), 	ools/fetch_windows_core.ps1 (Windows), 	ools/build_libbox.ps1 and 	ools/build_xray.ps1 (Android). The workflow in .github/workflows/build.yml shows the full build.
+Flutter 3.27 (Dart 3.6): `flutter pub get`, `flutter test`. The sing-box and Xray cores are not in the repository: `tools/fetch_unix_core.sh` (Linux, macOS), `tools/fetch_windows_core.ps1` (Windows), `tools/build_libbox.ps1` and `tools/build_xray.ps1` (Android). The workflow in `.github/workflows/build.yml` shows the full build.
 
 ## Feedback
 
@@ -80,4 +80,4 @@ Found a bug or have an idea? Open an [issue](../../issues).
 
 ## Disclaimer and license
 
-Kumo does not provide servers and does not control the public servers it lists. You are responsible for following the laws where you live. The software is provided as is. Kumo is free software under the **GNU GPL v3.0** and includes parts of [sing-box](https://github.com/SagerNet/sing-box) and [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android).
+Kumo does not provide servers and does not control the public servers it lists. You are responsible for following the laws where you live. The software is provided as is. Kumo is free software under the **GNU GPL v3.0** and includes parts of [sing-box](https://github.com/SagerNet/sing-box) and [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android). The ad blocker uses the block lists of [HaGeZi](https://github.com/hagezi/dns-blocklists) (GPL-3.0; a copy of *Pro mini* is built in), [OISD](https://oisd.nl), [AdGuard DNS filter](https://github.com/AdguardTeam/AdGuardSDNSFilter), [PersianBlocker](https://github.com/MasterKia/PersianBlocker) and [sing-geosite](https://github.com/SagerNet/sing-geosite).

@@ -4,7 +4,9 @@ import 'dart:math' show Random;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
+import '../core/ad_lists.dart' show cleanAllowList;
 import '../core/net_options.dart';
+import '../core/rule_sets.dart' show AdsStatus, adsStatus;
 import '../core/platform.dart';
 import '../core/proxy_config.dart';
 import '../core/singbox_config.dart' show parseExtraJson;
@@ -150,14 +152,29 @@ List<Widget> networkSections(
         ListTile(
           leading: const Icon(Icons.shield_moon_outlined),
           title: Text(tr(context, 'adsLevel')),
-          subtitle: Text(tr(context, o.adsLevel == 'strong' ? 'adsStrong' : 'adsStandard')),
+          subtitle: Text(tr(context, switch (o.adsLevel) { 'strong' => 'adsStrong', 'max' => 'adsMax', _ => 'adsStandard' })),
           onTap: () async {
             final v = await pickOption<String>(context, tr(context, 'adsLevel'), o.adsLevel, {
               'standard': tr(context, 'adsStandard'),
               'strong': tr(context, 'adsStrong'),
+              'max': tr(context, 'adsMax'),
             });
             if (v != null) await state.updateNet((o) => o.adsLevel = v);
           },
+        ),
+      if (o.blockAds) _AdsStatusTile(state: state),
+      if (o.blockAds)
+        flag(tr(context, 'blockCookieBanners'), tr(context, 'blockCookieBannersDesc'), o.blockCookieBanners,
+            (v) => o.blockCookieBanners = v),
+      if (o.blockAds)
+        flag(tr(context, 'blockAffiliate'), tr(context, 'blockAffiliateDesc'), o.blockAffiliate,
+            (v) => o.blockAffiliate = v),
+      if (o.blockAds)
+        ListTile(
+          leading: const Icon(Icons.verified_user_outlined),
+          title: Text(tr(context, 'adAllow')),
+          subtitle: Text(o.adAllow.isEmpty ? tr(context, 'adAllowDesc') : o.adAllow.take(3).join(', ') + (o.adAllow.length > 3 ? ' +${o.adAllow.length - 3}' : '')),
+          onTap: () => _editAdAllow(context, state),
         ),      ListTile(
         leading: const Icon(Icons.travel_explore),
         title: Text(tr(context, 'dnsCheck')),
@@ -818,5 +835,101 @@ Future<void> _pickCountries(BuildContext context, AppState state) async {
   );
   if (ok == true) {
     state.updateNet((o) => o.bypass = bypassCountries.keys.where(chosen.contains).toList());
+  }
+}
+
+/// The list of names ad blocking never blocks, one per line.
+Future<void> _editAdAllow(BuildContext context, AppState state) async {
+  final c = TextEditingController(text: state.net.adAllow.join('\n'));
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: Text(tr(dialog, 'adAllow')),
+      content: SizedBox(
+        width: 420,
+        child: TextField(
+          controller: c,
+          minLines: 4,
+          maxLines: 10,
+          textDirection: TextDirection.ltr,
+          decoration: InputDecoration(
+            helperText: tr(dialog, 'adAllowHint'),
+            helperMaxLines: 3,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialog, false), child: Text(MaterialLocalizations.of(dialog).cancelButtonLabel)),
+        FilledButton(onPressed: () => Navigator.pop(dialog, true), child: Text(MaterialLocalizations.of(dialog).okButtonLabel)),
+      ],
+    ),
+  );
+  if (ok == true) {
+    final list = cleanAllowList(c.text.split(RegExp(r'[\s,;]+')));
+    await state.updateNet((o) => o.adAllow = list);
+  }
+  c.dispose();
+}
+
+/// How the ad lists stand: how many there are and how many names they hold, when they were fetched,
+/// and a warning when only the list built into the app is there. "Update now" fetches them again.
+class _AdsStatusTile extends StatefulWidget {
+  const _AdsStatusTile({required this.state});
+  final AppState state;
+
+  @override
+  State<_AdsStatusTile> createState() => _AdsStatusTileState();
+}
+
+class _AdsStatusTileState extends State<_AdsStatusTile> {
+  Future<AdsStatus>? _status;
+  String? _level;
+  var _busy = false;
+
+  Future<AdsStatus> _read() async => adsStatus(await VpnChannel.dataDir(), widget.state.net.adsLevel);
+
+  Future<void> _update() async {
+    setState(() => _busy = true);
+    await widget.state.refreshAdLists();
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _status = _read();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final level = widget.state.net.adsLevel;
+    if (_status == null || _level != level) {
+      _level = level;
+      _status = _read();
+    }
+    final scheme = Theme.of(context).colorScheme;
+    return FutureBuilder<AdsStatus>(
+      future: _status,
+      builder: (context, snap) {
+        final s = snap.data;
+        String text;
+        if (s == null) {
+          text = '';
+        } else if (s.lists == 0 && !s.baseOnly) {
+          text = tr(context, 'adsNotYet');
+        } else {
+          final when = s.updated == null ? '-' : MaterialLocalizations.of(context).formatShortDate(s.updated!);
+          text = tr(context, 'adsStatus', {'lists': s.lists, 'total': s.expected, 'domains': s.domains, 'date': when});
+          if (s.baseOnly) text = '$text\n${tr(context, 'adsBaseOnly')}';
+        }
+        return ListTile(
+          leading: Icon(Icons.fact_check_outlined, color: s?.baseOnly == true ? scheme.error : null),
+          title: Text(tr(context, 'adsLists')),
+          subtitle: Text(text),
+          trailing: _busy
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : TextButton(onPressed: _update, child: Text(tr(context, 'adsUpdateNow'))),
+        );
+      },
+    );
   }
 }

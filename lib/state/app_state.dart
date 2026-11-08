@@ -4,7 +4,9 @@ import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform,
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
+import '../core/ad_lists.dart' show adBaseAsset;
 import '../core/app_icon.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
@@ -1040,7 +1042,7 @@ class AppState extends ChangeNotifier {
     change(net);
     _saveSettings();
     if (net.bypass.isNotEmpty || net.blockAds) {
-      ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds, adsLevel: net.adsLevel)
+      ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase)
           .catchError((_) => <String, String>{});
     }
     if (reconnect && connected) await _reconnect();
@@ -2215,7 +2217,7 @@ class AppState extends ChangeNotifier {
       final tags = routing?.ruleSetTags ?? const <String>[];
       final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
-              ads: net.blockAds, adsLevel: net.adsLevel, tags: tags, wait: false)
+              ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase, tags: tags, wait: false)
           : <String, String>{};
       final viaXray = chosen.length == 1 &&
           chosen.first.canXray &&
@@ -2245,6 +2247,17 @@ class AppState extends ChangeNotifier {
     }
   }
   final _nameResolver = NameResolver();
+
+  /// The ad list built into the app (see core/ad_lists.dart).
+  static Future<String> _loadAdBase() => rootBundle.loadString(adBaseAsset);
+
+  /// Fetches the ad lists again now (Settings > Update now). True when the main list is there after.
+  Future<bool> refreshAdLists() async {
+    final dir = await VpnChannel.dataDir();
+    final found = await ensureRuleSets(dir, const [], ads: true, adsLevel: net.adsLevel, loadBase: _loadAdBase, force: true, limit: const Duration(minutes: 3));
+    notifyListeners();
+    return found.containsKey(mainAdTag(net.adsLevel));
+  }
 
   /// [chosen] with the names of the servers already looked up over encrypted DNS (and by the system's
   /// resolver when that does not answer), or [chosen] itself when that is off or not possible.
@@ -2395,7 +2408,7 @@ class AppState extends ChangeNotifier {
       final tags = routing?.ruleSetTags ?? const <String>[];
       final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
-              ads: net.blockAds, adsLevel: net.adsLevel, tags: tags)
+              ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase, tags: tags)
           : <String, String>{};
       if (cancelled()) return;
       apiPort = await _freePort();

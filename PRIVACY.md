@@ -10,7 +10,7 @@ Kumo talks to other servers only for the features below. Each one is started by 
 | --- | --- | --- |
 | Checking for updates (on start and from *Settings → About*) | `api.github.com`, `github.com` | A request for the project's releases. The download of an update is a normal file download from GitHub. |
 | Loading the free public server list (the *Public servers* group; it can be hidden in Settings) | `cdn.jsdelivr.net` and mirrors, `raw.githubusercontent.com` | A request for a public text file. |
-| Downloading routing data when you pick *Direct countries* or turn on *Block ads and trackers* | `cdn.jsdelivr.net`, `raw.githubusercontent.com` | A request for public rule files. |
+| Downloading routing data when you pick *Direct countries* or turn on *Block ads and trackers* (the ad lists once a day, or when you tap *Update now*) | `cdn.jsdelivr.net` and its mirrors (`fastly.`, `gcore.`, `testingcf.jsdelivr.net`), `raw.githubusercontent.com` | A request for public rule files. |
 | Opening *What is my IP* or the *DNS leak test* (only when you do) | `api.ipify.org`, `ipwho.is`, `bash.ws` | Your address and the names looked up for the test. |
 | Updating a subscription you added | The address you entered | A normal request for that address. |
 | Looking up the name of a server before connecting (off in *Settings → Network*) | `1.1.1.1` (Cloudflare), `8.8.8.8` (Google) | The name of the server you connect to (for example `server.example.com`), over encrypted DNS, so that your network's own resolver does not see it. If these cannot be reached, your system's own resolver is asked instead. |

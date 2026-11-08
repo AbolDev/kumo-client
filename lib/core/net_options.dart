@@ -183,6 +183,13 @@ class NetOptions {
   /// How much "Block ads and trackers" blocks: 'standard' or 'strong' (see ad_lists.dart).
   String adsLevel = defaultAdLevel;
 
+  /// Names that ad blocking never blocks (a site or app that broke with a list).
+  List<String> adAllow = [];
+
+  /// With ad blocking: also hide cookie-consent banners, and block affiliate links (both off).
+  bool blockCookieBanners = false;
+  bool blockAffiliate = false;
+
   /// Keep every name lookup inside the VPN: the server names and the DNS server itself are
   /// looked up over encrypted DNS instead of the network's own resolver, and DNS over TLS that
   /// would skip the tunnel's resolver is refused.
@@ -275,6 +282,9 @@ class NetOptions {
         'fakeIp': fakeIp,
         'blockAds': blockAds,
         'adsLevel': adsLevel,
+        'adAllow': adAllow,
+        'blockCookieBanners': blockCookieBanners,
+        'blockAffiliate': blockAffiliate,
         'strictDns': strictDns,
         'encryptedLookup': encryptedLookup,
         'blockStun': blockStun,
@@ -342,6 +352,9 @@ class NetOptions {
     fakeIp = flag('fakeIp', false);
     blockAds = flag('blockAds', false);
     adsLevel = adLevels.contains(j['adsLevel']) ? j['adsLevel'] as String : defaultAdLevel;
+    blockCookieBanners = flag('blockCookieBanners', false);
+    blockAffiliate = flag('blockAffiliate', false);
+    adAllow = j['adAllow'] is List ? cleanAllowList((j['adAllow'] as List).whereType<String>()) : [];
     strictDns = flag('strictDns', false);
     encryptedLookup = flag('encryptedLookup', true);
     blockStun = flag('blockStun', false);
