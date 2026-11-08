@@ -38,6 +38,7 @@ import 'service_test_page.dart';
 import 'my_ip_page.dart';
 import 'dns_leak_page.dart';
 import 'troubleshoot_page.dart';
+import 'clean_ip_page.dart';
 import 'share_sheet.dart';
 import 'collector_info_page.dart';
 import 'subscription_info_page.dart';
@@ -153,6 +154,14 @@ class HomePage extends StatelessWidget {
                         settings: const RouteSettings(name: '/TroubleshootPage'), builder: (_) => TroubleshootPage(state: state)),
                   ),
                   child: _MenuRow(Icons.help_outline, tr(context, 'menuTroubleshoot')),
+                ),
+                PopupMenuItem(
+                  value: () => Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                        settings: const RouteSettings(name: '/CleanIpPage'), builder: (_) => CleanIpPage(state: state)),
+                  ),
+                  child: _MenuRow(Icons.travel_explore, tr(context, 'cleanIpButton')),
                 ),
                 const PopupMenuDivider(),
                 PopupMenuItem(
@@ -1432,10 +1441,11 @@ class _GroupHeader extends StatelessWidget {
         if (onMoveDown != null) CustomSemanticsAction(label: tr(context, 'a11yMoveDown')): onMoveDown!,
       };
 
-  String _title(S t) => switch (group.kind) {
+  String _title(BuildContext context, S t) => switch (group.kind) {
         GroupKind.collector => t.collectorGroup,
         GroupKind.manual => t.manualGroup,
         GroupKind.warp => 'WARP',
+        GroupKind.cleanIp => tr(context, 'cleanGroup'),
         GroupKind.subscription => group.name,
       };
 
@@ -1444,6 +1454,7 @@ class _GroupHeader extends StatelessWidget {
         GroupKind.collector => Icons.public,
         GroupKind.manual => Icons.edit_note,
         GroupKind.warp => null,
+        GroupKind.cleanIp => Icons.travel_explore,
         GroupKind.subscription => Icons.rss_feed,
       };
 
@@ -1485,7 +1496,7 @@ class _GroupHeader extends StatelessWidget {
         });
       case _GroupAction.deleteAll:
         _confirmDeleteAll(context, group.configs.length).then((ok) {
-          if (ok) state.clearManual();
+          if (ok) group.kind == GroupKind.cleanIp ? state.clearCleanIps() : state.clearManual();
         });
       case _GroupAction.warpNext:
         state.warp.nextMethod();
@@ -1584,7 +1595,7 @@ class _GroupHeader extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2.5)),
         ],
       ),
-      title: Text('${_title(t)} (${group.configs.length})',
+      title: Text('${_title(context, t)} (${group.configs.length})',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -1630,7 +1641,7 @@ class _GroupHeader extends StatelessWidget {
                   enabled: state.canTestReal,
                   value: _GroupAction.realDelay,
                   child: _MenuRow(Icons.speed, t.realDelay)),
-              if (group.kind != GroupKind.manual)
+              if (group.kind != GroupKind.manual && group.kind != GroupKind.cleanIp)
                 state.refreshing.contains(group.id)
                     ? PopupMenuItem(
                         value: _GroupAction.cancelRefresh,
@@ -1639,7 +1650,7 @@ class _GroupHeader extends StatelessWidget {
                     : PopupMenuItem(
                         value: _GroupAction.refresh,
                         child: _MenuRow(Icons.refresh, t.refreshList)),
-              if (group.kind == GroupKind.manual && group.configs.isNotEmpty)
+              if ((group.kind == GroupKind.manual || group.kind == GroupKind.cleanIp) && group.configs.isNotEmpty)
                 PopupMenuItem(
                     value: _GroupAction.deleteAll,
                     child: _MenuRow(Icons.delete_sweep_outlined, tr(context, 'deleteAll'))),

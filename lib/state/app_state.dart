@@ -46,7 +46,7 @@ const _settingsFile = 'settings.json';
 /// A status line that is turned into text with the current language when it is shown.
 typedef Message = String Function(S s);
 
-enum GroupKind { collector, subscription, manual, warp }
+enum GroupKind { collector, subscription, manual, warp, cleanIp }
 
 /// Configs that come from the same place: the free collector, one subscription link,
 /// or links added by hand.
@@ -166,6 +166,10 @@ class AppState extends ChangeNotifier {
   /// controller makes it from the account it keeps.
   final warpGroup = ServerGroup('warp', GroupKind.warp);
   final manual = ServerGroup('manual', GroupKind.manual);
+
+  /// The copies of configs that *Find a clean IP* made: kept apart from the configs added by hand, shown
+  /// only while there are some, and replaced by the next scan.
+  final cleanGroup = ServerGroup('clean', GroupKind.cleanIp);
   final List<ServerGroup> subscriptions = [];
 
   /// null = automatic (fastest servers).
@@ -495,6 +499,7 @@ class AppState extends ChangeNotifier {
       if (showCollector) collector,
       if (warp.enabled && warpGroup.configs.isNotEmpty) warpGroup,
       ...subscriptions,
+      if (cleanGroup.configs.isNotEmpty) cleanGroup,
       manual,
     ];
     int rank(ServerGroup g) {
@@ -1115,6 +1120,11 @@ class AppState extends ChangeNotifier {
       log('The saved manual configs were skipped: $e');
     }
     try {
+      cleanGroup.configs.addAll(parseLinks(((j['clean'] ?? const []) as List).cast<String>()));
+    } catch (e) {
+      log('The saved clean-IP configs were skipped: $e');
+    }
+    try {
       for (final s in (j['subs'] ?? const []) as List) {
         try {
           final m = s as Map<String, dynamic>;
@@ -1148,14 +1158,14 @@ class AppState extends ChangeNotifier {
         final ms = pings[c.link];
         if (ms is num) c.latencyMs = ms.toInt();
       }
-      for (final g in [collector, manual, ...subscriptions]) {
+      for (final g in [collector, manual, cleanGroup, ...subscriptions]) {
         if (g.configs.any((c) => c.latencyMs != null)) _sort(g);
       }
       final link = j['selected'] as String?;
       final inGroup = j['selectedGroup'] as String?;
       // The same link can be in two groups: the one that was picked is the one that comes back.
       selected = [
-        for (final g in [collector, warpGroup, manual, ...subscriptions])
+        for (final g in [collector, warpGroup, manual, cleanGroup, ...subscriptions])
           if (g.id == inGroup) ...g.configs,
       ].where((c) => c.link == link).firstOrNull ??
           all.where((c) => c.link == link).firstOrNull;
@@ -1452,9 +1462,11 @@ class AppState extends ChangeNotifier {
     final data = jsonEncode({
       'collector': links(collector),
       'manual': links(manual),
+      'clean': links(cleanGroup),
       'pings': {
         ...pings(collector),
         ...pings(manual),
+        ...pings(cleanGroup),
         for (final g in subscriptions) ...pings(g),
       },
       'subs': [
@@ -1482,7 +1494,7 @@ class AppState extends ChangeNotifier {
           },
       ],
       'selected': selected?.link,
-      'selectedGroup': [collector, warpGroup, manual, ...subscriptions]
+      'selectedGroup': [collector, warpGroup, manual, cleanGroup, ...subscriptions]
           .where((g) => g.configs.any((c) => identical(c, selected)))
           .firstOrNull
           ?.id,
@@ -1598,6 +1610,7 @@ class AppState extends ChangeNotifier {
         GroupKind.collector => 'Public servers',
         GroupKind.manual => 'Manual configs',
         GroupKind.warp => 'WARP',
+        GroupKind.cleanIp => 'Clean IPs',
         GroupKind.subscription => g.name,
       };
 
@@ -1851,6 +1864,29 @@ class AppState extends ChangeNotifier {
     } finally {
       vpnGateBusy.value = false;
     }
+  }
+
+  /// Puts the configs of [links] in the clean-IP group, in place of an earlier scan's (the server that is
+  /// chosen stays). Returns how many were added.
+  int addCleanIps(List<String> links) {
+    final parsed = parseLinks(links);
+    if (parsed.isEmpty) return 0;
+    cleanGroup.configs.removeWhere((c) => !identical(c, selected));
+    _merge(cleanGroup, parsed);
+    _save();
+    notifyListeners();
+    return parsed.length;
+  }
+
+  /// Removes the configs of the clean-IP group.
+  void clearCleanIps() {
+    if (tests[cleanGroup.id]?.running ?? false) cancelPing(cleanGroup);
+    final n = cleanGroup.configs.length;
+    if (selected != null && cleanGroup.configs.any((c) => identical(c, selected))) selected = null;
+    cleanGroup.configs.clear();
+    log('Removed $n clean-IP configs');
+    _save();
+    notifyListeners();
   }
 
   /// Removes every config that was added by hand.
