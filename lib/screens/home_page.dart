@@ -1767,7 +1767,12 @@ class _GroupHeader extends StatelessWidget {
         });
       case _GroupAction.deleteAll:
         _confirmDeleteAll(context, group.configs.length).then((ok) {
-          if (ok) group.kind == GroupKind.cleanIp ? state.clearCleanIps() : state.clearManual();
+          if (!ok) return;
+          final removed = group.kind == GroupKind.cleanIp ? state.clearCleanIps() : state.clearManual();
+          if (removed.isNotEmpty && context.mounted) {
+            toast(context, tr(context, 'removedN', {'n': removed.length}),
+                actionLabel: tr(context, 'undoAction'), onAction: () => state.restoreConfigs(removed));
+          }
         });
       case _GroupAction.warpNext:
         state.warp.nextMethod();

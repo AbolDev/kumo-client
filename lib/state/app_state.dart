@@ -1988,25 +1988,20 @@ class AppState extends ChangeNotifier {
   }
 
   /// Removes the configs of the clean-IP group.
-  void clearCleanIps() {
+  List<RemovedConfig> clearCleanIps() {
     if (tests[cleanGroup.id]?.running ?? false) cancelPing(cleanGroup);
-    final n = cleanGroup.configs.length;
-    if (selected != null && cleanGroup.configs.any((c) => identical(c, selected))) selected = null;
-    cleanGroup.configs.clear();
-    log('Removed $n clean-IP configs');
-    _save();
-    notifyListeners();
+    final removed = removeConfigs([for (final c in cleanGroup.configs.toList()) (group: cleanGroup, config: c)]);
+    log('Removed ${removed.length} clean-IP configs');
+    return removed;
   }
 
   /// Removes every config that was added by hand.
-  void clearManual() {
+  /// What was removed is returned, for [restoreConfigs] (the Undo button).
+  List<RemovedConfig> clearManual() {
     if (tests[manual.id]?.running ?? false) cancelPing(manual);
-    final n = manual.configs.length;
-    if (selected != null && manual.configs.any((c) => identical(c, selected))) selected = null;
-    manual.configs.clear();
-    log('Removed all $n configs added manually');
-    _save();
-    notifyListeners();
+    final removed = removeConfigs([for (final c in manual.configs.toList()) (group: manual, config: c)]);
+    log('Removed all ${removed.length} configs added manually');
+    return removed;
   }
 
   void removeConfig(ServerGroup g, ProxyConfig c) {

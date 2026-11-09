@@ -34,6 +34,24 @@ void main() {
       expect(s.manual.configs, hasLength(4));
     });
 
+    test('deleting all of a group can be undone as a whole', () {
+      final s = AppState();
+      s.manual.configs.addAll(parseLinks(_links));
+      final names = s.manual.configs.map((c) => c.name).toList();
+      s.selected = s.manual.configs[2];
+      final removed = s.clearManual();
+      expect(removed, hasLength(4));
+      expect(s.manual.configs, isEmpty);
+      expect(s.selected, isNull);
+      s.restoreConfigs(removed);
+      expect(s.manual.configs.map((c) => c.name), names);
+      expect(s.selected?.name, 'C');
+      s.cleanGroup.configs.addAll(parseLinks(_links.take(2).toList()));
+      expect(s.clearCleanIps(), hasLength(2));
+      expect(s.cleanGroup.configs, isEmpty);
+      expect(s.clearCleanIps(), isEmpty);
+    });
+
     test('a server that is not in the group is skipped, and a deleted subscription comes back at its place', () {
       final s = AppState();
       final other = parseLinks(_links.take(1).toList()).single;
