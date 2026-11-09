@@ -137,6 +137,7 @@ void main() {
             options: o,
             ruleSets: {
               'ads-hagezi-pro': bin,
+              'ads-base': File('assets/rules/ads-base.srs').absolute.path,
               'geoip-ir': File('assets/rules/geoip-ir.srs').absolute.path,
               'geosite-ir': File('assets/rules/geosite-ir.srs').absolute.path,
               'geosite-ir-extra': File('assets/rules/geosite-ir-extra.srs').absolute.path,

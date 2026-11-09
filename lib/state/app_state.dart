@@ -2302,7 +2302,14 @@ class AppState extends ChangeNotifier {
   final _nameResolver = NameResolver();
 
   /// The ad list built into the app (see core/ad_lists.dart).
-  static Future<String> _loadAdBase() => rootBundle.loadString(adBaseAsset);
+  static Future<Uint8List?> _loadAdBase() async {
+    try {
+      final data = await rootBundle.load(adBaseAsset);
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } catch (_) {
+      return null;
+    }
+  }
 
   /// The country list the app carries for [tag] (assets/rules), null when it carries none.
   static Future<Uint8List?> _loadBundledRules(String tag) async {
@@ -2337,6 +2344,7 @@ class AppState extends ChangeNotifier {
             loadBundled: _loadBundledRules,
             limit: const Duration(minutes: 5));
         await compileRuleSets(dir, VpnChannel.compileRuleSet);
+        await cleanRuleSets(dir, net.bypass, ads: net.blockAds, adsLevel: net.adsLevel, tags: _connectedTags);
       } catch (_) {}
     });
   }

@@ -229,6 +229,8 @@ jobs:
           fi
 
       - run: flutter pub get
+      # The .ico files of the app icons are only read on Windows: they are left out of this build.
+      - run: rm -f assets/app_icons/*.ico
       - env:
           KUMO_STOREPASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KUMO_KEYPASSWORD: ${{ secrets.KEY_PASSWORD }}
@@ -383,8 +385,8 @@ jobs:
         run: |
           choco install innosetup -y --no-progress
           $version = ((Get-Content pubspec.yaml | Select-String '^version:').Line -split '[: +]+')[1]
-          # /DFast: quicker compression (this runner is slow at it); the file is a few percent larger.
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=arm64" /DFast=1 installer\kumo.iss
+          # The same full compression as the x64 installer (a few minutes more here, about 10% less to download).
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$version" "/DArch=arm64" installer\kumo.iss
           if ($LASTEXITCODE -ne 0) { throw 'ISCC failed' }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -448,6 +450,8 @@ jobs:
       # sing-box, Xray and the library NaiveProxy needs, next to the program.
       - run: bash tools/fetch_unix_core.sh linux ${{ matrix.arch }}
 
+      # The .ico files of the app icons are only read on Windows: they are left out of this build.
+      - run: rm -f assets/app_icons/*.ico
       - run: flutter build linux --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-linux-${{ matrix.arch }} --no-pub
 
       - name: Package
@@ -555,6 +559,8 @@ jobs:
       # sing-box and Xray as universal binaries.
       - run: bash tools/fetch_unix_core.sh macos
 
+      # The .ico files of the app icons are only read on Windows: they are left out of this build.
+      - run: rm -f assets/app_icons/*.ico
       - run: flutter build macos --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-macos --no-pub
 
       - name: Put the cores in the app, sign it and package it

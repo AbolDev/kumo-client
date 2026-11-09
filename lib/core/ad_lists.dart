@@ -17,7 +17,12 @@ const adTagPrefix = 'ads-';
 /// The list built into the app, and the one-file list of the max level.
 const adBaseTag = '${adTagPrefix}base';
 const adMaxTag = '${adTagPrefix}max';
-const adBaseAsset = 'assets/ads/base.txt';
+
+/// The built-in list: a binary rule-set that comes with the app (made by tools/make_ad_base.py from
+/// [adBaseSource], HaGeZi Pro mini), and how many domains it holds (the tool prints it).
+const adBaseAsset = 'assets/rules/ads-base.srs';
+const adBaseSource = 'tools/ad_base/base.txt';
+const adBaseCount = 99476;
 
 /// One list: its tag, the addresses to try, and whether it is a plain list of domains (turned into
 /// a sing-box rule-set after the download) or a ready rule-set file.

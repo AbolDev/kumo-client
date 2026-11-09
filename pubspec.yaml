@@ -37,9 +37,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/npvs/
-    # The ad list built into the app (HaGeZi Pro mini), used when the lists cannot be downloaded.
-    - assets/ads/
-    # The country lists of "Direct countries" (sing-geoip, sing-geosite and the Iran rules of
+    # The ad list built into the app (ads-base.srs: HaGeZi Pro mini, made by tools/make_ad_base.py),
+    # used when the lists cannot be downloaded, and the country lists of "Direct countries" (sing-geoip, sing-geosite and the Iran rules of
     # Chocolate4U), so that a connection never waits for them to download; they are refreshed later.
     - assets/rules/
     - assets/tray_icon.ico

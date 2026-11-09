@@ -188,29 +188,36 @@ nodot
     setUp(() async => dir = await Directory.systemTemp.createTemp('kumo_ads_'));
     tearDown(() async => dir.delete(recursive: true));
 
-    test('without the downloaded list, the built-in one stands in (and is made once)', () async {
+    test('without the downloaded list, the built-in one stands in (and is copied once)', () async {
       var loads = 0;
-      Future<String> base() async {
+      final srs = Uint8List.fromList([0x53, 0x52, 0x53, 2, 9, 9, 9, 9]);
+      Future<Uint8List?> base() async {
         loads++;
-        return List.generate(50, (i) => 'ad$i.example.com').join('\n');
+        return srs;
       }
 
       final found = await ensureRuleSets(dir.path, const [], ads: true, wait: false, loadBase: base);
       expect(found.keys, contains(adBaseTag));
       final file = File(found[adBaseTag]!);
-      expect(await file.exists(), isTrue);
-      final rs = jsonDecode(await file.readAsString()) as Map;
-      expect(((rs['rules'] as List).single as Map)['domain_suffix'], hasLength(50));
+      expect(await file.readAsBytes(), srs);
       final status = await adsStatus(dir.path, defaultAdLevel);
       expect(status.baseOnly, isTrue);
-      expect(status.domains, 50);
+      expect(status.domains, adBaseCount);
       expect(status.lists, 0);
-      // The same built-in list: not rebuilt.
+      // The same built-in list: not copied again.
       final before = await file.lastModified();
       await Future<void>.delayed(const Duration(milliseconds: 20));
       await ensureRuleSets(dir.path, const [], ads: true, wait: false, loadBase: base);
       expect(await file.lastModified(), before);
       expect(loads, 2);
+      // A new version of the app brings another list: it takes the place of the old one.
+      final newer = Uint8List.fromList([...srs, 1]);
+      await ensureRuleSets(dir.path, const [], ads: true, wait: false, loadBase: () async => newer);
+      expect(await file.readAsBytes(), newer);
+      // Something that is not a rule-set is not copied over it.
+      await ensureRuleSets(dir.path, const [],
+          ads: true, wait: false, loadBase: () async => Uint8List.fromList(utf8.encode('<html>page')));
+      expect(await file.readAsBytes(), newer);
     });
 
     test('with the main list there, the built-in one is not used', () async {
@@ -218,7 +225,7 @@ nodot
       await main.parent.create(recursive: true);
       await main.writeAsString(ruleSetOf(['x.example.com']));
       await File('${main.path}.count').writeAsString('1');
-      final found = await ensureRuleSets(dir.path, const [], ads: true, wait: false, loadBase: () async => 'a.example.com');
+      final found = await ensureRuleSets(dir.path, const [], ads: true, wait: false, loadBase: () async => Uint8List.fromList([0x53, 0x52, 0x53, 2]));
       expect(found.keys, contains(mainAdTag(defaultAdLevel)));
       expect(found.keys.contains(adBaseTag), isFalse);
       final status = await adsStatus(dir.path, defaultAdLevel);
@@ -296,6 +303,63 @@ nodot
       expect(File('${dir.path}/rules/${adTagPrefix}hagezi-pro.bin.srs').existsSync(), isFalse);
     });
 
+    test('list files the settings no longer use are deleted, and nothing else', () async {
+      final rules = Directory('${dir.path}/rules')..createSync(recursive: true);
+      File touch(String name, {DateTime? at}) {
+        final f = File('${rules.path}/$name')
+          ..createSync(recursive: true)
+          ..writeAsStringSync('x');
+        if (at != null) f.setLastModifiedSync(at);
+        return f;
+      }
+
+      final old = DateTime(2020);
+      final kept = [
+        'geoip-ir.srs', 'geosite-ir.srs', 'geosite-ir-extra.srs', 'ads-base.srs', 'ads-base.srs.count',
+        'ads-hagezi-pro.json', 'ads-hagezi-pro.json.count', 'ads-hagezi-pro.bin.srs', 'ads-google-ads.srs',
+        'ads-new.json.123.tmp', // a download in progress
+        'notes.txt', // not ours
+      ];
+      final gone = [
+        'geoip-cn.srs', // a country no longer chosen
+        'geosite-category-ads-all.srs', // from an older version
+        'ads-base.json', 'ads-base.json.count', 'ads-base.json.source', // the built-in list of beta 4
+        'ads-hagezi-light.json', 'ads-hagezi-light.json.count', // another level
+        'ads-max.json', 'ads-max.bin.srs',
+        'raw/oisd-big.txt', // the texts of the max level
+      ];
+      for (final n in [...kept, ...gone]) {
+        touch(n);
+      }
+      touch('ads-old.json.99.tmp', at: old);
+      final n = await cleanRuleSets(dir.path, const ['ir'], ads: true, adsLevel: 'strong');
+      for (final k in kept) {
+        expect(File('${rules.path}/$k').existsSync(), isTrue, reason: k);
+      }
+      for (final g in gone) {
+        expect(File('${rules.path}/$g').existsSync(), isFalse, reason: g);
+      }
+      expect(File('${rules.path}/ads-old.json.99.tmp').existsSync(), isFalse);
+      expect(n, greaterThanOrEqualTo(gone.length - 1));
+
+      // At the max level its texts stay, but not one that is no longer a source.
+      touch('raw/oisd-big.txt');
+      touch('raw/gone-list.txt');
+      touch('ads-max.json');
+      await cleanRuleSets(dir.path, const [], ads: true, adsLevel: 'max');
+      expect(File('${rules.path}/raw/oisd-big.txt').existsSync(), isTrue);
+      expect(File('${rules.path}/raw/gone-list.txt').existsSync(), isFalse);
+      expect(File('${rules.path}/ads-max.json').existsSync(), isTrue);
+      expect(File('${rules.path}/ads-hagezi-pro.json').existsSync(), isFalse);
+
+      // With ad blocking off the ad lists stay (it is turned on again); the country lists go.
+      touch('geoip-ir.srs');
+      await cleanRuleSets(dir.path, const []);
+      expect(File('${rules.path}/ads-max.json').existsSync(), isTrue);
+      expect(File('${rules.path}/raw/oisd-big.txt').existsSync(), isTrue);
+      expect(File('${rules.path}/geoip-ir.srs').existsSync(), isFalse);
+    });
+
     test('nothing yet and no built-in list: an empty status', () async {
       final status = await adsStatus(dir.path, 'max');
       expect(status.lists, 0);
@@ -305,8 +369,10 @@ nodot
     });
   });
 
-  test('the built-in list is in the app and big enough', () {
-    final text = File(adBaseAsset).readAsStringSync();
-    expect(parseBlocklist(text).block.length, greaterThan(50000));
+  test('the built-in list is a rule-set made from its source, less the names apps need', () {
+    expect(File(adBaseAsset).readAsBytesSync().take(3), [0x53, 0x52, 0x53]);
+    final source = parseBlocklist(File(adBaseSource).readAsStringSync());
+    expect(withoutNeverBlocked(source.block).length, adBaseCount);
+    expect(adBaseCount, greaterThan(50000));
   });
 }

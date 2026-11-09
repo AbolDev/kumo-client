@@ -212,21 +212,19 @@ Future<bool> _ensureMaxList(String dir, {required bool wait, bool refresh = true
   return merged.exists();
 }
 
-/// The list built into the app as a rule-set in [dir]/rules, made from [loadBase] once (and again
-/// when the built-in list changed with a new version of the app). True when it is there.
-Future<bool> _ensureBaseList(String dir, Future<String> Function() loadBase) async {
-  final file = File('$dir/rules/$adBaseTag.json');
-  final stamp = File('${file.path}.source');
+/// The list built into the app ([loadBase]: a binary rule-set) copied to [dir]/rules, once, and
+/// again when a new version of the app brings another one. True when it is there.
+Future<bool> _ensureBaseList(String dir, Future<Uint8List?> Function() loadBase) async {
+  final file = File('$dir/rules/$adBaseTag.srs');
   try {
-    final text = await loadBase();
-    final sign = '${text.length}:${text.hashCode}';
-    if (await file.exists() && await stamp.exists() && await stamp.readAsString() == sign) return true;
-    final r = await _listToRuleSetOff(Uint8List.fromList(utf8.encode(text)), 1);
-    if (r == null) return file.exists();
+    final bytes = await loadBase();
+    if (bytes == null || !_isSrs(bytes)) return file.exists();
+    if (await file.exists() && await file.length() == bytes.length) return true;
     await file.parent.create(recursive: true);
-    await file.writeAsString(r.text, flush: true);
-    await stamp.writeAsString(sign, flush: true);
-    await _writeCount(file, r.count);
+    final tmp = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
+    await tmp.writeAsBytes(bytes, flush: true);
+    await tmp.rename(file.path);
+    await _writeCount(file, adBaseCount);
     return true;
   } catch (_) {
     return file.exists();
@@ -256,7 +254,7 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
     bool ads = false,
     String adsLevel = defaultAdLevel,
     List<String> tags = const [],
-    Future<String> Function()? loadBase,
+    Future<Uint8List?> Function()? loadBase,
     Future<Uint8List?> Function(String tag)? loadBundled,
     bool force = false,
     Duration limit = const Duration(seconds: 45)}) async {
@@ -310,7 +308,7 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
   // Without the main list (no download yet, or none possible), the one built into the app stands in.
   if (ads && loadBase != null && !found.containsKey(mainAdTag(adsLevel))) {
     if (await _ensureBaseList(dir, loadBase)) {
-      found[adBaseTag] = '$dir/rules/$adBaseTag.json'.replaceAll('\\', '/');
+      found[adBaseTag] = '$dir/rules/$adBaseTag.srs'.replaceAll('\\', '/');
     }
   }
   return {for (final e in found.entries) e.key: await _preferCompiled(e.value)};
@@ -379,6 +377,64 @@ Future<int> compileRuleSets(String dir, Future<bool> Function(String source, Str
   return made;
 }
 
+/// Deletes the list files in [dir]/rules that the settings no longer use: the lists of countries
+/// and of a subscription's rules that are not chosen any more, the ad lists of another level, what
+/// older versions of the app left, and temporary files of downloads that never ended. With ad
+/// blocking off the ad lists are kept (it is often turned off and on again). Only files this app
+/// names are touched. Returns how many were deleted.
+Future<int> cleanRuleSets(String dir, List<String> countries,
+    {bool ads = false, String adsLevel = defaultAdLevel, List<String> tags = const []}) async {
+  final folder = Directory('$dir/rules');
+  if (!await folder.exists()) return 0;
+  final keep = <String>{
+    for (final tag in _sourcesFor(countries, ads, tags).keys) '$tag.srs',
+    '$adBaseTag.srs',
+    '$adBaseTag.srs.count',
+  };
+  void keepJson(String tag) => keep.addAll(['$tag.json', '$tag.json.count', '$tag.bin.srs']);
+  if (ads) {
+    for (final s in adSources(adsLevel)) {
+      s.text ? keepJson(s.tag) : keep.add('${s.tag}.srs');
+    }
+    if (adsLevel == 'max') keepJson(adMaxTag);
+  }
+  final ours = RegExp(r'^(ads-|geoip-|geosite-)');
+  final stale = DateTime.now().subtract(const Duration(hours: 1));
+  var deleted = 0;
+  Future<void> drop(FileSystemEntity f) async {
+    try {
+      await f.delete(recursive: true);
+      deleted++;
+    } catch (_) {}
+  }
+
+  await for (final f in folder.list()) {
+    final name = f.uri.pathSegments.lastWhere((p) => p.isNotEmpty);
+    if (f is Directory) {
+      // The downloaded texts of the max level.
+      if (name != 'raw') continue;
+      if (ads && adsLevel != 'max') {
+        await drop(f);
+      } else if (ads) {
+        final wanted = {for (final s in maxTextSources) '${s.name}.txt'};
+        await for (final r in f.list()) {
+          final n = r.uri.pathSegments.last;
+          if (r is! File || wanted.contains(n)) continue;
+          if (n.endsWith('.tmp') && (await r.lastModified()).isAfter(stale)) continue;
+          await drop(r);
+        }
+      }
+      continue;
+    }
+    if (f is! File || !ours.hasMatch(name) || keep.contains(name)) continue;
+    // A download in progress writes a .tmp file: only old ones are leftovers.
+    if (name.endsWith('.tmp') && (await f.lastModified()).isAfter(stale)) continue;
+    if (!ads && name.startsWith(adTagPrefix)) continue;
+    await drop(f);
+  }
+  return deleted;
+}
+
 /// What Settings shows about the ad lists.
 class AdsStatus {
   AdsStatus({required this.lists, required this.expected, required this.domains, required this.updated, required this.baseOnly});
@@ -414,7 +470,7 @@ Future<AdsStatus> adsStatus(String dir, String level) async {
     } catch (_) {}
   }
   final main = File('$dir/rules/${mainAdTag(level)}.json');
-  final base = File('$dir/rules/$adBaseTag.json');
+  final base = File('$dir/rules/$adBaseTag.srs');
   final baseOnly = !await main.exists() && await base.exists();
   if (baseOnly) {
     try {
