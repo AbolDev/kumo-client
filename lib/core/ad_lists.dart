@@ -240,7 +240,8 @@ const builtInAdDomains = [
   'notes-analytics-events.apple.com', 'stocks-analytics-events.apple.com', 'metrics.mzstatic.com',
   'iadsdk.apple.com', 'api-adservices.apple.com', 'freshmarketer.com', 'shareasale-analytics.com',
   'trackcmp.net', 'track.hubspot.com', 'munchkin.marketo.net', 'js.driftt.com', 'metrics.brightcove.com',
-  'statdynamic.com',
+  'statdynamic.com', 'smetrics.samsung.com', 'nmetrics.samsung.com', 'dataplane.rudderstack.com',
+  'cdn.rudderlabs.com', 'hosted.rudderlabs.com',
 ];
 
 /// Cookie-consent banners (optional): blocking them hides most banners, but a site that waits for
