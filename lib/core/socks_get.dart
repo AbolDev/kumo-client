@@ -6,9 +6,6 @@ import 'dart:typed_data';
 
 import 'singbox_config.dart' show XrayAuth;
 
-/// For tests: what happens on the sockets, as text.
-void Function(String line)? socksDebug;
-
 /// What a request answered: the status, where it points to when it redirects, and the body.
 typedef _Reply = ({int status, String? location, Uint8List body});
 
@@ -45,7 +42,7 @@ Future<Uint8List?> socksGet(
 
 Future<_Reply?> _fetchOnce(Uri uri, int socksPort, XrayAuth? auth, Duration timeout, int maxBytes,
     bool Function(X509Certificate)? onBad, void Function(Object error)? onError) async {
-  final open = <RawSocket>[];
+  final open = <Socket>[];
   Future<_Reply?> run() async {
     final pipe = await _connect(uri, socksPort, auth, timeout, onBad, open);
     return _httpGet(pipe, uri, maxBytes);
@@ -63,7 +60,7 @@ Future<_Reply?> _fetchOnce(Uri uri, int socksPort, XrayAuth? auth, Duration time
     return null;
   } finally {
     for (final s in open) {
-      unawaited(s.close().then<void>((_) {}, onError: (Object _) {}));
+      s.destroy();
     }
   }
 }
@@ -71,15 +68,15 @@ Future<_Reply?> _fetchOnce(Uri uri, int socksPort, XrayAuth? auth, Duration time
 /// A connection to [uri]'s host through the proxy, with TLS on it for https. Every socket made is added
 /// to [open], for the caller to close.
 Future<_Pipe> _connect(Uri uri, int socksPort, XrayAuth? auth, Duration timeout, bool Function(X509Certificate)? onBad,
-    List<RawSocket> open) async {
-  final raw = await RawSocket.connect(InternetAddress.loopbackIPv4, socksPort, timeout: timeout);
-  open.add(raw);
-  var pipe = _Pipe(raw);
+    List<Socket> open) async {
+  final socket = await Socket.connect(InternetAddress.loopbackIPv4, socksPort, timeout: timeout);
+  open.add(socket);
+  var pipe = _Pipe(socket);
   await _socksHandshake(pipe, uri.host, uri.port, auth);
   if (uri.scheme == 'https') {
-    // The reading that the handshake started is handed over to the secure socket.
-    final secure =
-        await RawSecureSocket.secure(raw, subscription: pipe.subscription, host: uri.host, onBadCertificate: onBad);
+    // TLS over the connection the proxy made: the socket is handed over, what it was listened to for so far
+    // stays with the old object (nothing more comes there).
+    final secure = await SecureSocket.secure(socket, host: uri.host, onBadCertificate: onBad);
     open.add(secure);
     pipe = _Pipe(secure);
   }
@@ -199,7 +196,7 @@ Future<double> socksSpeed(
 }) async {
   final uri = Uri.tryParse(url);
   if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) return -1;
-  final open = <RawSocket>[];
+  final open = <Socket>[];
   Future<double> run() async {
     final pipe = await _connect(uri, socksPort, auth, timeout, onBadCertificate, open);
     if (upload) {
@@ -241,7 +238,7 @@ Future<double> socksSpeed(
     return -1;
   } finally {
     for (final s in open) {
-      unawaited(s.close().then<void>((_) {}, onError: (Object _) {}));
+      s.destroy();
     }
   }
 }
@@ -253,48 +250,27 @@ int _headEnd(Uint8List b) {
   return -1;
 }
 
-/// What comes in on a [RawSocket], read in order, with a way to put back what was read too far.
+/// What comes in on a [Socket], read in order, with a way to put back what was read too far.
 class _Pipe {
   _Pipe(this.socket) {
-    subscription = socket.listen(_onEvent, onError: (Object e) {
+    socket.listen((data) {
+      _chunks.add(data is Uint8List ? data : Uint8List.fromList(data));
+      _wake();
+    }, onError: (Object e) {
       _error = e;
       _closed = true;
       _wake();
     }, onDone: () {
       _closed = true;
       _wake();
-    });
+    }, cancelOnError: true);
   }
 
-  final RawSocket socket;
-  late final StreamSubscription<RawSocketEvent> subscription;
+  final Socket socket;
   final _chunks = ListQueue<Uint8List>();
   Completer<void>? _waiting;
-  Completer<void>? _writable;
   Object? _error;
   var _closed = false;
-
-  void _onEvent(RawSocketEvent event) {
-    socksDebug?.call('event $event');
-    if (event == RawSocketEvent.read) {
-      while (true) {
-        final data = socket.read();
-        if (data == null || data.isEmpty) break;
-        _chunks.add(data);
-      }
-    } else if (event == RawSocketEvent.write) {
-      final w = _writable;
-      _writable = null;
-      if (w != null && !w.isCompleted) w.complete();
-    } else if (event == RawSocketEvent.readClosed || event == RawSocketEvent.closed) {
-      _closed = true;
-      // A writer that waits for the socket will not get it now.
-      final w = _writable;
-      _writable = null;
-      if (w != null && !w.isCompleted) w.completeError(const SocketException('closed'));
-    }
-    _wake();
-  }
 
   void _wake() {
     final w = _waiting;
@@ -353,18 +329,9 @@ class _Pipe {
     }
   }
 
-  /// Sends [data]; what the socket does not take at once waits for it to be ready again.
+  /// Sends [data] and waits until the socket has taken it (so that a big upload does not pile up in memory).
   Future<void> write(List<int> data) async {
-    var sent = 0;
-    while (sent < data.length) {
-      final n = socket.write(data, sent, data.length - sent);
-      socksDebug?.call('write ${data.length - sent} -> $n');
-      sent += n;
-      if (sent < data.length) {
-        final w = _writable = Completer<void>();
-        socket.writeEventsEnabled = true;
-        await w.future;
-      }
-    }
+    socket.add(data);
+    await socket.flush();
   }
 }
