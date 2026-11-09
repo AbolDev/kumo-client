@@ -213,6 +213,37 @@ void main() {
     expect(await socksGet('http://lists.test/hello', locked.port), isNull);
   });
 
+  test('speed: a download is counted from its first byte; an upload until the server has answered', () async {
+    final speedWeb = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => speedWeb.close(force: true));
+    var uploaded = 0;
+    speedWeb.listen((request) async {
+      if (request.method == 'POST') {
+        await for (final chunk in request) {
+          uploaded += chunk.length;
+        }
+        request.response.statusCode = HttpStatus.ok;
+      } else if (request.uri.path == '/down') {
+        final body = Uint8List(3000000);
+        request.response.headers.contentLength = body.length;
+        request.response.add(body);
+      } else {
+        request.response.statusCode = HttpStatus.notFound;
+      }
+      await request.response.close();
+    });
+    final proxy = await _fakeSocks({'speed.test:80': speedWeb.port});
+    addTearDown(proxy.close);
+    final down = await socksSpeed('http://speed.test/down', proxy.port, upload: false);
+    expect(down, greaterThan(0));
+    final up = await socksSpeed('http://speed.test/up', proxy.port, upload: true, bytes: 1000000);
+    expect(up, greaterThan(0));
+    expect(uploaded, 1000000);
+    // A missing page, a refused name, a dead proxy and a page that takes the whole time give -1.
+    expect(await socksSpeed('http://speed.test/none', proxy.port, upload: false), -1);
+    expect(await socksSpeed('http://other.test/down', proxy.port, upload: false), -1);
+  });
+
   test('a page that never answers is given up after the time', () async {
     final silent = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     silent.listen((_) {});

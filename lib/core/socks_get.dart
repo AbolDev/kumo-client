@@ -44,17 +44,7 @@ Future<_Reply?> _fetchOnce(Uri uri, int socksPort, XrayAuth? auth, Duration time
     bool Function(X509Certificate)? onBad, void Function(Object error)? onError) async {
   final open = <RawSocket>[];
   Future<_Reply?> run() async {
-    final raw = await RawSocket.connect(InternetAddress.loopbackIPv4, socksPort, timeout: timeout);
-    open.add(raw);
-    var pipe = _Pipe(raw);
-    await _socksHandshake(pipe, uri.host, uri.port, auth);
-    if (uri.scheme == 'https') {
-      // The reading that the handshake started is handed over to the secure socket.
-      final secure = await RawSecureSocket.secure(raw,
-          subscription: pipe.subscription, host: uri.host, onBadCertificate: onBad);
-      open.add(secure);
-      pipe = _Pipe(secure);
-    }
+    final pipe = await _connect(uri, socksPort, auth, timeout, onBad, open);
     return _httpGet(pipe, uri, maxBytes);
   }
 
@@ -73,6 +63,24 @@ Future<_Reply?> _fetchOnce(Uri uri, int socksPort, XrayAuth? auth, Duration time
       unawaited(s.close().then<void>((_) {}, onError: (Object _) {}));
     }
   }
+}
+
+/// A connection to [uri]'s host through the proxy, with TLS on it for https. Every socket made is added
+/// to [open], for the caller to close.
+Future<_Pipe> _connect(Uri uri, int socksPort, XrayAuth? auth, Duration timeout, bool Function(X509Certificate)? onBad,
+    List<RawSocket> open) async {
+  final raw = await RawSocket.connect(InternetAddress.loopbackIPv4, socksPort, timeout: timeout);
+  open.add(raw);
+  var pipe = _Pipe(raw);
+  await _socksHandshake(pipe, uri.host, uri.port, auth);
+  if (uri.scheme == 'https') {
+    // The reading that the handshake started is handed over to the secure socket.
+    final secure =
+        await RawSecureSocket.secure(raw, subscription: pipe.subscription, host: uri.host, onBadCertificate: onBad);
+    open.add(secure);
+    pipe = _Pipe(secure);
+  }
+  return pipe;
 }
 
 Future<void> _socksHandshake(_Pipe p, String host, int port, XrayAuth? auth) async {
@@ -100,15 +108,18 @@ Future<void> _socksHandshake(_Pipe p, String host, int port, XrayAuth? auth) asy
   }
 }
 
-Future<_Reply?> _httpGet(_Pipe p, Uri uri, int maxBytes) async {
+/// The start of a request: [method], the page, the headers every request has and [extra] ones.
+List<int> _request(String method, Uri uri, [String extra = '']) {
   final defaultPort = uri.scheme == 'https' ? 443 : 80;
   final hostHeader = uri.port == defaultPort ? uri.host : '${uri.host}:${uri.port}';
   final path = uri.path.isEmpty ? '/' : uri.path;
   final query = uri.hasQuery ? '?${uri.query}' : '';
-  await p.write(utf8.encode('GET $path$query HTTP/1.1\r\nHost: $hostHeader\r\nUser-Agent: Kumo\r\n'
-      'Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n'));
+  return utf8.encode('$method $path$query HTTP/1.1\r\nHost: $hostHeader\r\nUser-Agent: Kumo\r\n'
+      'Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n$extra\r\n');
+}
 
-  // The head: up to the empty line; what came after it belongs to the body.
+/// The status and the headers (names in lower case) of an answer; what comes after them stays in [p].
+Future<({int status, Map<String, String> headers})?> _readHead(_Pipe p) async {
   var buffer = Uint8List(0);
   Uint8List headBytes;
   while (true) {
@@ -131,6 +142,14 @@ Future<_Reply?> _httpGet(_Pipe p, Uri uri, int maxBytes) async {
     final colon = line.indexOf(':');
     if (colon > 0) headers[line.substring(0, colon).trim().toLowerCase()] = line.substring(colon + 1).trim();
   }
+  return (status: status, headers: headers);
+}
+
+Future<_Reply?> _httpGet(_Pipe p, Uri uri, int maxBytes) async {
+  await p.write(_request('GET', uri));
+  final head = await _readHead(p);
+  if (head == null) return null;
+  final status = head.status, headers = head.headers;
   if (status != 200) return (status: status, location: headers['location'], body: Uint8List(0));
 
   final body = BytesBuilder(copy: false);
@@ -157,6 +176,71 @@ Future<_Reply?> _httpGet(_Pipe p, Uri uri, int maxBytes) async {
     }
   }
   return (status: status, location: headers['location'], body: body.takeBytes());
+}
+
+/// How fast data goes through the SOCKS5 proxy at 127.0.0.1:[socksPort], in Mbit/s; -1 when it could not be
+/// measured. A download counts what comes from [url] from its first byte until it ends or [window] has
+/// passed; an upload sends [bytes] of zeros to [url] and counts the time until the server has answered
+/// (so it must be a page that takes a body, such as Cloudflare's speed test).
+///
+/// [timeout] is for the whole, set-up included. [onBadCertificate] is for tests.
+Future<double> socksSpeed(
+  String url,
+  int socksPort, {
+  XrayAuth? auth,
+  required bool upload,
+  int bytes = 4000000,
+  Duration timeout = const Duration(seconds: 30),
+  Duration window = const Duration(seconds: 12),
+  bool Function(X509Certificate certificate)? onBadCertificate,
+}) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) return -1;
+  final open = <RawSocket>[];
+  Future<double> run() async {
+    final pipe = await _connect(uri, socksPort, auth, timeout, onBadCertificate, open);
+    if (upload) {
+      await pipe.write(_request('POST', uri, 'Content-Type: application/octet-stream\r\nContent-Length: $bytes\r\n'));
+      final sw = Stopwatch()..start();
+      final chunk = Uint8List(32768);
+      var left = bytes;
+      while (left > 0) {
+        final n = left < chunk.length ? left : chunk.length;
+        await pipe.write(n == chunk.length ? chunk : Uint8List.sublistView(chunk, 0, n));
+        left -= n;
+      }
+      final head = await _readHead(pipe);
+      sw.stop();
+      if (head == null || head.status >= 400) return -1;
+      return bytes * 8 / (sw.elapsedMicroseconds / 1e6) / 1e6;
+    }
+    await pipe.write(_request('GET', uri));
+    final head = await _readHead(pipe);
+    if (head == null || head.status != 200) return -1;
+    var total = 0;
+    Stopwatch? sw;
+    while (true) {
+      final left = sw == null ? window : window - sw.elapsed;
+      if (left <= Duration.zero) break;
+      final chunk = await pipe.next().timeout(left, onTimeout: () => null);
+      if (chunk == null) break;
+      sw ??= Stopwatch()..start();
+      total += chunk.length;
+    }
+    if (sw == null || total == 0) return -1;
+    final seconds = sw.elapsedMicroseconds / 1e6;
+    return total * 8 / (seconds < 0.05 ? 0.05 : seconds) / 1e6;
+  }
+
+  try {
+    return await run().timeout(timeout, onTimeout: () => -1);
+  } catch (_) {
+    return -1;
+  } finally {
+    for (final s in open) {
+      unawaited(s.close().then<void>((_) {}, onError: (Object _) {}));
+    }
+  }
 }
 
 int _headEnd(Uint8List b) {

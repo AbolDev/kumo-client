@@ -101,6 +101,20 @@ Future<int> realDelay(ProxyConfig c,
   return VpnChannel.delay(_delayConfig(layers), delayTestUrl, timeoutMs: timeout.inMilliseconds);
 }
 
+/// Cloudflare's speed test: a download of the size asked for, and a page that takes an upload.
+String speedDownloadUrl(int bytes) => 'https://speed.cloudflare.com/__down?bytes=$bytes';
+const speedUploadUrl = 'https://speed.cloudflare.com/__up';
+
+/// How fast data goes through the server [c], in Mbit/s: a download of [bytes] (a 10 MB file), or an upload
+/// of [bytes]. A throw-away core is run for it, like the real delay. -1 when it cannot be measured (the
+/// servers that only Xray carries and OpenVPN servers are not measured this way).
+Future<double> realSpeed(ProxyConfig c, {required bool upload, int bytes = 8000000, Duration timeout = const Duration(seconds: 30)}) async {
+  if (c.isOpenVpn || !c.canSingBox || (c.preferXray && c.canXray)) return -1;
+  final layers = await _resolvedLayers(c);
+  return VpnChannel.speed(_delayConfig(layers), upload ? speedUploadUrl : speedDownloadUrl(bytes),
+      upload: upload, bytes: bytes, timeoutMs: timeout.inMilliseconds);
+}
+
 /// Delay of fetching [delayTestUrl] while the VPN is up, in ms, -1 on failure. The request
 /// rides the tunnel; with Xray running the app is outside it, so a SOCKS connection through
 /// Xray's port ([socksPort]) is used instead. The delay counts what a server's own delay test

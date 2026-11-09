@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 
 import 'latency_tester.dart' show socksWarmDelay;
 import 'proxy_holder.dart';
+import 'socks_get.dart' show socksSpeed;
 import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
 import 'win_dpapi.dart';
@@ -953,7 +954,9 @@ rm -rf "$T"
     }
   }
 
-  Future<int> delay(String configJson, String url, int timeoutMs) async {
+  /// Runs a throw-away core that holds only [configJson]'s outbound, with a SOCKS inbound on a port of its
+  /// own, gives that port to [use] and ends the core. Null when the core did not come up.
+  Future<T?> _withProbeCore<T>(String configJson, Future<T> Function(int port) use) async {
     await _ready;
     final output = StringBuffer();
     Process? core;
@@ -984,10 +987,10 @@ rm -rf "$T"
           await Future<void>.delayed(const Duration(milliseconds: 60));
         }
       }
-      if (!ready) return -1;
-      return await socksWarmDelay(port, Uri.parse(url), Duration(milliseconds: timeoutMs));
+      if (!ready) return null;
+      return await use(port);
     } catch (_) {
-      return -1;
+      return null;
     } finally {
       core?.kill();
       try {
@@ -995,4 +998,13 @@ rm -rf "$T"
       } catch (_) {}
     }
   }
+
+  Future<int> delay(String configJson, String url, int timeoutMs) async =>
+      await _withProbeCore(configJson, (port) => socksWarmDelay(port, Uri.parse(url), Duration(milliseconds: timeoutMs))) ?? -1;
+
+  /// How fast data goes through [configJson]'s server, in Mbit/s (see [socksSpeed]); -1 when it cannot be had.
+  Future<double> speed(String configJson, String url, {required bool upload, required int bytes, required int timeoutMs}) async =>
+      await _withProbeCore(configJson,
+          (port) => socksSpeed(url, port, upload: upload, bytes: bytes, timeout: Duration(milliseconds: timeoutMs))) ??
+      -1;
 }

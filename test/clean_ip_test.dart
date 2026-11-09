@@ -367,6 +367,7 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
     test('the fastest open addresses get the real test, the fastest answers come first', () async {
       final tested = <String>[];
       final live = <int?>[];
+      var openFirst = 0;
       final found = await scanCleanIps(
         server: server,
         ranges: ['203.0.113.0/24'],
@@ -381,12 +382,109 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
           expect((c.outbound['tls'] as Map)['server_name'], 'cdn.example.com');
           return 1000 - last(c.host);
         },
-        onResult: (r) => live.add(r.delayMs),
+        onResult: (r) {
+          // The open addresses are shown at once (no real delay yet); the answers of the real test follow.
+          if (r.delayMs == null) {
+            if (tested.isEmpty) openFirst++;
+          } else {
+            live.add(r.delayMs);
+          }
+        },
       );
+      expect(openFirst, greaterThan(0));
       expect(tested, hasLength(lessThanOrEqualTo(5)));
       expect(found, isNotEmpty);
       expect(live, hasLength(found.length)); // each answer was given as it came
       expect(found.map((r) => r.delayMs), orderedEquals([...found.map((r) => r.delayMs!)]..sort()));
+    });
+
+    test('the speed of the best addresses through the server: download, upload or both, each given as measured', () async {
+      Future<int> delay(c) async => 1000 - last(c.host);
+      final asked = <String>[];
+      final given = <String>[];
+      Future<({double? down, double? up})> speed(config, bool down, bool up) async {
+        asked.add('${config.host} $down $up');
+        final n = last(config.host).toDouble();
+        return (down: down ? n : null, up: up ? n / 2 : null);
+      }
+
+      for (final mode in [1, 2, 3]) {
+        asked.clear();
+        given.clear();
+        final found = await scanCleanIps(
+          server: server,
+          addresses: [for (var i = 1; i <= 8; i++) '10.0.0.$i'],
+          options: ScanOptions(speedTest: mode, speedCount: 3),
+          tcp: (ip, p) async => 5,
+          delay: delay,
+          speed: speed,
+          onResult: (r) {
+            if (r.downMbps != null || r.upMbps != null) given.add(r.ip);
+          },
+        );
+        // The three with the shortest real delay are measured, one at a time.
+        expect(asked, hasLength(3), reason: 'mode $mode');
+        expect(asked.every((a) => a.endsWith('${mode & 1 != 0} ${mode & 2 != 0}')), isTrue);
+        expect(given, hasLength(3));
+        final measured = found.where((r) => r.downMbps != null || r.upMbps != null).toList();
+        expect(measured, hasLength(3));
+        expect(found.where((r) => r.downMbps == null && r.upMbps == null).length, found.length - 3);
+        if (mode != 2) expect(measured.every((r) => r.downMbps == last(r.ip).toDouble()), isTrue);
+        if (mode == 1) expect(measured.every((r) => r.upMbps == null), isTrue);
+        if (mode != 1) expect(measured.every((r) => r.upMbps == last(r.ip) / 2), isTrue);
+      }
+    });
+
+    test('a speed measurement that fails leaves the address as it was; none is made when it is off or stopped', () async {
+      var calls = 0;
+      final found = await scanCleanIps(
+        server: server,
+        addresses: ['10.0.0.1', '10.0.0.2'],
+        options: const ScanOptions(speedTest: 3),
+        tcp: (ip, p) async => 5,
+        delay: (c) async => 50,
+        speed: (c, d, u) async {
+          calls++;
+          throw StateError('no core');
+        },
+      );
+      expect(calls, 2);
+      expect(found, hasLength(2));
+      expect(found.every((r) => r.downMbps == null && r.upMbps == null && r.delayMs == 50), isTrue);
+      calls = 0;
+      await scanCleanIps(
+          server: server,
+          addresses: ['10.0.0.1'],
+          tcp: (ip, p) async => 5,
+          delay: (c) async => 50,
+          speed: (c, d, u) async {
+            calls++;
+            return (down: 1.0, up: 1.0);
+          });
+      expect(calls, 0); // off by default
+      var stop = false;
+      await scanCleanIps(
+          server: server,
+          addresses: ['10.0.0.1', '10.0.0.2', '10.0.0.3'],
+          options: const ScanOptions(speedTest: 1),
+          tcp: (ip, p) async => 5,
+          delay: (c) async => 50,
+          speed: (c, d, u) async {
+            calls++;
+            stop = true;
+            return (down: 1.0, up: null);
+          },
+          cancelled: () => stop);
+      expect(calls, 1); // cancelled after the first
+    });
+
+    test('the speed options are saved and read back, and kept inside their limits', () {
+      final back = ScanOptions.fromJson(const ScanOptions(speedTest: 3, speedCount: 5).toJson());
+      expect(back.speedTest, 3);
+      expect(back.speedCount, 5);
+      expect(const ScanOptions(speedTest: 9, speedCount: 99).normalized().speedTest, 3);
+      expect(const ScanOptions(speedTest: 9, speedCount: 99).normalized().speedCount, cleanIpMaxSpeedCount);
+      expect(ScanOptions.fromJson('junk').speedTest, 0);
     });
 
     test('skipping the first stage: no connection tests, every address gets the real test', () async {

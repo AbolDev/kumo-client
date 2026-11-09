@@ -16,7 +16,7 @@ import 'share_sheet.dart' show toast;
 
 const _stateFile = 'clean_ip_scan.json';
 
-enum _Sort { fast, loss, speed }
+enum _Sort { fast, loss, speed, up }
 
 /// How many good addresses are drawn while a scan runs (all of them are kept).
 const _liveShown = 30;
@@ -53,6 +53,8 @@ class _CleanIpPageState extends State<CleanIpPage> {
   // Progress comes for every probe; the screen is redrawn at most this often.
   var _lastPaint = DateTime(0);
   var _gentle = false, _skip = false, _neighbors = false, _fragment = false, _colo = false, _speed = false;
+  // With a server: the speed of the best addresses through it. 0 none, 1 download, 2 upload, 3 both.
+  var _via = 0, _viaCount = cleanIpSpeedCount;
   String? _listError, _numberError, _note;
 
   // With a server's settings (true) or addresses only (false).
@@ -73,6 +75,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
   LinkFields? _scanned;
   var _scanSteps = 1;
   var _scanEnrich = false;
+  var _scanSkip = false;
   String _scanSummary = '';
   // The addresses the user ticked, and the configs they are meant for (a copy of each config is made for
   // each address, or the config's address is replaced).
@@ -207,6 +210,8 @@ class _CleanIpPageState extends State<CleanIpPage> {
       neighbors: _neighbors,
       samples: _samples,
       fragment: _fragment,
+      speedTest: _withServer ? _via : 0,
+      speedCount: _viaCount,
     );
   }
 
@@ -255,7 +260,8 @@ class _CleanIpPageState extends State<CleanIpPage> {
     if (!mounted) return;
     final server = resume != null ? resumeServer : (_withServer ? _server : null);
     final cloudflare = _cdn == Cdn.cloudflare;
-    final enrich = cloudflare && (_colo || _speed);
+    // With a server the speed is measured through it (see [_via]); the direct speed test is for the scan of addresses only.
+    final enrich = cloudflare && (_colo || (_speed && server == null));
     setState(() {
       _listError = _numberError = null;
       _note = null;
@@ -266,7 +272,8 @@ class _CleanIpPageState extends State<CleanIpPage> {
       _picked.clear();
       _scanned = server;
       _scanEnrich = enrich;
-      _scanSteps = (server != null && !options.skipFirst ? 2 : 1) + (enrich ? 1 : 0);
+      _scanSkip = options.skipFirst;
+      _scanSteps = (server != null && !options.skipFirst ? 2 : 1) + (server != null && options.speedTest != 0 ? 1 : 0) + (enrich ? 1 : 0);
       _scanSummary = [
         _cdnName(_cdn),
         server == null ? tr(context, 'cleanIpModeOnly') : _nameOf(server),
@@ -289,7 +296,13 @@ class _CleanIpPageState extends State<CleanIpPage> {
         _paint(force: d == t);
       },
       onResult: (r) {
-        _live.add(r);
+        // The same address again (the real test, then the speed) takes the place of the first answer.
+        final at = _live.indexWhere((x) => x.ip == r.ip && x.port == r.port);
+        if (at >= 0) {
+          _live[at] = r;
+        } else {
+          _live.add(r);
+        }
         _paint();
       },
       onCheckpoint: (state) => _save(state, options, server),
@@ -318,7 +331,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
       });
       results = await enrichResults(results,
           colo: _colo,
-          speed: _speed,
+          speed: _speed && server == null,
           onProgress: (d, t) {
             if (mounted) setState(() => _done = d);
           },
@@ -377,6 +390,11 @@ class _CleanIpPageState extends State<CleanIpPage> {
       case _Sort.speed:
         out.sort((a, b) {
           final c = (b.downMbps ?? -1).compareTo(a.downMbps ?? -1);
+          return c != 0 ? c : _ms(a).compareTo(_ms(b));
+        });
+      case _Sort.up:
+        out.sort((a, b) {
+          final c = (b.upMbps ?? -1).compareTo(a.upMbps ?? -1);
           return c != 0 ? c : _ms(a).compareTo(_ms(b));
         });
     }
@@ -556,7 +574,35 @@ class _CleanIpPageState extends State<CleanIpPage> {
                 _option(Icons.fast_forward_outlined, _skip, 'cleanIpSkip', 'cleanIpSkipDesc', (v) => update(() => _skip = v)),
               if (_cdn == Cdn.cloudflare) ...[
                 _option(Icons.location_on_outlined, _colo, 'cleanIpColo', null, (v) => update(() => _colo = v)),
-                _option(Icons.speed, _speed, 'cleanIpSpeed', null, (v) => update(() => _speed = v)),
+                if (!_withServer) _option(Icons.speed, _speed, 'cleanIpSpeed', null, (v) => update(() => _speed = v)),
+              ],
+              if (_withServer) ...[
+                const Divider(height: 24),
+                Row(children: [
+                  Icon(Icons.speed, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 16),
+                  Expanded(child: Text(tr(context, 'cleanIpVia'), style: Theme.of(context).textTheme.titleSmall)),
+                ]),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, bottom: 8),
+                  child: Text(tr(context, 'cleanIpViaDesc'), style: Theme.of(context).textTheme.bodySmall),
+                ),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final e in const [(0, 'cleanIpViaOff'), (1, 'cleanIpViaDown'), (2, 'cleanIpViaUp'), (3, 'cleanIpViaBoth')])
+                    ChoiceChip(
+                      label: Text(tr(context, e.$2)),
+                      selected: _via == e.$1,
+                      onSelected: (_) => update(() => _via = e.$1),
+                    ),
+                ]),
+                if (_via != 0)
+                  _stepper(
+                    icon: Icons.format_list_numbered,
+                    label: tr(context, 'cleanIpViaCount'),
+                    value: _viaCount,
+                    down: _viaCount > 1 ? () => update(() => _viaCount--) : null,
+                    up: _viaCount < cleanIpMaxSpeedCount ? () => update(() => _viaCount++) : null,
+                  ),
               ],
               const Divider(height: 24),
               _stepper(
@@ -589,7 +635,8 @@ class _CleanIpPageState extends State<CleanIpPage> {
       if (_neighbors) tr(context, 'cleanIpNeighborsShort'),
       if (_withServer && _skip) tr(context, 'cleanIpSkip'),
       if (_cdn == Cdn.cloudflare && _colo) tr(context, 'cleanIpColoShort'),
-      if (_cdn == Cdn.cloudflare && _speed) tr(context, 'cleanIpSpeedShort'),
+      if (_cdn == Cdn.cloudflare && _speed && !_withServer) tr(context, 'cleanIpSpeedShort'),
+      if (_withServer && _via != 0) tr(context, 'cleanIpViaShort'),
       if (_stopAfter > 0) '${tr(context, 'cleanIpStopAfterShort')} $_stopAfter',
       if (_samples > 1) '${tr(context, 'cleanIpSamplesShort')} $_samples',
     ];
@@ -652,7 +699,14 @@ class _CleanIpPageState extends State<CleanIpPage> {
         if (r.loss > 0) tr(context, 'cleanIpLoss', {'loss': (r.loss * 100).round()}),
         if (r.jitterMs > 0) 'jitter ${r.jitterMs} ms',
         if (r.colo != null) r.colo!,
-        if (r.downMbps != null) tr(context, 'cleanIpSpeedRow', {'mbps': r.downMbps!.toStringAsFixed(1), 'ttfb': r.ttfbMs ?? 0}),
+        // The speed of a download from the address itself (Cloudflare), or through the server.
+        if (r.downMbps != null && r.ttfbMs != null)
+          tr(context, 'cleanIpSpeedRow', {'mbps': r.downMbps!.toStringAsFixed(1), 'ttfb': r.ttfbMs})
+        else if (r.downMbps != null || r.upMbps != null)
+          tr(context, 'cleanIpSpeedVia', {
+            'down': r.downMbps == null ? '-' : r.downMbps!.toStringAsFixed(1),
+            'up': r.upMbps == null ? '-' : r.upMbps!.toStringAsFixed(1),
+          }),
       ].join(' · ');
 
   Widget _result(CleanIp r, int rank, {required bool selectable}) {
@@ -887,14 +941,19 @@ class _CleanIpPageState extends State<CleanIpPage> {
 
   int get _stepNow {
     if (_enriching) return _scanSteps;
-    if (_stage == 2) return _scanSteps - (_scanEnrich ? 1 : 0);
-    return 1;
+    return switch (_stage) {
+      1 => 1,
+      2 => _scanSkip ? 1 : 2,
+      _ => _scanSteps - (_scanEnrich ? 1 : 0),
+    };
   }
 
   Widget _scanning() {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final title = _enriching ? 'cleanIpStageEnrichTitle' : (_stage == 1 ? 'cleanIpStage1Title' : 'cleanIpStage2Title');
+    final title = _enriching
+        ? 'cleanIpStageEnrichTitle'
+        : switch (_stage) { 1 => 'cleanIpStage1Title', 2 => 'cleanIpStage2Title', _ => 'cleanIpStage3Title' };
     final shown = _sorted(_live).take(_liveShown).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -956,6 +1015,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
     }
     final shown = _sorted(found);
     final hasSpeed = found.any((r) => r.downMbps != null);
+    final hasUp = found.any((r) => r.upMbps != null);
     final hasLoss = found.any((r) => r.loss > 0);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -966,7 +1026,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
             child: Text(_scanSummary, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
           ),
         if (_note != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_note!)),
-        if (hasSpeed || hasLoss)
+        if (hasSpeed || hasUp || hasLoss)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Wrap(spacing: 8, runSpacing: 8, children: [
@@ -980,6 +1040,11 @@ class _CleanIpPageState extends State<CleanIpPage> {
                     label: Text(tr(context, 'cleanIpSortSpeed')),
                     selected: _sort == _Sort.speed,
                     onSelected: (_) => setState(() => _sort = _Sort.speed)),
+              if (hasUp)
+                ChoiceChip(
+                    label: Text(tr(context, 'cleanIpSortUp')),
+                    selected: _sort == _Sort.up,
+                    onSelected: (_) => setState(() => _sort = _Sort.up)),
             ]),
           ),
         if (_canAct)

@@ -145,6 +145,16 @@ class VpnChannel {
           'delay', {'config': configJson, 'url': url, 'timeout': timeoutMs})) ??
       -1;
 
+  /// How fast data goes through the server of [configJson], in Mbit/s: a download from [url], or an upload of
+  /// [bytes] to it. -1 on failure, -2 when skipped because the tunnel is being started or stopped.
+  static Future<double> speed(String configJson, String url,
+          {required bool upload, int bytes = 4000000, int timeoutMs = 30000}) async =>
+      _win
+          ? DesktopVpn.instance.speed(configJson, url, upload: upload, bytes: bytes, timeoutMs: timeoutMs)
+          : (await _control.invokeMethod<double>(
+                  'speed', {'config': configJson, 'url': url, 'upload': upload, 'size': bytes, 'timeout': timeoutMs})) ??
+              -1;
+
   /// Real delay of a server only Xray can carry, -1 on failure (see [runXrayDelay]).
   static Future<int> xrayDelay(String Function(int port) config, String url,
       {int timeoutMs = 8000}) async {

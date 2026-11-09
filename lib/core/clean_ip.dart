@@ -226,6 +226,10 @@ const cleanIpMaxPorts = 8;
 /// How many of the fastest open addresses are listed when no server takes part, and how many are
 /// given the real test when the first stage is skipped.
 const cleanIpKeep = 50;
+
+/// How many of the best addresses are measured for speed through the server (when asked for), and the most.
+const cleanIpSpeedCount = 8;
+const cleanIpMaxSpeedCount = 20;
 const cleanIpMaxRealTests = 60;
 
 /// Gentle mode, for networks that cut the connection when a scan looks like a flood: few at once, a
@@ -248,6 +252,8 @@ class ScanOptions {
     this.fragment = false,
     this.keep = cleanIpKeep,
     this.delayCount = cleanIpDelayCount,
+    this.speedTest = 0,
+    this.speedCount = cleanIpSpeedCount,
   });
 
   /// How many addresses are drawn from the ranges.
@@ -280,6 +286,11 @@ class ScanOptions {
   final int keep;
   final int delayCount;
 
+  /// With a server: after the real test, the speed of the best addresses through the server. 0 none,
+  /// 1 download, 2 upload, 3 both. [speedCount] is how many of them.
+  final int speedTest;
+  final int speedCount;
+
   /// The values brought inside their limits.
   ScanOptions normalized() => ScanOptions(
         count: count.clamp(cleanIpMinCount, cleanIpMaxCount),
@@ -296,6 +307,8 @@ class ScanOptions {
         fragment: fragment,
         keep: keep.clamp(1, 200),
         delayCount: delayCount.clamp(1, cleanIpMaxRealTests),
+        speedTest: speedTest.clamp(0, 3),
+        speedCount: speedCount.clamp(1, cleanIpMaxSpeedCount),
       );
 
   Map<String, Object> toJson() => {
@@ -309,6 +322,8 @@ class ScanOptions {
         'neighbors': neighbors,
         'samples': samples,
         'fragment': fragment,
+        'speedTest': speedTest,
+        'speedCount': speedCount,
       };
 
   static ScanOptions fromJson(Object? j) {
@@ -326,13 +341,15 @@ class ScanOptions {
       neighbors: b('neighbors'),
       samples: i('samples', 1),
       fragment: b('fragment'),
+      speedTest: i('speedTest', 0),
+      speedCount: i('speedCount', cleanIpSpeedCount),
     ).normalized();
   }
 }
 
 class CleanIp {
   const CleanIp(this.ip, this.tcpMs, this.delayMs,
-      {this.port = 443, this.loss = 0, this.jitterMs = 0, this.colo, this.downMbps, this.ttfbMs});
+      {this.port = 443, this.loss = 0, this.jitterMs = 0, this.colo, this.downMbps, this.upMbps, this.ttfbMs});
   final String ip;
   final int port;
 
@@ -347,16 +364,20 @@ class CleanIp {
   final int jitterMs;
 
   /// Cloudflare's data center ("FRA") and the speed of a download from the address, when asked for.
+  /// With a server, [downMbps] and [upMbps] are the speed of a download and of an upload through the server
+  /// with this address (Mbit/s), when asked for.
   final String? colo;
   final double? downMbps;
+  final double? upMbps;
   final int? ttfbMs;
 
-  CleanIp with_({String? colo, double? downMbps, int? ttfbMs}) => CleanIp(ip, tcpMs, delayMs,
+  CleanIp with_({String? colo, double? downMbps, double? upMbps, int? ttfbMs}) => CleanIp(ip, tcpMs, delayMs,
       port: port,
       loss: loss,
       jitterMs: jitterMs,
       colo: colo ?? this.colo,
       downMbps: downMbps ?? this.downMbps,
+      upMbps: upMbps ?? this.upMbps,
       ttfbMs: ttfbMs ?? this.ttfbMs);
 
   Map<String, Object?> toJson() => {'ip': ip, 'port': port, 'ms': tcpMs, 'loss': loss, 'jitter': jitterMs};
@@ -399,6 +420,23 @@ class ScanState {
 
 typedef TcpProbe = Future<int> Function(String ip, int port);
 typedef DelayProbe = Future<int> Function(ProxyConfig config);
+
+/// The speed through a server, Mbit/s (null: not measured): a download, an upload, or both.
+typedef SpeedProbe = Future<({double? down, double? up})> Function(ProxyConfig config, bool down, bool up);
+
+/// [SpeedProbe] with a throw-away core and Cloudflare's speed test (see [realSpeed]).
+Future<({double? down, double? up})> measureSpeedVia(ProxyConfig config, bool down, bool up) async {
+  double? d, u;
+  if (down) {
+    final v = await realSpeed(config, upload: false);
+    if (v >= 0) d = v;
+  }
+  if (up) {
+    final v = await realSpeed(config, upload: true);
+    if (v >= 0) u = v;
+  }
+  return (down: d, up: u);
+}
 
 /// A TCP connection to [ip]:[port]: the time it took in ms, -1 when it did not happen within [timeout].
 Future<int> tcpProbe(String ip, int port, Duration timeout) async {
@@ -527,6 +565,7 @@ Future<List<CleanIp>> scanCleanIps({
   Random? random,
   TcpProbe? tcp,
   DelayProbe? delay,
+  SpeedProbe? speed,
   void Function(int stage, int done, int total)? onProgress,
   void Function(CleanIp result)? onResult,
   void Function(ScanState state)? onCheckpoint,
@@ -596,10 +635,9 @@ Future<List<CleanIp>> scanCleanIps({
         if (port == ports.last) remaining.remove(ip);
         if (r != null) {
           open.add(r);
-          if (server == null) {
-            onResult?.call(r);
-            if (o.stopAfter > 0 && open.length >= o.stopAfter) stop = true;
-          }
+          // Shown at once, with a server too (the real test that follows replaces them).
+          onResult?.call(r);
+          if (server == null && o.stopAfter > 0 && open.length >= o.stopAfter) stop = true;
         }
         onProgress?.call(1, ++done, total);
       }, halted);
@@ -659,6 +697,29 @@ Future<List<CleanIp>> scanCleanIps({
       onProgress?.call(2, ++tested2, best.length);
     }, halted);
     answered.sort((a, b) => a.delayMs!.compareTo(b.delayMs!));
+
+    // The speed of the best addresses through the server, one at a time (they would take each other's
+    // bandwidth). Each result is given as soon as it is measured.
+    if (o.speedTest != 0 && answered.isNotEmpty) {
+      final probe = speed ?? measureSpeedVia;
+      final best = answered.take(o.speedCount).toList();
+      var measured = 0;
+      for (final r in best) {
+        if (cancelled?.call() == true) break;
+        final fields = withCleanIp(server, r.ip);
+        final config = fields == null ? null : parseLink(fields.build());
+        ({double? down, double? up}) got = (down: null, up: null);
+        if (config != null) {
+          try {
+            got = await probe(config, o.speedTest & 1 != 0, o.speedTest & 2 != 0);
+          } catch (_) {}
+        }
+        final updated = r.with_(downMbps: got.down, upMbps: got.up);
+        answered[answered.indexOf(r)] = updated;
+        onResult?.call(updated);
+        onProgress?.call(3, ++measured, best.length);
+      }
+    }
     return answered;
   } finally {
     timer?.cancel();

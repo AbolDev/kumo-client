@@ -153,6 +153,29 @@ class KumoActivity : FlutterActivity() {
                         runOnUiThread { result.success(ms) }
                     }
                 }
+                // How fast data goes through a server (Kumo's MeasureSpeed in libbox): a download or an upload.
+                "speed" -> {
+                    val config = call.argument<String>("config") ?: ""
+                    val url = call.argument<String>("url") ?: ""
+                    val upload = call.argument<Boolean>("upload") ?: false
+                    val size = call.argument<Int>("size") ?: 4000000
+                    val timeout = call.argument<Int>("timeout") ?: 30000
+                    delayPool.execute {
+                        // -2 = skipped because the tunnel is being started or stopped.
+                        var mbps = -2.0
+                        if (VpnBridge.enterDelay()) {
+                            mbps = try {
+                                App.ensureLibbox()
+                                Libbox.measureSpeed(config, url, upload, size, timeout)
+                            } catch (_: Throwable) {
+                                -1.0
+                            } finally {
+                                VpnBridge.exitDelay()
+                            }
+                        }
+                        runOnUiThread { result.success(mbps) }
+                    }
+                }
                 // A JSON rule-set written as a binary one (Kumo's CompileRuleSet in libbox), off the main thread.
                 "compileRuleSet" -> {
                     val source = call.argument<String>("source") ?: ""

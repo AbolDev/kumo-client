@@ -7,7 +7,7 @@ import '../l10n/extra.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import 'collector_info_page.dart';
-import 'share_sheet.dart' show toast;
+import 'share_sheet.dart' show ToastKind, toast;
 import 'warp_page.dart';
 
 /// The free ways to connect, each one on or off, with a page to manage it. The public servers are on
