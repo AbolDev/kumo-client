@@ -124,17 +124,25 @@ class FreeConnectionsPage extends StatelessWidget {
   Widget _vpnGate(BuildContext context) {
     return ValueListenableBuilder<bool>(
       valueListenable: state.vpnGateBusy,
+      // Laid out like the other cards: the text has the whole width, the action is below it (a button
+      // beside the text left it a narrow column, one word a line).
       builder: (context, busy, _) => Card(
         margin: const EdgeInsets.only(bottom: 12),
-        child: ListTile(
-          leading: busy
-              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.vpn_lock_outlined),
-          title: Text(tr(context, 'vpngateTitle'), style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text(tr(context, 'vpngateDesc')),
-          isThreeLine: true,
-          trailing: FilledButton.tonal(
-            onPressed: busy
+        child: Column(children: [
+          ListTile(
+            leading: busy
+                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.vpn_lock_outlined),
+            title: Text(tr(context, 'vpngateTitle'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(tr(context, 'vpngateDesc')),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: Padding(
+              padding: const EdgeInsetsDirectional.only(end: 12, bottom: 12),
+              child: FilledButton.tonalIcon(
+                icon: const Icon(Icons.download, size: 18),
+                onPressed: busy
                 ? null
                 : () async {
                     final failed = tr(context, 'vpngateFailed');
@@ -148,9 +156,11 @@ class FreeConnectionsPage extends StatelessWidget {
                     }
                     if (context.mounted) toast(context, text);
                   },
-            child: Text(tr(context, 'vpngateGet')),
+                label: Text(tr(context, 'vpngateGet')),
+              ),
+            ),
           ),
-        ),
+        ]),
       ),
     );
   }

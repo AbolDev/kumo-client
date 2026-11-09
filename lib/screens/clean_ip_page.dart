@@ -16,11 +16,29 @@ import 'share_sheet.dart' show toast;
 
 const _stateFile = 'clean_ip_scan.json';
 
+/// How many addresses a scan draws and how long each may take to answer.
+enum _Depth { quick, normal, deep, custom }
+
+const _presets = <_Depth, ({int count, int seconds})>{
+  _Depth.quick: (count: 48, seconds: 2),
+  _Depth.normal: (count: cleanIpTcpCount, seconds: 2),
+  _Depth.deep: (count: 300, seconds: 3),
+};
+
+/// The steps of the number of addresses in the custom depth.
+const _countSteps = [10, 25, 50, 96, 150, 200, 300, 400, 500];
+
+enum _Sort { fast, loss, speed }
+
+typedef _Server = ({String name, LinkFields fields, ProxyConfig config});
+
 /// "Find a clean IP" (see core/clean_ip.dart). Two ways to open it:
 /// - from the edit page of a server: [server] is that server; picking an address pops with it;
-/// - from the menu of the home page: [state] gives the servers to choose from; an address can be copied,
-///   or added as a copy of the server.
+/// - from the menu of the home page: [state] gives the servers to choose from; addresses can be copied,
+///   added as copies of configs, or put in place of a config's address.
 /// Either way the scan can also be run on its own, for addresses only, without any server.
+///
+/// The page has three faces: the setup, the scan while it runs, and the results.
 class CleanIpPage extends StatefulWidget {
   const CleanIpPage({super.key, this.server, this.state});
 
@@ -35,12 +53,10 @@ class _CleanIpPageState extends State<CleanIpPage> {
   // The network: Cloudflare, Fastly or the user's own list (null).
   Cdn? _cdn = Cdn.cloudflare;
   final _custom = TextEditingController();
-  final _count = TextEditingController(text: '$cleanIpTcpCount');
-  final _timeout = TextEditingController(text: '2');
   final _ports = TextEditingController(text: '443');
   final _sni = TextEditingController();
-  final _stopAfter = TextEditingController(text: '0');
-  final _samples = TextEditingController(text: '1');
+  var _depth = _Depth.normal;
+  var _count = cleanIpTcpCount, _seconds = 2, _stopAfter = 0, _samples = 1;
   var _gentle = false, _skip = false, _neighbors = false, _fragment = false, _colo = false, _speed = false;
   String? _listError, _numberError, _note;
 
@@ -48,7 +64,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
   var _withServer = true;
 
   // The servers to choose from when opened from the home page.
-  late final List<({String name, LinkFields fields, ProxyConfig config})> _servers = _eligible();
+  late final List<_Server> _servers = _eligible();
   LinkFields? _chosen;
 
   var _running = false;
@@ -57,10 +73,14 @@ class _CleanIpPageState extends State<CleanIpPage> {
   var _enriching = false;
   List<CleanIp> _live = [];
   List<CleanIp>? _found;
-  // What the last scan was, to know what the "Add" buttons copy.
+  var _sort = _Sort.fast;
+  // What the last scan was: the server (the "Add" buttons copy it) and how many steps it had.
   LinkFields? _scanned;
-  // The addresses the user ticked, and the config they are meant for (a copy of it is made for each, or its
-  // address is replaced).
+  var _scanSteps = 1;
+  var _scanEnrich = false;
+  String _scanSummary = '';
+  // The addresses the user ticked, and the configs they are meant for (a copy of each config is made for
+  // each address, or the config's address is replaced).
   final _picked = <String>{};
   final _targets = Set<LinkFields>.identity();
 
@@ -68,10 +88,10 @@ class _CleanIpPageState extends State<CleanIpPage> {
   ScanState? _saved;
   ({bool server, ScanOptions options, LinkFields? link})? _savedInfo;
 
-  List<({String name, LinkFields fields, ProxyConfig config})> _eligible() {
+  List<_Server> _eligible() {
     final s = widget.state;
     if (s == null) return const [];
-    final out = <({String name, LinkFields fields, ProxyConfig config})>[];
+    final out = <_Server>[];
     for (final c in s.all) {
       if (c.isOpenVpn) continue;
       final f = LinkFields.parse(c.link);
@@ -85,6 +105,14 @@ class _CleanIpPageState extends State<CleanIpPage> {
 
   /// The server the scan would use: the one of the edit page, or the one chosen in the list.
   LinkFields? get _server => widget.server ?? _chosen;
+
+  bool get _fixed => widget.server != null;
+
+  String _nameOf(LinkFields? f) {
+    if (f == null) return '';
+    final e = _servers.where((e) => identical(e.fields, f)).firstOrNull;
+    return e?.name ?? f.host;
+  }
 
   @override
   void initState() {
@@ -105,7 +133,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
   @override
   void dispose() {
     _cancel = true;
-    for (final c in [_custom, _count, _timeout, _ports, _sni, _stopAfter, _samples]) {
+    for (final c in [_custom, _ports, _sni]) {
       c.dispose();
     }
     super.dispose();
@@ -163,22 +191,10 @@ class _CleanIpPageState extends State<CleanIpPage> {
 
   // ---- the scan
 
-  /// The numbers of the form, or null (with the message set) when one is outside its limits.
+  /// The options of the form, or null (with the message set) when the ports cannot be read.
   ScanOptions? _options() {
-    final count = int.tryParse(_count.text.trim()) ?? -1;
-    final seconds = int.tryParse(_timeout.text.trim()) ?? -1;
-    final stop = int.tryParse(_stopAfter.text.trim()) ?? -1;
-    final samples = int.tryParse(_samples.text.trim()) ?? -1;
     final ports = [for (final p in _ports.text.split(RegExp(r'[\s,;]+'))) if (p.isNotEmpty) int.tryParse(p) ?? -1];
-    final bad = count < cleanIpMinCount ||
-        count > cleanIpMaxCount ||
-        seconds < cleanIpMinTimeout ||
-        seconds > cleanIpMaxTimeout ||
-        stop < 0 ||
-        samples < 1 ||
-        samples > cleanIpMaxSamples ||
-        (!_withServer && (ports.isEmpty || ports.length > cleanIpMaxPorts || ports.any((p) => p < 1 || p > 65535)));
-    if (bad) {
+    if (!_withServer && (ports.isEmpty || ports.length > cleanIpMaxPorts || ports.any((p) => p < 1 || p > 65535))) {
       setState(() {
         _listError = null;
         _numberError = tr(context, 'cleanIpLimits');
@@ -186,20 +202,27 @@ class _CleanIpPageState extends State<CleanIpPage> {
       return null;
     }
     return ScanOptions(
-      count: count,
-      timeoutSeconds: seconds,
+      count: _count,
+      timeoutSeconds: _seconds,
       gentle: _gentle,
       ports: ports.isEmpty ? const [443] : ports,
       sni: _sni.text,
-      stopAfter: stop,
+      stopAfter: _stopAfter,
       skipFirst: _withServer && _skip,
       neighbors: _neighbors,
-      samples: samples,
+      samples: _samples,
       fragment: _fragment,
     );
   }
 
+  String _cdnName(Cdn? c) => switch (c) {
+        Cdn.cloudflare => 'Cloudflare',
+        Cdn.fastly => 'Fastly',
+        null => tr(context, 'cleanIpMyList'),
+      };
+
   Future<void> _scan({ScanState? resume, ScanOptions? resumeOptions, LinkFields? resumeServer}) async {
+    FocusScope.of(context).unfocus();
     final options = resume != null ? resumeOptions! : _options();
     if (options == null) return;
     var ranges = <String>[];
@@ -234,8 +257,10 @@ class _CleanIpPageState extends State<CleanIpPage> {
         ranges = rangesOf(_cdn!);
       }
     }
+    if (!mounted) return;
     final server = resume != null ? resumeServer : (_withServer ? _server : null);
     final cloudflare = _cdn == Cdn.cloudflare;
+    final enrich = cloudflare && (_colo || _speed);
     setState(() {
       _listError = _numberError = null;
       _note = null;
@@ -245,6 +270,13 @@ class _CleanIpPageState extends State<CleanIpPage> {
       _live = [];
       _picked.clear();
       _scanned = server;
+      _scanEnrich = enrich;
+      _scanSteps = (server != null && !options.skipFirst ? 2 : 1) + (enrich ? 1 : 0);
+      _scanSummary = [
+        _cdnName(_cdn),
+        server == null ? tr(context, 'cleanIpModeOnly') : _nameOf(server),
+        if (resume == null) tr(context, 'cleanIpDepthSummary', {'n': options.count, 's': options.timeoutSeconds}),
+      ].join(' · ');
       _stage = 1;
       _done = 0;
       _total = 0;
@@ -272,14 +304,19 @@ class _CleanIpPageState extends State<CleanIpPage> {
     );
     if (!mounted) return;
     if (_cancel) {
-      // Stopped by the user: the checkpoint holds what is left.
-      setState(() => _running = false);
+      // Stopped by the user: the checkpoint holds what is left, and what was found so far is shown (with
+      // nothing found, the setup, where the scan can be resumed).
+      setState(() {
+        _running = false;
+        _enriching = false;
+        _found = _live.isEmpty ? null : _live;
+      });
       _loadSaved();
       return;
     }
     await _clearSaved();
     var results = found;
-    if (cloudflare && (_colo || _speed) && results.isNotEmpty) {
+    if (enrich && results.isNotEmpty) {
       setState(() {
         _enriching = true;
         _done = 0;
@@ -299,6 +336,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
       _running = false;
       _enriching = false;
       _found = results;
+      _sort = _Sort.fast;
       if (options.stopAfter > 0 && results.length >= options.stopAfter) _note = tr(context, 'cleanIpStopped');
     });
   }
@@ -309,6 +347,13 @@ class _CleanIpPageState extends State<CleanIpPage> {
     await _scan(resume: s, resumeOptions: info.options, resumeServer: info.link);
   }
 
+  void _newScan() => setState(() {
+        _found = null;
+        _live = [];
+        _picked.clear();
+        _note = null;
+      });
+
   // ---- what to take away
 
   Future<void> _copy(String text) async {
@@ -318,6 +363,24 @@ class _CleanIpPageState extends State<CleanIpPage> {
 
   static String _key(CleanIp r) => '${r.ip}:${r.port}';
 
+  static int _ms(CleanIp r) => r.delayMs ?? r.tcpMs;
+
+  List<CleanIp> _sorted(List<CleanIp> list) {
+    final out = [...list];
+    switch (_sort) {
+      case _Sort.fast:
+        out.sort((a, b) => _ms(a).compareTo(_ms(b)));
+      case _Sort.loss:
+        out.sort((a, b) => a.loss != b.loss ? a.loss.compareTo(b.loss) : _ms(a).compareTo(_ms(b)));
+      case _Sort.speed:
+        out.sort((a, b) {
+          final c = (b.downMbps ?? -1).compareTo(a.downMbps ?? -1);
+          return c != 0 ? c : _ms(a).compareTo(_ms(b));
+        });
+    }
+    return out;
+  }
+
   List<CleanIp> get _pickedResults => [for (final r in _found ?? _live) if (_picked.contains(_key(r))) r];
 
   /// The configs the ticked addresses are for: the ones ticked in the list, else the one that was scanned.
@@ -326,6 +389,9 @@ class _CleanIpPageState extends State<CleanIpPage> {
     final one = _scanned ?? _chosen;
     return one == null ? const [] : [one];
   }
+
+  /// Whether addresses can be ticked and put into configs (opened from the home page, with servers).
+  bool get _canAct => !_fixed && widget.state != null && _servers.isNotEmpty;
 
   /// Adds, for each ticked config, a copy with each of [list]'s addresses.
   Future<void> _addServers(List<CleanIp> list) async {
@@ -360,6 +426,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
     // The configs were rebuilt: the ticks on the old ones no longer point at anything.
     if (mounted) setState(_targets.clear);
   }
+
   Future<void> _loadFile() async {
     try {
       final r = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['txt', 'csv', 'list'], withData: true);
@@ -370,302 +437,693 @@ class _CleanIpPageState extends State<CleanIpPage> {
     } catch (_) {}
   }
 
-  // ---- the page
+  // ---- sheets
 
-  Widget _number(TextEditingController c, String label, {String? helper}) => TextField(
-        controller: c,
-        enabled: !_running,
-        keyboardType: TextInputType.number,
-        textDirection: TextDirection.ltr,
-        decoration: InputDecoration(labelText: label, helperText: helper, helperMaxLines: 2, border: const OutlineInputBorder()),
-      );
-
-  Widget _switch(bool value, String title, String? subtitle, ValueChanged<bool> onChanged) => SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        value: value,
-        onChanged: _running ? null : onChanged,
-        title: Text(title),
-        subtitle: subtitle == null ? null : Text(subtitle),
-      );
-
-  String _rowText(CleanIp r) {
-    final parts = <String>[
-      '${r.delayMs ?? r.tcpMs} ms',
-      if (r.loss > 0) tr(context, 'cleanIpLoss', {'loss': (r.loss * 100).round()}),
-      if (r.jitterMs > 0) 'jitter ${r.jitterMs} ms',
-      if (r.colo != null) r.colo!,
-      if (r.downMbps != null) tr(context, 'cleanIpSpeedRow', {'mbps': r.downMbps!.toStringAsFixed(1), 'ttfb': r.ttfbMs ?? 0}),
-    ];
-    return parts.join(' · ');
-  }
-
-  Widget _row(CleanIp r, {required bool fixed}) => Card(
-        child: ListTile(
-          leading: fixed || widget.state == null
-              ? null
-              : Checkbox(
-                  value: _picked.contains(_key(r)),
-                  onChanged: _running
-                      ? null
-                      : (v) => setState(() => v == true ? _picked.add(_key(r)) : _picked.remove(_key(r)))),
-          title: Text('${r.ip}:${r.port}', textDirection: TextDirection.ltr),
-          subtitle: Text(_rowText(r), textDirection: TextDirection.ltr),
-          trailing: Wrap(spacing: 4, children: [
-            IconButton(tooltip: tr(context, 'cleanIpCopy'), onPressed: () => _copy(r.ip), icon: const Icon(Icons.copy)),
-            if (fixed) FilledButton.tonal(onPressed: () => Navigator.pop(context, r.ip), child: Text(tr(context, 'cleanIpUse'))),
-          ]),
-          onTap: fixed || widget.state == null || _running
-              ? null
-              : () => setState(() => _picked.contains(_key(r)) ? _picked.remove(_key(r)) : _picked.add(_key(r))),
-        ),
-      );
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final fixed = widget.server != null;
-    final canPickServer = fixed || _servers.isNotEmpty;
-    final shown = _found ?? _live;
-    final cloudflare = _cdn == Cdn.cloudflare;
-    return Scaffold(
-      appBar: AppBar(title: Text(tr(context, 'cleanIpTitle'))),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(tr(context, _withServer ? 'cleanIpDesc' : 'cleanIpOnlyDesc')),
-          const SizedBox(height: 16),
-          if (_saved != null && !_running)
-            Card(
-              color: scheme.secondaryContainer,
-              child: ListTile(
-                leading: const Icon(Icons.restore),
-                title: Text(tr(context, 'cleanIpResume', {'n': _saved!.pending.length})),
-                trailing: TextButton(onPressed: _clearSaved, child: Text(tr(context, 'cleanIpDiscard'))),
-                onTap: _resume,
+  /// A bottom sheet with a search field over [_servers]; [tile] draws one server.
+  Future<void> _serverSheet({required String title, required Widget Function(_Server e, StateSetter setSheet) tile}) {
+    var query = '';
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) {
+          final q = query.trim().toLowerCase();
+          final list = q.isEmpty ? _servers : _servers.where((e) => e.name.toLowerCase().contains(q)).toList();
+          return SizedBox(
+            height: MediaQuery.of(context).size.height * 0.75,
+            child: Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(title, style: Theme.of(context).textTheme.titleMedium),
               ),
-            ),
-          SegmentedButton<bool>(
-            segments: [
-              ButtonSegment(value: true, label: Text(tr(context, 'cleanIpModeServer')), enabled: canPickServer),
-              ButtonSegment(value: false, label: Text(tr(context, 'cleanIpModeOnly'))),
-            ],
-            selected: {_withServer},
-            onSelectionChanged: _running ? null : (v) => setState(() => _withServer = v.first),
-          ),
-          if (!canPickServer && _withServer) ...[
-            const SizedBox(height: 8),
-            Text(tr(context, 'cleanIpNoServers')),
-          ],
-          const SizedBox(height: 16),
-          if (_withServer && !fixed && _servers.isNotEmpty) ...[
-            DropdownButtonFormField<LinkFields>(
-              value: _chosen,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: tr(context, 'cleanIpPickServer'), border: const OutlineInputBorder()),
-              items: [
-                for (final e in _servers) DropdownMenuItem(value: e.fields, child: Text(e.name, overflow: TextOverflow.ellipsis)),
-              ],
-              onChanged: _running
-                  ? null
-                  : (v) {
-                      setState(() => _chosen = v);
-                      _detect();
-                    },
-            ),
-            const SizedBox(height: 12),
-          ],
-          DropdownButtonFormField<Cdn?>(
-            value: _cdn,
-            decoration: InputDecoration(labelText: tr(context, 'cleanIpNetwork'), border: const OutlineInputBorder()),
-            items: [
-              const DropdownMenuItem(value: Cdn.cloudflare, child: Text('Cloudflare')),
-              const DropdownMenuItem(value: Cdn.fastly, child: Text('Fastly')),
-              DropdownMenuItem(value: null, child: Text(tr(context, 'cleanIpCustom'))),
-            ],
-            onChanged: _running ? null : (v) => setState(() => _cdn = v),
-          ),
-          if (_cdn == null) ...[
-            const SizedBox(height: 12),
-            TextField(
-              controller: _custom,
-              enabled: !_running,
-              maxLines: 6,
-              minLines: 3,
-              textDirection: TextDirection.ltr,
-              decoration: InputDecoration(
-                labelText: tr(context, 'cleanIpList'),
-                helperText: tr(context, 'cleanIpListHint'),
-                helperMaxLines: 4,
-                errorText: _listError,
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TextButton.icon(
-                  onPressed: _running ? null : _loadFile, icon: const Icon(Icons.file_open), label: Text(tr(context, 'cleanIpFile'))),
-            ),
-          ],
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _number(_count, tr(context, 'cleanIpCount'))),
-            const SizedBox(width: 12),
-            Expanded(child: _number(_timeout, tr(context, 'cleanIpTimeout'))),
-          ]),
-          if (!_withServer) ...[
-            const SizedBox(height: 12),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: _number(_ports, tr(context, 'cleanIpPorts'))),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _sni,
-                  enabled: !_running,
-                  textDirection: TextDirection.ltr,
-                  decoration: InputDecoration(
-                    labelText: tr(context, 'cleanIpSni'),
-                    helperText: tr(context, 'cleanIpSniHint'),
-                    helperMaxLines: 3,
-                    border: const OutlineInputBorder(),
+              if (_servers.length > 6)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: tr(context, 'cleanIpSearch'),
+                      prefixIcon: const Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onChanged: (v) => setSheet(() => query = v),
                   ),
                 ),
+              Expanded(
+                child: list.isEmpty
+                    ? Center(child: Text(tr(context, 'cleanIpNoMatch')))
+                    : ListView.builder(
+                        itemCount: list.length,
+                        itemBuilder: (context, i) => tile(list[i], setSheet),
+                      ),
               ),
             ]),
-          ],
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: Text(tr(context, 'cleanIpAdvanced')),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _pickServer() => _serverSheet(
+        title: tr(context, 'cleanIpPickServer'),
+        tile: (e, _) => ListTile(
+          leading: Icon(identical(e.fields, _chosen) ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              color: identical(e.fields, _chosen) ? Theme.of(context).colorScheme.primary : null),
+          title: Text(e.name, overflow: TextOverflow.ellipsis),
+          subtitle: Text(e.fields.host, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr),
+          onTap: () {
+            Navigator.pop(context);
+            setState(() => _chosen = e.fields);
+            _detect();
+          },
+        ),
+      );
+
+  bool _isTarget(LinkFields f) => _targets.contains(f) || (_targets.isEmpty && identical(f, _scanned ?? _chosen));
+
+  Future<void> _pickTargets() async {
+    await _serverSheet(
+      title: tr(context, 'cleanIpPutIn'),
+      tile: (e, setSheet) => CheckboxListTile(
+        value: _isTarget(e.fields),
+        title: Text(e.name, overflow: TextOverflow.ellipsis),
+        subtitle: Text(e.fields.host, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr),
+        onChanged: (v) {
+          // Ticking starts from what was shown ticked (the scanned config).
+          if (_targets.isEmpty) {
+            final one = _scanned ?? _chosen;
+            if (one != null) _targets.add(one);
+          }
+          v == true ? _targets.add(e.fields) : _targets.remove(e.fields);
+          setSheet(() {});
+        },
+      ),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openOptions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(builder: (context, setSheet) {
+        void update(VoidCallback f) {
+          setState(f);
+          setSheet(() {});
+        }
+
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          builder: (context, scroll) => ListView(
+            controller: scroll,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              _switch(_gentle, tr(context, 'cleanIpGentle'), tr(context, 'cleanIpGentleDesc'), (v) => setState(() => _gentle = v)),
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: _number(_stopAfter, tr(context, 'cleanIpStopAfter'), helper: tr(context, 'cleanIpStopAfterHint'))),
-                const SizedBox(width: 12),
-                Expanded(child: _number(_samples, tr(context, 'cleanIpSamples'))),
-              ]),
+              Text(tr(context, 'cleanIpAdvanced'), style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              _option(Icons.spa_outlined, _gentle, 'cleanIpGentle', 'cleanIpGentleDesc', (v) => update(() => _gentle = v)),
+              _option(Icons.content_cut, _fragment, 'cleanIpFragment', 'cleanIpFragmentDesc', (v) => update(() => _fragment = v)),
+              _option(Icons.hub_outlined, _neighbors, 'cleanIpNeighbors', null, (v) => update(() => _neighbors = v)),
               if (_withServer)
-                _switch(_skip, tr(context, 'cleanIpSkip'), tr(context, 'cleanIpSkipDesc'), (v) => setState(() => _skip = v)),
-              _switch(_neighbors, tr(context, 'cleanIpNeighbors'), null, (v) => setState(() => _neighbors = v)),
-              _switch(_fragment, tr(context, 'cleanIpFragment'), tr(context, 'cleanIpFragmentDesc'),
-                  (v) => setState(() => _fragment = v)),
-              if (cloudflare) ...[
-                _switch(_colo, tr(context, 'cleanIpColo'), null, (v) => setState(() => _colo = v)),
-                _switch(_speed, tr(context, 'cleanIpSpeed'), null, (v) => setState(() => _speed = v)),
+                _option(Icons.fast_forward_outlined, _skip, 'cleanIpSkip', 'cleanIpSkipDesc', (v) => update(() => _skip = v)),
+              if (_cdn == Cdn.cloudflare) ...[
+                _option(Icons.location_on_outlined, _colo, 'cleanIpColo', null, (v) => update(() => _colo = v)),
+                _option(Icons.speed, _speed, 'cleanIpSpeed', null, (v) => update(() => _speed = v)),
               ],
+              const Divider(height: 24),
+              _stepper(
+                icon: Icons.flag_outlined,
+                label: tr(context, 'cleanIpStopAfter'),
+                value: _stopAfter,
+                show: (v) => v == 0 ? tr(context, 'cleanIpNever') : '$v',
+                down: _stopAfter > 0 ? () => update(() => _stopAfter = _stopAfter <= 5 ? _stopAfter - 1 : _stopAfter - 5) : null,
+                up: _stopAfter < 100 ? () => update(() => _stopAfter = _stopAfter < 5 ? _stopAfter + 1 : _stopAfter + 5) : null,
+              ),
+              _stepper(
+                icon: Icons.repeat,
+                label: tr(context, 'cleanIpSamples'),
+                value: _samples,
+                down: _samples > 1 ? () => update(() => _samples--) : null,
+                up: _samples < cleanIpMaxSamples ? () => update(() => _samples++) : null,
+              ),
             ],
           ),
-          if (_numberError != null) ...[
-            const SizedBox(height: 8),
-            Text(_numberError!, style: TextStyle(color: scheme.error)),
-          ],
-          if (_note != null) ...[
-            const SizedBox(height: 8),
-            Text(_note!),
-          ],
-          const SizedBox(height: 16),
-          Row(children: [
-            FilledButton.icon(
-              onPressed: _running || (_withServer && _server == null) ? null : _scan,
-              icon: _running
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.travel_explore),
-              label: Text(_running
-                  ? tr(context, _enriching ? 'cleanIpStageEnrich' : (_stage == 1 ? 'cleanIpStage1' : 'cleanIpStage2'),
-                      {'done': _done, 'total': _total})
-                  : tr(context, 'cleanIpScan')),
+        );
+      }),
+    );
+  }
+
+  /// The options that are on, for the summary on the Options card.
+  String _optionsSummary() {
+    final on = <String>[
+      if (_gentle) tr(context, 'cleanIpGentle'),
+      if (_fragment) tr(context, 'cleanIpFragmentShort'),
+      if (_neighbors) tr(context, 'cleanIpNeighborsShort'),
+      if (_withServer && _skip) tr(context, 'cleanIpSkip'),
+      if (_cdn == Cdn.cloudflare && _colo) tr(context, 'cleanIpColoShort'),
+      if (_cdn == Cdn.cloudflare && _speed) tr(context, 'cleanIpSpeedShort'),
+      if (_stopAfter > 0) '${tr(context, 'cleanIpStopAfterShort')} $_stopAfter',
+      if (_samples > 1) '${tr(context, 'cleanIpSamplesShort')} $_samples',
+    ];
+    return on.isEmpty ? tr(context, 'cleanIpDefaults') : on.join(', ');
+  }
+
+  // ---- pieces of the page
+
+  Widget _option(IconData icon, bool value, String title, String? desc, ValueChanged<bool> onChanged) => SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        secondary: Icon(icon),
+        value: value,
+        onChanged: onChanged,
+        title: Text(tr(context, title)),
+        subtitle: desc == null ? null : Text(tr(context, desc)),
+      );
+
+  Widget _stepper({
+    required IconData icon,
+    required String label,
+    required int value,
+    String Function(int)? show,
+    VoidCallback? down,
+    VoidCallback? up,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(children: [
+          Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
+          const SizedBox(width: 16),
+          Expanded(child: Text(label)),
+          IconButton.outlined(onPressed: down, icon: const Icon(Icons.remove), visualDensity: VisualDensity.compact),
+          SizedBox(
+            width: 56,
+            child: Text(show?.call(value) ?? '$value',
+                textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+          ),
+          IconButton.outlined(onPressed: up, icon: const Icon(Icons.add), visualDensity: VisualDensity.compact),
+        ]),
+      );
+
+  Widget _section(String text) => Padding(
+        padding: const EdgeInsets.only(top: 20, bottom: 8),
+        child: Text(text, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Theme.of(context).colorScheme.primary)),
+      );
+
+  Widget _latency(int ms) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final MaterialColor c = ms <= 300 ? Colors.green : (ms <= 700 ? Colors.orange : Colors.red);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: c.withValues(alpha: dark ? 0.22 : 0.14), borderRadius: BorderRadius.circular(20)),
+      child: Text('$ms ms',
+          textDirection: TextDirection.ltr,
+          style: TextStyle(color: dark ? c.shade200 : c.shade800, fontWeight: FontWeight.w600, fontSize: 13)),
+    );
+  }
+
+  String _details(CleanIp r) => <String>[
+        if (r.loss > 0) tr(context, 'cleanIpLoss', {'loss': (r.loss * 100).round()}),
+        if (r.jitterMs > 0) 'jitter ${r.jitterMs} ms',
+        if (r.colo != null) r.colo!,
+        if (r.downMbps != null) tr(context, 'cleanIpSpeedRow', {'mbps': r.downMbps!.toStringAsFixed(1), 'ttfb': r.ttfbMs ?? 0}),
+      ].join(' · ');
+
+  Widget _result(CleanIp r, int rank, {required bool selectable}) {
+    final scheme = Theme.of(context).colorScheme;
+    final picked = _picked.contains(_key(r));
+    final details = _details(r);
+    void toggle() => setState(() => picked ? _picked.remove(_key(r)) : _picked.add(_key(r)));
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: picked ? scheme.secondaryContainer : null,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: selectable ? toggle : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+          child: Row(children: [
+            if (selectable)
+              Checkbox(value: picked, onChanged: (_) => toggle())
+            else
+              SizedBox(
+                width: 40,
+                child: Text('$rank', textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+              ),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('${r.ip}:${r.port}',
+                    textDirection: TextDirection.ltr,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontFamily: 'monospace')),
+                if (details.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(details,
+                      textDirection: TextDirection.ltr,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                ],
+              ]),
             ),
-            if (_running)
-              TextButton(
-                  onPressed: () => setState(() => _cancel = true),
-                  child: Text(MaterialLocalizations.of(context).cancelButtonLabel)),
+            const SizedBox(width: 8),
+            _latency(_ms(r)),
+            if (_fixed && !_running) ...[
+              const SizedBox(width: 8),
+              FilledButton.tonal(onPressed: () => Navigator.pop(context, r.ip), child: Text(tr(context, 'cleanIpUse'))),
+            ] else
+              IconButton(tooltip: tr(context, 'cleanIpCopy'), onPressed: () => _copy(r.ip), icon: const Icon(Icons.copy, size: 20)),
           ]),
-          if (_running && _live.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(tr(context, 'cleanIpLiveTitle', {'n': _live.length}), style: TextStyle(color: scheme.primary)),
+        ),
+      ),
+    );
+  }
+
+  // ---- the three faces
+
+  Widget _setup() {
+    final scheme = Theme.of(context).colorScheme;
+    final canPickServer = _fixed || _servers.isNotEmpty;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        if (_saved != null)
+          Card(
+            color: scheme.secondaryContainer,
+            margin: const EdgeInsets.only(bottom: 12),
+            child: ListTile(
+              leading: const Icon(Icons.history),
+              title: Text(tr(context, 'cleanIpResume', {'n': _saved!.pending.length})),
+              trailing: TextButton(onPressed: _clearSaved, child: Text(tr(context, 'cleanIpDiscard'))),
+              onTap: _resume,
+            ),
+          ),
+        SegmentedButton<bool>(
+          segments: [
+            ButtonSegment(
+                value: true,
+                icon: const Icon(Icons.dns_outlined),
+                label: Text(tr(context, 'cleanIpModeServer')),
+                enabled: canPickServer),
+            ButtonSegment(value: false, icon: const Icon(Icons.public), label: Text(tr(context, 'cleanIpModeOnly'))),
           ],
-          if (_found != null && _found!.isEmpty) ...[
-            const SizedBox(height: 16),
-            Text(tr(context, 'cleanIpNone'), style: TextStyle(color: scheme.error)),
-          ],
-          if (shown.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, children: [
-              TextButton.icon(
-                  onPressed: () => _copy(endpointsText(shown)),
-                  icon: const Icon(Icons.copy_all),
-                  label: Text(tr(context, 'cleanIpCopyEndpoints'))),
-              if (_targetList.isNotEmpty) ...[
-                TextButton.icon(
-                    onPressed: () => _copy([for (final b in _targetList) ...linksFor(b, _picked.isEmpty ? shown : _pickedResults)].join('\n')),
-                    icon: const Icon(Icons.link),
-                    label: Text(tr(context, 'cleanIpCopyLinks'))),
-                TextButton.icon(
-                    onPressed: () => _copy(subscriptionText([for (final b in _targetList) ...linksFor(b, _picked.isEmpty ? shown : _pickedResults)])),
-                    icon: const Icon(Icons.rss_feed),
-                    label: Text(tr(context, 'cleanIpCopySub'))),
-              ],
-            ]),
-            if (!fixed && widget.state != null && !_running && _servers.isNotEmpty) ...[
-              const SizedBox(height: 8),
+          selected: {_withServer},
+          showSelectedIcon: false,
+          onSelectionChanged: (v) => setState(() => _withServer = v.first),
+        ),
+        if (_withServer) ...[
+          _section(tr(context, 'cleanIpPickServer')),
+          if (!canPickServer)
+            Text(tr(context, 'cleanIpNoServers'))
+          else
+            Card(
+              margin: EdgeInsets.zero,
+              child: ListTile(
+                leading: const Icon(Icons.dns_outlined),
+                title: Text(_fixed ? _server!.host : _nameOf(_chosen), overflow: TextOverflow.ellipsis),
+                subtitle: _fixed || _chosen == null
+                    ? null
+                    : Text(_chosen!.host, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr),
+                trailing: _fixed ? null : const Icon(Icons.unfold_more),
+                onTap: _fixed ? null : _pickServer,
+              ),
+            ),
+        ],
+        _section(tr(context, 'cleanIpNetwork')),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final c in const [Cdn.cloudflare, Cdn.fastly, null])
+            ChoiceChip(
+              label: Text(_cdnName(c)),
+              selected: _cdn == c,
+              onSelected: (_) => setState(() => _cdn = c),
+            ),
+        ]),
+        if (_cdn == null) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _custom,
+            maxLines: 6,
+            minLines: 3,
+            textDirection: TextDirection.ltr,
+            decoration: InputDecoration(
+              labelText: tr(context, 'cleanIpList'),
+              helperText: tr(context, 'cleanIpListHint'),
+              helperMaxLines: 4,
+              errorText: _listError,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(onPressed: _loadFile, icon: const Icon(Icons.file_open_outlined), label: Text(tr(context, 'cleanIpFile'))),
+          ),
+        ],
+        if (!_withServer) ...[
+          const SizedBox(height: 16),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: TextField(
+                controller: _ports,
+                keyboardType: TextInputType.number,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(labelText: tr(context, 'cleanIpPorts'), border: const OutlineInputBorder()),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: _sni,
+                textDirection: TextDirection.ltr,
+                decoration: InputDecoration(
+                  labelText: tr(context, 'cleanIpSni'),
+                  helperText: tr(context, 'cleanIpSniHint'),
+                  helperMaxLines: 3,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ),
+          ]),
+        ],
+        _section(tr(context, 'cleanIpDepth')),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final d in _Depth.values)
+            ChoiceChip(
+              label: Text(tr(context, switch (d) {
+                _Depth.quick => 'cleanIpQuick',
+                _Depth.normal => 'cleanIpNormal',
+                _Depth.deep => 'cleanIpDeep',
+                _Depth.custom => 'cleanIpCustomDepth',
+              })),
+              selected: _depth == d,
+              onSelected: (_) => setState(() {
+                _depth = d;
+                final p = _presets[d];
+                if (p != null) {
+                  _count = p.count;
+                  _seconds = p.seconds;
+                }
+              }),
+            ),
+        ]),
+        const SizedBox(height: 8),
+        if (_depth == _Depth.custom) ...[
+          _stepper(
+            icon: Icons.format_list_numbered,
+            label: tr(context, 'cleanIpCount'),
+            value: _count,
+            down: _count > _countSteps.first
+                ? () => setState(() => _count = _countSteps.lastWhere((s) => s < _count, orElse: () => _countSteps.first))
+                : null,
+            up: _count < _countSteps.last
+                ? () => setState(() => _count = _countSteps.firstWhere((s) => s > _count, orElse: () => _countSteps.last))
+                : null,
+          ),
+          _stepper(
+            icon: Icons.timer_outlined,
+            label: tr(context, 'cleanIpTimeout'),
+            value: _seconds,
+            down: _seconds > cleanIpMinTimeout ? () => setState(() => _seconds--) : null,
+            up: _seconds < cleanIpMaxTimeout ? () => setState(() => _seconds++) : null,
+          ),
+        ] else
+          Text(tr(context, 'cleanIpDepthSummary', {'n': _count, 's': _seconds}),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 16),
+        Card(
+          margin: EdgeInsets.zero,
+          child: ListTile(
+            leading: const Icon(Icons.tune),
+            title: Text(tr(context, 'cleanIpAdvanced')),
+            subtitle: Text(_optionsSummary(), maxLines: 2, overflow: TextOverflow.ellipsis),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _openOptions,
+          ),
+        ),
+        if (_numberError != null) ...[
+          const SizedBox(height: 12),
+          Text(_numberError!, style: TextStyle(color: scheme.error)),
+        ],
+        if (_note != null) ...[
+          const SizedBox(height: 12),
+          Text(_note!),
+        ],
+      ],
+    );
+  }
+
+  int get _stepNow {
+    if (_enriching) return _scanSteps;
+    if (_stage == 2) return _scanSteps - (_scanEnrich ? 1 : 0);
+    return 1;
+  }
+
+  Widget _scanning() {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final title = _enriching ? 'cleanIpStageEnrichTitle' : (_stage == 1 ? 'cleanIpStage1Title' : 'cleanIpStage2Title');
+    final shown = _sorted(_live);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(
-                  child: Text(tr(context, 'cleanIpPicked', {'n': _picked.length, 'total': shown.length}),
-                      style: TextStyle(color: scheme.primary)),
+                  child: Text(tr(context, 'cleanIpStep', {'n': _stepNow, 'total': _scanSteps}),
+                      style: text.labelLarge?.copyWith(color: scheme.primary)),
                 ),
-                TextButton(
-                    onPressed: () => setState(() {
-                          if (_picked.length == shown.length) {
-                            _picked.clear();
-                          } else {
-                            _picked..clear()..addAll(shown.map(_key));
-                          }
-                        }),
-                    child: Text(tr(context, _picked.length == shown.length ? 'cleanIpSelectNone' : 'cleanIpSelectAll'))),
+                if (_total > 0) Text('$_done / $_total', textDirection: TextDirection.ltr, style: text.labelLarge),
               ]),
-              Card(
-                margin: EdgeInsets.zero,
-                child: ExpansionTile(
-                  title: Text(tr(context, 'cleanIpPutIn')),
-                  subtitle: Text(tr(context, 'cleanIpPicked', {'n': _targetList.length, 'total': _servers.length})),
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 280),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final e in _servers)
-                            CheckboxListTile(
-                              dense: true,
-                              value: _targets.contains(e.fields) || (_targets.isEmpty && identical(e.fields, _scanned ?? _chosen)),
-                              title: Text(e.name, overflow: TextOverflow.ellipsis),
-                              onChanged: (v) => setState(() {
-                                // Ticking starts from what was shown ticked (the scanned config).
-                                if (_targets.isEmpty) {
-                                  final one = _scanned ?? _chosen;
-                                  if (one != null) _targets.add(one);
-                                }
-                                v == true ? _targets.add(e.fields) : _targets.remove(e.fields);
-                              }),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 6),
+              Text(tr(context, title), style: text.titleMedium),
+              const SizedBox(height: 12),
+              LinearProgressIndicator(
+                value: _total > 0 ? _done / _total : null,
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(height: 12),
+              Row(children: [
+                Icon(Icons.check_circle_outline, size: 18, color: scheme.primary),
+                const SizedBox(width: 6),
+                Expanded(child: Text(tr(context, 'cleanIpLiveTitle', {'n': _live.length}))),
+              ]),
+              if (_scanSummary.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(_scanSummary, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            ]),
+          ),
+        ),
+        const SizedBox(height: 12),
+        for (final (i, r) in shown.indexed) _result(r, i + 1, selectable: false),
+      ],
+    );
+  }
+
+  Widget _results() {
+    final scheme = Theme.of(context).colorScheme;
+    final found = _found ?? const <CleanIp>[];
+    if (found.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.search_off, size: 56, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 16),
+            Text(tr(context, 'cleanIpNone'), textAlign: TextAlign.center),
+            if (_note != null) ...[const SizedBox(height: 8), Text(_note!, textAlign: TextAlign.center)],
+          ]),
+        ),
+      );
+    }
+    final shown = _sorted(found);
+    final hasSpeed = found.any((r) => r.downMbps != null);
+    final hasLoss = found.any((r) => r.loss > 0);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      children: [
+        if (_scanSummary.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(_scanSummary, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ),
+        if (_note != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(_note!)),
+        if (hasSpeed || hasLoss)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(spacing: 8, runSpacing: 8, children: [
+              ChoiceChip(
+                  label: Text(tr(context, 'cleanIpSortFast')), selected: _sort == _Sort.fast, onSelected: (_) => setState(() => _sort = _Sort.fast)),
+              if (hasLoss)
+                ChoiceChip(
+                    label: Text(tr(context, 'cleanIpSortLoss')), selected: _sort == _Sort.loss, onSelected: (_) => setState(() => _sort = _Sort.loss)),
+              if (hasSpeed)
+                ChoiceChip(
+                    label: Text(tr(context, 'cleanIpSortSpeed')),
+                    selected: _sort == _Sort.speed,
+                    onSelected: (_) => setState(() => _sort = _Sort.speed)),
+            ]),
+          ),
+        if (_canAct)
+          Row(children: [
+            Expanded(
+              child: Text(tr(context, 'cleanIpPicked', {'n': _picked.length, 'total': found.length}),
+                  style: TextStyle(color: scheme.primary)),
+            ),
+            TextButton(
+                onPressed: () => setState(() {
+                      if (_picked.length == found.length) {
+                        _picked.clear();
+                      } else {
+                        _picked
+                          ..clear()
+                          ..addAll(found.map(_key));
+                      }
+                    }),
+                child: Text(tr(context, _picked.length == found.length ? 'cleanIpSelectNone' : 'cleanIpSelectAll'))),
+          ]),
+        for (final (i, r) in shown.indexed) _result(r, i + 1, selectable: _canAct),
+      ],
+    );
+  }
+
+  Widget _bottomBar() {
+    final Widget child;
+    if (_running) {
+      child = OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+        onPressed: _cancel ? null : () => setState(() => _cancel = true),
+        icon: const Icon(Icons.stop_circle_outlined),
+        label: Text(tr(context, 'cleanIpStop')),
+      );
+    } else if (_found != null) {
+      final acting = _canAct && _picked.isNotEmpty && (_found ?? const []).isNotEmpty;
+      child = acting
+          ? Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                Expanded(
+                  child: Text(tr(context, 'cleanIpPicked', {'n': _picked.length, 'total': _found!.length}),
+                      style: Theme.of(context).textTheme.labelLarge),
                 ),
-              ),              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 4, children: [
-                FilledButton.icon(
-                    onPressed: _picked.isEmpty || _targetList.isEmpty ? null : () => _addServers(_pickedResults),
+                TextButton.icon(
+                  onPressed: _pickTargets,
+                  icon: const Icon(Icons.dns_outlined, size: 18),
+                  label: Text(tr(context, 'cleanIpConfigs', {'n': _targetList.length})),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Row(children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                    onPressed: _targetList.isEmpty ? null : () => _addServers(_pickedResults),
                     icon: const Icon(Icons.playlist_add),
-                    label: Text(tr(context, 'cleanIpAddPicked', {'n': _picked.length * _targetList.length}))),
+                    label: Text(tr(context, 'cleanIpAddPicked', {'n': _picked.length * _targetList.length}),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 OutlinedButton.icon(
-                    onPressed: _picked.length == 1 && _targetList.isNotEmpty ? () => _replaceAddress(_pickedResults.single) : null,
-                    icon: const Icon(Icons.swap_horiz),
-                    label: Text(tr(context, 'cleanIpReplace'))),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+                  onPressed: _picked.length == 1 && _targetList.isNotEmpty ? () => _replaceAddress(_pickedResults.single) : null,
+                  icon: const Icon(Icons.swap_horiz),
+                  label: Text(tr(context, 'cleanIpReplaceShort')),
+                ),
               ]),
-              const SizedBox(height: 8),
-            ],            for (final r in shown) _row(r, fixed: fixed && !_running),
+            ])
+          : FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              onPressed: _newScan,
+              icon: const Icon(Icons.refresh),
+              label: Text(tr(context, 'cleanIpNewScan')),
+            );
+    } else {
+      final ready = !(_withServer && _server == null);
+      child = FilledButton.icon(
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+        onPressed: ready ? _scan : null,
+        icon: const Icon(Icons.radar),
+        label: Text(tr(context, 'cleanIpStart')),
+      );
+    }
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainer,
+      child: SafeArea(
+        top: false,
+        child: Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 12), child: child),
+      ),
+    );
+  }
+
+  void _about() => showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(tr(context, 'cleanIpTitle')),
+          content: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text(tr(context, 'cleanIpModeServer'), style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              Text(tr(context, 'cleanIpDesc')),
+              const SizedBox(height: 16),
+              Text(tr(context, 'cleanIpModeOnly'), style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 4),
+              Text(tr(context, 'cleanIpOnlyDesc')),
+            ]),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(MaterialLocalizations.of(context).okButtonLabel))],
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final results = _found != null && !_running;
+    final shown = _found ?? const <CleanIp>[];
+    final links = _targetList.isEmpty ? const <String>[] : [for (final b in _targetList) ...linksFor(b, _picked.isEmpty ? shown : _pickedResults)];
+    return PopScope(
+      // From the results, Back goes to the setup of a new scan.
+      canPop: !results,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && results) _newScan();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(results && shown.isNotEmpty ? tr(context, 'cleanIpResultsTitle', {'n': shown.length}) : tr(context, 'cleanIpTitle')),
+          actions: [
+            if (results && shown.isNotEmpty)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.copy_all),
+                tooltip: tr(context, 'cleanIpCopy'),
+                onSelected: (v) => switch (v) {
+                  'ip' => _copy(endpointsText(_picked.isEmpty ? shown : _pickedResults)),
+                  'links' => _copy(links.join('\n')),
+                  _ => _copy(subscriptionText(links)),
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: 'ip', child: Text(tr(context, 'cleanIpCopyEndpoints'))),
+                  if (links.isNotEmpty) ...[
+                    PopupMenuItem(value: 'links', child: Text(tr(context, 'cleanIpCopyLinks'))),
+                    PopupMenuItem(value: 'sub', child: Text(tr(context, 'cleanIpCopySub'))),
+                  ],
+                ],
+              ),
+            if (!results && !_running)
+              IconButton(tooltip: tr(context, 'cleanIpAbout'), onPressed: _about, icon: const Icon(Icons.info_outline)),
           ],
-        ],
+        ),
+        body: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: KeyedSubtree(
+            key: ValueKey(_running ? 'scan' : (results ? 'results' : 'setup')),
+            child: _running ? _scanning() : (results ? _results() : _setup()),
+          ),
+        ),
+        bottomNavigationBar: _bottomBar(),
       ),
     );
   }
