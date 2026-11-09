@@ -119,6 +119,30 @@ void main() {
     accepted('re2', buildSingBoxConfig(servers.take(1).toList(), options: o));
   }, skip: skip);
 
+  test('an ad list made binary by the core, and the country lists the app carries, are taken', () {
+    final names = [for (var i = 0; i < 2000; i++) 'ad$i.example.com', 'tracker.example.net'];
+    final json = File('${dir.path}/ads-hagezi-pro.json')
+      ..writeAsStringSync('{"version":3,"rules":[{"domain_suffix":${jsonEncode(names)}}]}');
+    final bin = '${dir.path}/ads-hagezi-pro.bin.srs';
+    final r = Process.runSync(core!, ['rule-set', 'compile', json.path, '-o', bin]);
+    expect(r.exitCode, 0, reason: '${r.stdout}\n${r.stderr}');
+    expect(File(bin).readAsBytesSync().take(3), [0x53, 0x52, 0x53]);
+    final o = NetOptions()
+      ..tun = true
+      ..blockAds = true
+      ..bypass = ['ir'];
+    accepted(
+        'compiled',
+        buildSingBoxConfig(parseLinks(_links).take(1).toList(),
+            options: o,
+            ruleSets: {
+              'ads-hagezi-pro': bin,
+              'geoip-ir': File('assets/rules/geoip-ir.srs').absolute.path,
+              'geosite-ir': File('assets/rules/geosite-ir.srs').absolute.path,
+              'geosite-ir-extra': File('assets/rules/geosite-ir-extra.srs').absolute.path,
+            }));
+  }, skip: skip);
+
   test('the other switches', () {
     final o = NetOptions()
       ..tun = true

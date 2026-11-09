@@ -67,6 +67,26 @@ void main() {
       expect(dohCalls, 2);
     });
 
+    test('the first encrypted resolver to answer wins; a slow or failing one does not hold it back', () async {
+      Future<String?> after(int ms, String? ip) => Future.delayed(Duration(milliseconds: ms), () => ip);
+      expect(await firstAnswer([after(200, '203.0.113.1'), after(10, '203.0.113.2')]), '203.0.113.2');
+      expect(await firstAnswer([after(10, null), after(30, '203.0.113.3')]), '203.0.113.3');
+      expect(await firstAnswer([Future.error(Exception('blocked')), after(10, '203.0.113.4')]), '203.0.113.4');
+      expect(await firstAnswer([after(5, null), Future.error(Exception('x'))]), isNull);
+      expect(await firstAnswer([]), isNull);
+    });
+
+    test('encrypted DNS that takes too long gives way to the system resolver', () async {
+      final r = NameResolver(
+        doh: (h) => Future<String?>.delayed(const Duration(seconds: 5), () => '203.0.113.1'),
+        system: (h) async => '198.51.100.7',
+        dohWait: const Duration(milliseconds: 50),
+      );
+      final sw = Stopwatch()..start();
+      expect(await r.lookup('a.example.com'), '198.51.100.7');
+      expect(sw.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
     test('nothing answers: null, and nothing is remembered', () async {
       final r = NameResolver(doh: (h) async => null, system: (h) async => null);
       expect(await r.lookup('x.example.com'), isNull);

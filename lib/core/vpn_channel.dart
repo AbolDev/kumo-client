@@ -200,6 +200,17 @@ class VpnChannel {
   static Future<void> stop() =>
       _win ? DesktopVpn.instance.stop() : _control.invokeMethod('stop');
 
+  /// Writes the JSON rule-set [source] as a binary one at [output] with the core's own compiler
+  /// (desktop: the core program; Android: libbox). False when it could not.
+  static Future<bool> compileRuleSet(String source, String output) async {
+    if (_win) return DesktopVpn.instance.compileRuleSet(source, output);
+    try {
+      return await _control.invokeMethod<bool>('compileRuleSet', {'source': source, 'output': output}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Android: the state the VPN service holds now (null on the desktop, or when it cannot be asked).
   /// The screen uses it when an expected change of state never arrived.
   static Future<VpnStatus?> currentStatus() async {

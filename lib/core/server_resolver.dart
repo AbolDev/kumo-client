@@ -7,7 +7,8 @@ import 'proxy_config.dart';
 /// Looking up the names of servers before a connection, so that the network's own resolver is asked
 /// as little as possible (it sees which server the user looks for, and on many networks it answers
 /// wrongly for the names of servers that are blocked):
-/// 1. over encrypted DNS (DNS over HTTPS to 1.1.1.1, then 8.8.8.8), which a network cannot read or change;
+/// 1. over encrypted DNS (DNS over HTTPS to 1.1.1.1 and 8.8.8.8 at once), which a network cannot read
+///    or change;
 /// 2. when that does not answer (it is blocked on some networks), the system's own resolver;
 /// 3. when neither answers, the name is left in the configuration for the core to look up.
 /// The address that is found takes the place of the name in the server's settings; the name stays
@@ -60,6 +61,27 @@ String? firstARecord(String json) {
   return null;
 }
 
+/// The first of [lookups] that gives an address; null when all of them gave none (or failed).
+Future<String?> firstAnswer(List<Future<String?>> lookups) {
+  final done = Completer<String?>();
+  var left = lookups.length;
+  if (left == 0) return Future.value(null);
+  void settle(String? ip) {
+    left--;
+    if (done.isCompleted) return;
+    if (ip != null) {
+      done.complete(ip);
+    } else if (left == 0) {
+      done.complete(null);
+    }
+  }
+
+  for (final l in lookups) {
+    l.then(settle, onError: (Object _) => settle(null));
+  }
+  return done.future;
+}
+
 /// Looks names up the way described above, and remembers what it found for a few minutes. When the
 /// encrypted resolvers did not answer, they are not tried again for a while (a blocked one would
 /// otherwise add its timeout to every connection).
@@ -70,18 +92,26 @@ class NameResolver {
     DateTime Function()? now,
     this.cacheFor = const Duration(minutes: 10),
     this.dohPause = const Duration(minutes: 5),
+    this.dohWait = const Duration(milliseconds: 2500),
   })  : _doh = doh ?? _defaultDoh,
         _system = system ?? systemLookup,
         _now = now ?? DateTime.now;
 
-  static Future<String?> _defaultDoh(String host) async =>
-      await dohLookup(host) ?? await dohLookup(host, resolver: 'https://8.8.8.8/resolve');
+  /// Cloudflare and Google asked at once: the first address that comes back (one after the other,
+  /// a blocked first one used to cost its whole timeout before the second was even asked).
+  static Future<String?> _defaultDoh(String host) => firstAnswer([
+        dohLookup(host),
+        dohLookup(host, resolver: 'https://8.8.8.8/resolve'),
+      ]);
 
   final NameLookup _doh;
   final NameLookup _system;
   final DateTime Function() _now;
   final Duration cacheFor;
   final Duration dohPause;
+
+  /// How long the encrypted resolvers are waited for before the system's resolver is asked.
+  final Duration dohWait;
 
   final _cache = <String, ({String ip, DateTime at})>{};
   DateTime? _dohBlockedUntil;
@@ -94,7 +124,7 @@ class NameResolver {
     String? ip;
     final paused = _dohBlockedUntil != null && _now().isBefore(_dohBlockedUntil!);
     if (!paused) {
-      ip = await _doh(host);
+      ip = await _doh(host).timeout(dohWait, onTimeout: () => null).catchError((Object _) => null);
       if (ip == null) _dohBlockedUntil = _now().add(dohPause);
     }
     ip ??= await _system(host);

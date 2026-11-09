@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/ad_lists.dart';
@@ -225,6 +226,74 @@ nodot
       expect(status.lists, 1);
       expect(status.domains, 1);
       expect(status.updated, isNotNull);
+    });
+
+    test('a connection never waits for a download: old lists are used, refreshed later', () async {
+      // An old list (made long ago) of the level is there.
+      final main = File('${dir.path}/rules/${mainAdTag(defaultAdLevel)}.json');
+      await main.parent.create(recursive: true);
+      await main.writeAsString(ruleSetOf(['x.example.com']));
+      await File('${main.path}.count').writeAsString('1');
+      await main.setLastModified(DateTime(2020));
+      final sw = Stopwatch()..start();
+      final found = await ensureRuleSets(dir.path, const [], ads: true, wait: false, refresh: false);
+      expect(found.keys, contains(mainAdTag(defaultAdLevel)));
+      expect(await main.lastModified(), DateTime(2020)); // not fetched again
+      expect(sw.elapsed, lessThan(const Duration(seconds: 2)));
+    });
+
+    test('the country lists the app carries are copied in, dated old so that they are refreshed', () async {
+      final srs = Uint8List.fromList([0x53, 0x52, 0x53, 1, 2, 3, 4, 5]);
+      final asked = <String>[];
+      final found = await ensureRuleSets(dir.path, const ['ir'], wait: false, refresh: false, loadBundled: (tag) async {
+        asked.add(tag);
+        return tag == 'geoip-ir' ? srs : null;
+      });
+      expect(asked, containsAll(['geoip-ir', 'geosite-ir', 'geosite-ir-extra']));
+      expect(found.keys, ['geoip-ir']);
+      final f = File(found['geoip-ir']!);
+      expect(await f.readAsBytes(), srs);
+      expect((await f.lastModified()).isBefore(DateTime(2021)), isTrue);
+      // Something that is not a rule-set is not copied.
+      final again = await ensureRuleSets(dir.path, const ['cn'], wait: false, refresh: false,
+          loadBundled: (tag) async => Uint8List.fromList(utf8.encode('<html>')));
+      expect(again, isEmpty);
+    });
+
+    test('the bundled country lists are real rule-sets, and cover every country of the list', () {
+      for (final c in bypassCountries.keys) {
+        final f = File('assets/rules/geoip-$c.srs');
+        expect(f.existsSync(), isTrue, reason: c);
+        expect(f.readAsBytesSync().take(3), [0x53, 0x52, 0x53], reason: c);
+      }
+      expect(File('assets/rules/geosite-ir-extra.srs').existsSync(), isTrue);
+    });
+
+    test('JSON lists get a binary copy, which is used while it is current', () async {
+      final json = File('${dir.path}/rules/${adTagPrefix}hagezi-pro.json');
+      await json.parent.create(recursive: true);
+      await json.writeAsString(ruleSetOf(['x.example.com']));
+      await File('${json.path}.count').writeAsString('1');
+      final made = <String>[];
+      Future<bool> compile(String source, String output) async {
+        made.add(source);
+        await File(output).writeAsBytes([0x53, 0x52, 0x53, 9]);
+        return true;
+      }
+
+      expect(await compileRuleSets(dir.path, compile), 1);
+      expect(await compileRuleSets(dir.path, compile), 0); // current: not made again
+      var found = await ensureRuleSets(dir.path, const [], ads: true, adsLevel: 'strong', wait: false, refresh: false);
+      expect(found['${adTagPrefix}hagezi-pro'], endsWith('${adTagPrefix}hagezi-pro.bin.srs'));
+      // A newer list: the old copy is not used, and a new one is made.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await json.writeAsString(ruleSetOf(['y.example.com']));
+      await json.setLastModified(DateTime.now().add(const Duration(seconds: 5)));
+      found = await ensureRuleSets(dir.path, const [], ads: true, adsLevel: 'strong', wait: false, refresh: false);
+      expect(found['${adTagPrefix}hagezi-pro'], endsWith('.json'));
+      // A compiler that fails leaves nothing behind.
+      expect(await compileRuleSets(dir.path, (s, o) async => false), 0);
+      expect(File('${dir.path}/rules/${adTagPrefix}hagezi-pro.bin.srs').existsSync(), isFalse);
     });
 
     test('nothing yet and no built-in list: an empty status', () async {

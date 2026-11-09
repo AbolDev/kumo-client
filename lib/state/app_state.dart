@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket;
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -586,9 +587,12 @@ class AppState extends ChangeNotifier {
           _healthTick();
         });
         Future<void>.delayed(const Duration(seconds: 3), _refreshActive);
+        _refreshListsSoon();
       } else if (s.status != VpnStatus.started) {
         _watch?.cancel();
         _watch = null;
+        _listsTimer?.cancel();
+        if (changed && (s.status == VpnStatus.stopped || s.status == VpnStatus.error)) _warmLookup(const Duration(seconds: 3));
       }
       if (s.status == VpnStatus.error) {
         final reason = s.error ?? '';
@@ -608,6 +612,7 @@ class AppState extends ChangeNotifier {
     await _loadSettings();
     settingsLoaded = true;
     notifyListeners();
+    _warmLookup(const Duration(seconds: 5));
     if (Platform.isWindows) {
       OvpnRunner.cleanLeftovers(await VpnChannel.dataDir()).catchError((Object _) {});
     }
@@ -815,6 +820,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     if (connected) await _reconnect();
     _syncStandby();
+    _warmLookup();
+  }
+
+  Timer? _warmTimer;
+
+  /// While disconnected, the names of the servers a connection would use are looked up ahead (over
+  /// encrypted DNS, as at a connection) and again before the answer is forgotten, so that a
+  /// connection finds them ready instead of waiting for the lookup.
+  void _warmLookup([Duration after = const Duration(seconds: 1)]) {
+    _warmTimer?.cancel();
+    if (!net.encryptedLookup || net.strictDns) return;
+    _warmTimer = Timer(after, () async {
+      if (!_idle || _preparing || all.isEmpty) return;
+      try {
+        await _resolveAhead(_chosenServers());
+      } catch (_) {}
+      _warmLookup(const Duration(minutes: 9));
+    });
   }
 
   Future<void> _reconnect() async {
@@ -1045,7 +1068,9 @@ class AppState extends ChangeNotifier {
     change(net);
     _saveSettings();
     if (net.bypass.isNotEmpty || net.blockAds) {
-      ensureRuleSets(await VpnChannel.dataDir(), net.bypass, ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase)
+      // Fetched now, so that the next connection has them (a connection does not wait for lists).
+      ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
+              ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase, loadBundled: _loadBundledRules)
           .catchError((_) => <String, String>{});
     }
     if (reconnect && connected) await _reconnect();
@@ -2239,7 +2264,13 @@ class AppState extends ChangeNotifier {
       final tags = routing?.ruleSetTags ?? const <String>[];
       final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
-              ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase, tags: tags, wait: false)
+              ads: net.blockAds,
+              adsLevel: net.adsLevel,
+              loadBase: _loadAdBase,
+              loadBundled: _loadBundledRules,
+              tags: tags,
+              wait: false,
+              refresh: false)
           : <String, String>{};
       final viaXray = chosen.length == 1 &&
           chosen.first.canXray &&
@@ -2273,11 +2304,49 @@ class AppState extends ChangeNotifier {
   /// The ad list built into the app (see core/ad_lists.dart).
   static Future<String> _loadAdBase() => rootBundle.loadString(adBaseAsset);
 
+  /// The country list the app carries for [tag] (assets/rules), null when it carries none.
+  static Future<Uint8List?> _loadBundledRules(String tag) async {
+    if (!RegExp(r'^[a-z0-9-]+$').hasMatch(tag)) return null;
+    try {
+      final data = await rootBundle.load('assets/rules/$tag.srs');
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The rule-set lists of the connection now (the subscription's routing asks for some).
+  List<String> _connectedTags = const [];
+  Timer? _listsTimer;
+
+  /// A while after a connection is up, the lists are fetched again where they are old or missing
+  /// (through the tunnel, so a filter on the way does not stop it), and the big ones are made binary
+  /// for the next connection. The connection itself never waits for any of this.
+  void _refreshListsSoon() {
+    _listsTimer?.cancel();
+    if (net.bypass.isEmpty && !net.blockAds && _connectedTags.isEmpty) return;
+    _listsTimer = Timer(const Duration(seconds: 8), () async {
+      if (!connected) return;
+      try {
+        final dir = await VpnChannel.dataDir();
+        await ensureRuleSets(dir, net.bypass,
+            ads: net.blockAds,
+            adsLevel: net.adsLevel,
+            tags: _connectedTags,
+            loadBase: _loadAdBase,
+            loadBundled: _loadBundledRules,
+            limit: const Duration(minutes: 5));
+        await compileRuleSets(dir, VpnChannel.compileRuleSet);
+      } catch (_) {}
+    });
+  }
+
   /// Fetches the ad lists again now (Settings > Update now). True when the main list is there after.
   Future<bool> refreshAdLists() async {
     final dir = await VpnChannel.dataDir();
     final found = await ensureRuleSets(dir, const [], ads: true, adsLevel: net.adsLevel, loadBase: _loadAdBase, force: true, limit: const Duration(minutes: 3));
     notifyListeners();
+    compileRuleSets(dir, VpnChannel.compileRuleSet).catchError((_) => 0);
     return found.containsKey(mainAdTag(net.adsLevel));
   }
 
@@ -2427,9 +2496,21 @@ class AppState extends ChangeNotifier {
         }
       }
       final tags = routing?.ruleSetTags ?? const <String>[];
+      _connectedTags = tags;
+      // No download holds the connection back: the lists there are used (missing ones are stood in for
+      // by the ones the app carries) and they are refreshed once it is up. Only lists a subscription's
+      // rules ask for and that nobody has yet are waited for, a little.
       final sets = net.bypass.isNotEmpty || net.blockAds || tags.isNotEmpty
           ? await ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
-              ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase, tags: tags)
+              ads: net.blockAds,
+              adsLevel: net.adsLevel,
+              loadBase: _loadAdBase,
+              loadBundled: _loadBundledRules,
+              tags: tags,
+              wait: false,
+              refresh: false,
+              waitForTags: true,
+              limit: const Duration(seconds: 10))
           : <String, String>{};
       if (cancelled()) return;
       apiPort = await _freePort();

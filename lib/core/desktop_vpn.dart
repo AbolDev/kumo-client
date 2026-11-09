@@ -934,6 +934,25 @@ rm -rf "$T"
   /// The real delay of the single outbound `proxy` of [configJson] to [url] in ms, -1 on failure:
   /// a throw-away core with a SOCKS inbound, and two requests over one connection through it (see
   /// [socksWarmDelay]).
+  /// Writes the JSON rule-set [source] as a binary one at [output] with the core program
+  /// (`rule-set compile`), written next to it first and moved into place when whole.
+  Future<bool> compileRuleSet(String source, String output) async {
+    await _ready;
+    final tmp = '$output.tmp';
+    try {
+      final r = await Process.run(_exePath('kumo-core'), ['rule-set', 'compile', source, '-o', tmp])
+          .timeout(const Duration(minutes: 3));
+      if (r.exitCode != 0 || !await File(tmp).exists()) return false;
+      await File(tmp).rename(output);
+      return true;
+    } catch (_) {
+      try {
+        await File(tmp).delete();
+      } catch (_) {}
+      return false;
+    }
+  }
+
   Future<int> delay(String configJson, String url, int timeoutMs) async {
     await _ready;
     final output = StringBuffer();

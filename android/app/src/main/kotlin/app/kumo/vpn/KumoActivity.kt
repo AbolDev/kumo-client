@@ -153,6 +153,21 @@ class KumoActivity : FlutterActivity() {
                         runOnUiThread { result.success(ms) }
                     }
                 }
+                // A JSON rule-set written as a binary one (Kumo's CompileRuleSet in libbox), off the main thread.
+                "compileRuleSet" -> {
+                    val source = call.argument<String>("source") ?: ""
+                    val output = call.argument<String>("output") ?: ""
+                    Thread({
+                        val ok = try {
+                            App.ensureLibbox()
+                            Libbox.compileRuleSet(source, output)
+                            true
+                        } catch (_: Throwable) {
+                            false
+                        }
+                        runOnUiThread { result.success(ok) }
+                    }, "compile-rule-set").start()
+                }
                 // Where the Xray program is (it is shipped as libxray.so in the native library directory).
                 "xrayPath" -> result.success(java.io.File(applicationInfo.nativeLibraryDir, "libxray.so").path)
                 // The "not connected" notification: shown (or removed) right away when the switch changes.

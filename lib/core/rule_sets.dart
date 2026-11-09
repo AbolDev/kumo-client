@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'ad_lists.dart';
 
@@ -71,27 +73,28 @@ Future<void> _writeCount(File list, int n) async {
   } catch (_) {}
 }
 
-/// Downloads the first address that answers. With [convert] the body is read as text and turned into
-/// the file to keep (null: the body is not what it should be, so the next address is tried).
-Future<bool> _download(List<String> urls, File target, {String? Function(String)? convert}) =>
+/// Downloads the first address that answers. With [convert] the body is turned into the file to keep
+/// (null: the body is not what it should be, so the next address is tried).
+Future<bool> _download(List<String> urls, File target, {Future<String?> Function(Uint8List)? convert}) =>
     _inFlight.putIfAbsent(
         target.path,
         () => _downloadOnce(urls, target, convert: convert)
             .whenComplete(() => _inFlight.remove(target.path)));
 
 /// [url]'s body, or null.
-Future<List<int>?> _get(String url) async {
+Future<Uint8List?> _get(String url) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
   try {
     final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 10));
     final res = await req.close().timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) return null;
-    final bytes = <int>[];
+    // Bytes, not a list of ints (eight times the memory for a list of a few megabytes).
+    final bytes = BytesBuilder(copy: false);
     await for (final chunk in res.timeout(const Duration(seconds: 20))) {
-      bytes.addAll(chunk);
+      bytes.add(chunk);
       if (bytes.length > _maxDownload) throw const HttpException('too large');
     }
-    return bytes.length < 16 ? null : bytes;
+    return bytes.length < 16 ? null : bytes.takeBytes();
   } catch (_) {
     return null;
   } finally {
@@ -99,7 +102,7 @@ Future<List<int>?> _get(String url) async {
   }
 }
 
-Future<bool> _downloadOnce(List<String> urls, File target, {String? Function(String)? convert}) async {
+Future<bool> _downloadOnce(List<String> urls, File target, {Future<String?> Function(Uint8List)? convert}) async {
   for (final url in urls) {
     try {
       final bytes = await _get(url);
@@ -107,7 +110,7 @@ Future<bool> _downloadOnce(List<String> urls, File target, {String? Function(Str
       await target.parent.create(recursive: true);
       final tmp = File('${target.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
       if (convert != null) {
-        final text = convert(utf8.decode(bytes, allowMalformed: true));
+        final text = await convert(bytes);
         if (text == null) continue;
         await tmp.writeAsString(text, flush: true);
       } else {
@@ -123,19 +126,51 @@ Future<bool> _downloadOnce(List<String> urls, File target, {String? Function(Str
   return false;
 }
 
-/// How [domainListToRuleSet] is used for a download, with the count kept for the status.
-String? Function(String) _textToRuleSet(File target, {int min = 1000}) => (text) {
-      final p = parseBlocklist(text);
-      final domains = withoutNeverBlocked(p.block.difference(p.allow));
-      if (domains.length < min) return null;
-      _writeCount(target, domains.length);
-      return ruleSetOf(domains);
+/// A block list (its bytes) as a rule-set and the number of its domains; null when it holds fewer than
+/// [min]. Runs on another isolate: reading hundreds of thousands of names takes seconds, and the screen
+/// must not stop meanwhile.
+({String text, int count})? _listToRuleSet(Uint8List bytes, int min) {
+  final p = parseBlocklist(utf8.decode(bytes, allowMalformed: true));
+  final domains = withoutNeverBlocked(p.block.difference(p.allow));
+  if (domains.length < min) return null;
+  return (text: ruleSetOf(domains), count: domains.length);
+}
+
+// The jobs given to another isolate. Each is made in a function of its own, so that the closure sent
+// over holds only its arguments (a closure carries the variables around it, and some cannot be sent).
+Future<({String text, int count})?> _listToRuleSetOff(Uint8List bytes, int min) =>
+    Isolate.run(() => _listToRuleSet(bytes, min));
+Future<bool> _rawListOkOff(Uint8List bytes, int min) => Isolate.run(() => _rawListOk(bytes, min));
+Future<int> _mergeIntoOff(List<String> paths, String out) => Isolate.run(() => _mergeInto(paths, out));
+
+/// How a downloaded text list becomes the rule-set kept, with the count kept for the status.
+Future<String?> Function(Uint8List) _textToRuleSet(File target, {int min = 1000}) => (bytes) async {
+      final r = await _listToRuleSetOff(bytes, min);
+      if (r == null) return null;
+      await _writeCount(target, r.count);
+      return r.text;
     };
+
+/// Whether a downloaded list of the max level names at least [min] domains (on another isolate).
+bool _rawListOk(Uint8List bytes, int min) => parseBlocklist(utf8.decode(bytes, allowMalformed: true)).block.length >= min;
+
+/// The text lists at [paths] merged into the rule-set [out] (written whole, then moved into place);
+/// the number of its domains, or 0 when there were too few to write. Runs on another isolate.
+Future<int> _mergeInto(List<String> paths, String out) async {
+  final domains = mergeBlocklists([for (final p in paths) await File(p).readAsString()]);
+  if (domains.length < 1000) return 0;
+  final file = File(out);
+  await file.parent.create(recursive: true);
+  final tmp = File('$out.${DateTime.now().microsecondsSinceEpoch}.tmp');
+  await tmp.writeAsString(ruleSetOf(domains), flush: true);
+  await tmp.rename(out);
+  return domains.length;
+}
 
 /// The lists of the max level: each kept as text in rules/raw (fetched once a day, an old copy kept
 /// when a fetch fails), and all of them merged into one rule-set, built again when one of them is
 /// newer than it. True when the merged rule-set is there.
-Future<bool> _ensureMaxList(String dir, {required bool wait, bool force = false}) async {
+Future<bool> _ensureMaxList(String dir, {required bool wait, bool refresh = true, bool force = false}) async {
   final merged = File('$dir/rules/$adMaxTag.json');
   var newest = DateTime.fromMillisecondsSinceEpoch(0);
   final raws = <File>[];
@@ -143,16 +178,15 @@ Future<bool> _ensureMaxList(String dir, {required bool wait, bool force = false}
     final raw = File('$dir/rules/raw/${s.name}.txt');
     final exists = await raw.exists();
     final old = exists && (force || DateTime.now().difference(await raw.lastModified()) > adsMaxAge);
-    if ((!exists && wait) || old) {
+    if ((!exists && wait) || (old && refresh)) {
       await _inFlight.putIfAbsent(raw.path, () async {
         for (final url in s.urls) {
           final bytes = await _get(url);
           if (bytes == null) continue;
-          final text = utf8.decode(bytes, allowMalformed: true);
-          if (parseBlocklist(text).block.length < s.min) continue;
+          if (!await _rawListOkOff(bytes, s.min)) continue;
           await raw.parent.create(recursive: true);
           final tmp = File('${raw.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
-          await tmp.writeAsString(text, flush: true);
+          await tmp.writeAsBytes(bytes, flush: true);
           await tmp.rename(raw.path);
           return true;
         }
@@ -168,14 +202,12 @@ Future<bool> _ensureMaxList(String dir, {required bool wait, bool force = false}
   if (raws.isEmpty) return merged.exists();
   final current = await merged.exists() && !(await merged.lastModified()).isBefore(newest);
   if (!current) {
-    final domains = mergeBlocklists([for (final r in raws) await r.readAsString()]);
-    if (domains.length >= 1000) {
-      await merged.parent.create(recursive: true);
-      final tmp = File('${merged.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
-      await tmp.writeAsString(ruleSetOf(domains), flush: true);
-      await tmp.rename(merged.path);
-      await _writeCount(merged, domains.length);
-    }
+    // A million names: merged on another isolate, and once at a time.
+    await _inFlight.putIfAbsent(merged.path, () async {
+      final n = await _mergeIntoOff([for (final r in raws) r.path], merged.path);
+      if (n > 0) await _writeCount(merged, n);
+      return n > 0;
+    }).whenComplete(() => _inFlight.remove(merged.path));
   }
   return merged.exists();
 }
@@ -189,13 +221,12 @@ Future<bool> _ensureBaseList(String dir, Future<String> Function() loadBase) asy
     final text = await loadBase();
     final sign = '${text.length}:${text.hashCode}';
     if (await file.exists() && await stamp.exists() && await stamp.readAsString() == sign) return true;
-    final p = parseBlocklist(text);
-    final domains = withoutNeverBlocked(p.block.difference(p.allow));
-    if (domains.isEmpty) return file.exists();
+    final r = await _listToRuleSetOff(Uint8List.fromList(utf8.encode(text)), 1);
+    if (r == null) return file.exists();
     await file.parent.create(recursive: true);
-    await file.writeAsString(ruleSetOf(domains), flush: true);
+    await file.writeAsString(r.text, flush: true);
     await stamp.writeAsString(sign, flush: true);
-    await _writeCount(file, domains.length);
+    await _writeCount(file, r.count);
     return true;
   } catch (_) {
     return file.exists();
@@ -208,21 +239,32 @@ String mainAdTag(String level) => level == 'max'
     : '${adTagPrefix}hagezi-${level == 'strong' ? 'pro' : 'light'}';
 
 /// Makes sure the rule-set files exist in [dir]/rules and returns tag -> path for the ones that
-/// do. Missing files are downloaded; files older than a week (ad lists: a day) are refreshed, but an
-/// old file is still used when the refresh fails. With [wait] false nothing is downloaded. When the
-/// main ad list of the level is not there, the list built into the app ([loadBase]) is used.
+/// do. Missing files are downloaded; with [refresh], files older than a week (ad lists: a day) are
+/// fetched again, but an old file is still used when that fails. With [wait] false nothing missing
+/// is downloaded (except the lists a subscription's rules ask for, with [waitForTags]).
+///
+/// So that a connection never waits for a download, it calls this with neither [wait] nor
+/// [refresh]: a list the app carries ([loadBundled]: the country lists) is copied in when there is
+/// none yet, and the ad lists missing are stood in for by the list built into the app ([loadBase]).
+/// The downloads are made once the connection is up, through it.
+///
+/// A list kept as JSON is given as its binary copy when [compileRuleSets] made one that is current.
 Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
     {bool wait = true,
+    bool refresh = true,
+    bool waitForTags = false,
     bool ads = false,
     String adsLevel = defaultAdLevel,
     List<String> tags = const [],
     Future<String> Function()? loadBase,
+    Future<Uint8List?> Function(String tag)? loadBundled,
     bool force = false,
     Duration limit = const Duration(seconds: 45)}) async {
   final found = <String, String>{};
   final jobs = <Future<void>>[];
 
-  Future<void> fetch(String tag, List<String> urls, {bool text = false, Duration maxAge = _maxAge}) async {
+  Future<void> fetch(String tag, List<String> urls,
+      {bool text = false, Duration maxAge = _maxAge, bool waitHere = false}) async {
     final file = File('$dir/rules/$tag.${text ? 'json' : 'srs'}');
     Future<void> one() async {
       var exists = await file.exists();
@@ -233,15 +275,14 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
         } catch (_) {}
         exists = false;
       }
+      if (!exists && !text && loadBundled != null) exists = await _seed(file, tag, loadBundled);
       final old = exists &&
           ((force && maxAge == adsMaxAge) ||
               DateTime.now().difference(await file.lastModified()) > maxAge ||
               // A list made by a version before 1.12.2-beta.4 (no count kept) is made again.
               (text && !await _countFile(file).exists()));
-      if (!exists || old) {
-        if (wait || exists) {
-          await _download(urls, file, convert: text ? _textToRuleSet(file) : null);
-        }
+      if (!exists ? (wait || waitHere) : (old && refresh)) {
+        await _download(urls, file, convert: text ? _textToRuleSet(file) : null);
       }
       if (await file.exists()) found[tag] = file.path.replaceAll('\\', '/');
     }
@@ -249,15 +290,16 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
     jobs.add(one().catchError((_) {}));
   }
 
+  final asked = tags.toSet();
   for (final e in _sourcesFor(countries, ads, tags).entries) {
-    await fetch(e.key, e.value);
+    await fetch(e.key, e.value, waitHere: waitForTags && asked.contains(e.key));
   }
   if (ads) {
     for (final s in adSources(adsLevel)) {
       await fetch(s.tag, s.urls, text: s.text, maxAge: adsMaxAge);
     }
     if (adsLevel == 'max') {
-      jobs.add(_ensureMaxList(dir, wait: wait, force: force).then((ok) {
+      jobs.add(_ensureMaxList(dir, wait: wait, refresh: refresh, force: force).then((ok) {
         if (ok) found[adMaxTag] = '$dir/rules/$adMaxTag.json'.replaceAll('\\', '/');
       }).catchError((_) {}));
     }
@@ -271,7 +313,70 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
       found[adBaseTag] = '$dir/rules/$adBaseTag.json'.replaceAll('\\', '/');
     }
   }
-  return Map.of(found);
+  return {for (final e in found.entries) e.key: await _preferCompiled(e.value)};
+}
+
+/// Copies the list the app carries for [tag] to [file], dated long ago so that it is fetched again
+/// (as an old file) the next time the lists are refreshed. True when there is one.
+Future<bool> _seed(File file, String tag, Future<Uint8List?> Function(String tag) loadBundled) async {
+  try {
+    final bytes = await loadBundled(tag);
+    if (bytes == null || !_isSrs(bytes)) return false;
+    await file.parent.create(recursive: true);
+    final tmp = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
+    await tmp.writeAsBytes(bytes, flush: true);
+    await tmp.rename(file.path);
+    await file.setLastModified(DateTime(2020));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// The binary copy of a JSON rule-set: `ads-x.json` -> `ads-x.bin.srs`.
+File _compiledOf(File json) => File('${json.path.substring(0, json.path.length - 5)}.bin.srs');
+
+/// [path], or its binary copy when that is there and not older than it.
+Future<String> _preferCompiled(String path) async {
+  if (!path.endsWith('.json')) return path;
+  try {
+    final json = File(path), bin = _compiledOf(json);
+    if (await bin.exists() &&
+        !(await bin.lastModified()).isBefore(await json.lastModified()) &&
+        await _validFile(bin, text: false)) {
+      return bin.path.replaceAll('\\', '/');
+    }
+  } catch (_) {}
+  return path;
+}
+
+/// Makes a binary copy of every JSON rule-set in [dir]/rules that has none or an older one, one at a
+/// time, with [compile] (the core's own compiler). sing-box reads the binary format several times
+/// faster and with less memory: what a list of a million names costs at each start is paid once
+/// here. Returns how many were made.
+Future<int> compileRuleSets(String dir, Future<bool> Function(String source, String output) compile) async {
+  var made = 0;
+  final folder = Directory('$dir/rules');
+  if (!await folder.exists()) return 0;
+  final jsons = [
+    await for (final f in folder.list())
+      if (f is File && f.path.endsWith('.json')) f,
+  ];
+  for (final json in jsons) {
+    final bin = _compiledOf(json);
+    try {
+      if (await bin.exists() && !(await bin.lastModified()).isBefore(await json.lastModified())) continue;
+      final ok = await _inFlight
+          .putIfAbsent(bin.path, () => compile(json.path, bin.path))
+          .whenComplete(() => _inFlight.remove(bin.path));
+      if (ok && await _validFile(bin, text: false)) {
+        made++;
+      } else if (await bin.exists()) {
+        await bin.delete();
+      }
+    } catch (_) {}
+  }
+  return made;
 }
 
 /// What Settings shows about the ad lists.
