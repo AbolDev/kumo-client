@@ -16,6 +16,7 @@ import 'package:kumo/screens/routing_rules_page.dart';
 import 'package:kumo/screens/service_test_page.dart';
 import 'package:kumo/screens/settings_page.dart';
 import 'package:kumo/screens/subscription_info_page.dart';
+import 'package:kumo/screens/tools_page.dart';
 import 'package:kumo/screens/troubleshoot_page.dart';
 import 'package:kumo/screens/usage_page.dart';
 import 'package:kumo/screens/free_connections_page.dart';
@@ -82,6 +83,7 @@ void main() {
     'my ip': (s) => MyIpPage(state: s),
     'services': (s) => ServiceTestPage(state: s),
     'troubleshoot': (s) => TroubleshootPage(state: s),
+    'tools': (s) => ToolsPage(state: s),
     'connections': (s) => ConnectionsPage(state: s),
     'logs': (s) => LogsPage(state: s),
     'onboarding': (s) => OnboardingPage(state: s),

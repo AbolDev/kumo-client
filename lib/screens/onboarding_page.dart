@@ -24,7 +24,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   var _country = '';
 
   // The permission page only makes sense on Android.
-  int get _pages => isDesktop ? 3 : 4;
+  int get _pages => isDesktop ? 4 : 5;
 
   @override
   void dispose() {
@@ -65,6 +65,28 @@ class _OnboardingPageState extends State<OnboardingPage> {
         ],
       ),
     );
+  }
+
+  /// The last page: three ways to get a first server. Each ends the guide and then does its part.
+  Widget _addServer() => Column(mainAxisSize: MainAxisSize.min, children: [
+        FilledButton.icon(
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            onPressed: () => _finishWith('paste'),
+            icon: const Icon(Icons.content_paste),
+            label: Text(S.of(context).addFromClipboard)),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            onPressed: () => _finishWith('free'),
+            icon: const Icon(Icons.volunteer_activism_outlined),
+            label: Text(tr(context, 'freeConnections'))),
+      ]);
+
+  /// Ends the guide and, once the home page is there, does [action] ('paste' or 'free'): the state keeps
+  /// it for the home page to find.
+  void _finishWith(String action) {
+    widget.state.pendingHomeAction = action;
+    _finish();
   }
 
   Widget _languages() => ListView(
@@ -123,6 +145,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           _languages()),
                       _slide(Icons.public, tr(context, 'onbCountryTitle'),
                           tr(context, 'onbCountryText'), _countries()),
+                      _slide(Icons.dns_outlined, tr(context, 'onbAddTitle'), tr(context, 'onbAddText'), _addServer()),
                     ],
                   ),
                 ),

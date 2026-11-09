@@ -27,6 +27,7 @@ dependencies:
   country_flags: ^3.2.0
   desktop_drop: ^0.8.4
   package_info_plus: ^8.1.2
+  dynamic_color: ^1.7.0
 
 dev_dependencies:
   flutter_test:
@@ -35,6 +36,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Persian and Arabic are shown in Vazirmatn (SIL Open Font License, assets/fonts/OFL.txt).
+  fonts:
+    - family: Vazirmatn
+      fonts:
+        - asset: assets/fonts/Vazirmatn-Regular.ttf
+        - asset: assets/fonts/Vazirmatn-Bold.ttf
+          weight: 700
   assets:
     - assets/npvs/
     # The ad list built into the app (ads-base.srs: HaGeZi Pro mini, made by tools/make_ad_base.py),

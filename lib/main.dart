@@ -3,6 +3,7 @@ import 'dart:io' show Directory, FileSystemEvent, Platform, exit;
 import 'dart:isolate' show Isolate, RawReceivePort;
 import 'dart:ui' show PlatformDispatcher;
 
+import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:tray_manager/tray_manager.dart';
@@ -414,12 +415,33 @@ class _KumoAppState extends State<KumoApp>
     if (allow == true) await VpnChannel.requestBatteryExemption();
   }
 
-  ThemeData _theme(Brightness brightness) {
-    final base = ThemeData(
-      useMaterial3: true,
-      colorSchemeSeed: const Color(0xFF0E9F8E),
-      brightness: brightness,
-    );
+  /// The theme: Kumo's teal, or the colours of the system ([system]: from the wallpaper on Android 12 and
+  /// later, the accent colour on Windows) when the setting says so, with a black background in the dark
+  /// theme when asked, and Vazirmatn for Persian and Arabic.
+  ThemeData _theme(Brightness brightness, ColorScheme? system) {
+    final code = _state.languageCode ?? PlatformDispatcher.instance.locale.languageCode;
+    final font = code == 'fa' || code == 'ar' ? 'Vazirmatn' : null;
+    var base = _state.themeColor == 'system' && system != null
+        ? ThemeData(useMaterial3: true, colorScheme: system, fontFamily: font)
+        : ThemeData(
+            useMaterial3: true,
+            colorSchemeSeed: const Color(0xFF0E9F8E),
+            brightness: brightness,
+            fontFamily: font,
+          );
+    if (brightness == Brightness.dark && _state.blackTheme) {
+      base = base.copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        colorScheme: base.colorScheme.copyWith(
+          surface: Colors.black,
+          surfaceContainerLowest: Colors.black,
+          surfaceContainerLow: const Color(0xFF0B0B0B),
+          surfaceContainer: const Color(0xFF121212),
+          surfaceContainerHigh: const Color(0xFF191919),
+          surfaceContainerHighest: const Color(0xFF212121),
+        ),
+      );
+    }
     // The header's icons (add, more, settings, back) share one colour: a button and a popup
     // menu icon otherwise get two different greys.
     final icons = IconThemeData(color: base.colorScheme.onSurface);
@@ -432,7 +454,8 @@ class _KumoAppState extends State<KumoApp>
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: _state,
-      builder: (context, _) => MaterialApp(
+      builder: (context, _) => DynamicColorBuilder(
+        builder: (light, dark) => MaterialApp(
         title: 'Kumo',
         navigatorKey: _navigator,
         navigatorObservers: [_state.routes],
@@ -462,8 +485,8 @@ class _KumoAppState extends State<KumoApp>
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
+        theme: _theme(Brightness.light, light),
+        darkTheme: _theme(Brightness.dark, dark),
         themeMode: _state.themeMode,
         // (The first route is "/", set by Flutter.)
         home: !_state.settingsLoaded
@@ -471,6 +494,7 @@ class _KumoAppState extends State<KumoApp>
             : _state.onboarded
                 ? HomePage(state: _state)
                 : OnboardingPage(state: _state),
+      ),
       ),
     );
   }

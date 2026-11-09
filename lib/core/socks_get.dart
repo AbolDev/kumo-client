@@ -79,17 +79,17 @@ Future<void> _socksHandshake(_Pipe p, String host, int port, XrayAuth? auth) asy
   final name = utf8.encode(host);
   if (name.length > 255) throw const FormatException('name too long');
   if (auth == null) {
-    p.write([5, 1, 0]);
+    await p.write([5, 1, 0]);
     if ((await p.take(2))[1] != 0) throw const SocketException('socks: no method');
   } else {
     // method 2: user name and password (RFC 1929)
-    p.write([5, 1, 2]);
+    await p.write([5, 1, 2]);
     if ((await p.take(2))[1] != 2) throw const SocketException('socks: no method');
     final user = utf8.encode(auth.user), pass = utf8.encode(auth.pass);
-    p.write([1, user.length, ...user, pass.length, ...pass]);
+    await p.write([1, user.length, ...user, pass.length, ...pass]);
     if ((await p.take(2))[1] != 0) throw const SocketException('socks: login refused');
   }
-  p.write([5, 1, 0, 3, name.length, ...name, port >> 8, port & 255]);
+  await p.write([5, 1, 0, 3, name.length, ...name, port >> 8, port & 255]);
   final head = await p.take(4);
   if (head[1] != 0) throw SocketException('socks: refused (${head[1]})');
   if (head[3] == 3) {
@@ -105,7 +105,7 @@ Future<_Reply?> _httpGet(_Pipe p, Uri uri, int maxBytes) async {
   final hostHeader = uri.port == defaultPort ? uri.host : '${uri.host}:${uri.port}';
   final path = uri.path.isEmpty ? '/' : uri.path;
   final query = uri.hasQuery ? '?${uri.query}' : '';
-  p.write(utf8.encode('GET $path$query HTTP/1.1\r\nHost: $hostHeader\r\nUser-Agent: Kumo\r\n'
+  await p.write(utf8.encode('GET $path$query HTTP/1.1\r\nHost: $hostHeader\r\nUser-Agent: Kumo\r\n'
       'Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n'));
 
   // The head: up to the empty line; what came after it belongs to the body.
@@ -183,6 +183,7 @@ class _Pipe {
   late final StreamSubscription<RawSocketEvent> subscription;
   final _chunks = ListQueue<Uint8List>();
   Completer<void>? _waiting;
+  Completer<void>? _writable;
   Object? _error;
   var _closed = false;
 
@@ -193,8 +194,16 @@ class _Pipe {
         if (data == null || data.isEmpty) break;
         _chunks.add(data);
       }
+    } else if (event == RawSocketEvent.write) {
+      final w = _writable;
+      _writable = null;
+      if (w != null && !w.isCompleted) w.complete();
     } else if (event == RawSocketEvent.readClosed || event == RawSocketEvent.closed) {
       _closed = true;
+      // A writer that waits for the socket will not get it now.
+      final w = _writable;
+      _writable = null;
+      if (w != null && !w.isCompleted) w.completeError(const SocketException('closed'));
     }
     _wake();
   }
@@ -256,7 +265,16 @@ class _Pipe {
     }
   }
 
-  void write(List<int> data) {
-    if (socket.write(data) < data.length) throw const SocketException('could not send');
+  /// Sends [data]; what the socket does not take at once waits for it to be ready again.
+  Future<void> write(List<int> data) async {
+    var sent = 0;
+    while (sent < data.length) {
+      sent += socket.write(data, sent, data.length - sent);
+      if (sent < data.length) {
+        final w = _writable = Completer<void>();
+        socket.writeEventsEnabled = true;
+        await w.future;
+      }
+    }
   }
 }

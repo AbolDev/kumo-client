@@ -9,10 +9,33 @@ import 'package:share_plus/share_plus.dart';
 
 import '../l10n/strings.dart';
 
-void toast(BuildContext context, String text) {
+/// What a message is about: it gets a mark and a colour.
+enum ToastKind { info, ok, error }
+
+/// A message at the bottom. [kind] gives it a mark (done, or went wrong); [actionLabel] and [onAction]
+/// add a button (Undo), and the message stays longer then.
+void toast(BuildContext context, String text,
+    {ToastKind kind = ToastKind.info, String? actionLabel, VoidCallback? onAction}) {
+  final scheme = Theme.of(context).colorScheme;
+  final error = kind == ToastKind.error;
+  final color = error ? scheme.onErrorContainer : null;
+  final icon = switch (kind) {
+    ToastKind.ok => Icons.check_circle_outline,
+    ToastKind.error => Icons.error_outline,
+    ToastKind.info => null,
+  };
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(text)));
+    ..showSnackBar(SnackBar(
+      behavior: SnackBarBehavior.floating,
+      duration: Duration(seconds: onAction == null ? 4 : 7),
+      backgroundColor: error ? scheme.errorContainer : null,
+      content: Row(children: [
+        if (icon != null) ...[Icon(icon, color: color ?? scheme.primary), const SizedBox(width: 12)],
+        Expanded(child: Text(text, style: color == null ? null : TextStyle(color: color))),
+      ]),
+      action: onAction == null || actionLabel == null ? null : SnackBarAction(label: actionLabel, onPressed: onAction),
+    ));
 }
 
 /// Bottom sheet with the ways to share [text] (a config link or a subscription link).

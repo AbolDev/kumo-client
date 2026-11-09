@@ -34,12 +34,8 @@ import '../core/platform.dart';
 import 'scan_page.dart';
 import 'settings_page.dart';
 import 'region_picker.dart';
-import 'service_test_page.dart';
-import 'my_ip_page.dart';
-import 'dns_leak_page.dart';
-import 'troubleshoot_page.dart';
-import 'clean_ip_page.dart';
 import 'share_sheet.dart';
+import 'tools_page.dart';
 import 'collector_info_page.dart';
 import 'subscription_info_page.dart';
 
@@ -72,6 +68,15 @@ class HomePage extends StatelessWidget {
 
   Widget _page(BuildContext context) {
     final t = S.of(context);
+    // The first thing to do, when the guide asked for one.
+    final first = state.takePendingHomeAction();
+    if (first != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        if (first == 'paste') _addFromClipboard(context);
+        if (first == 'free') _openFree(context);
+      });
+    }
     return ListenableBuilder(
       listenable: state,
       builder: (context, _) => Scaffold(
@@ -128,72 +133,14 @@ class HomePage extends StatelessWidget {
                 PopupMenuItem(
                   value: () => Navigator.push(
                     context,
-                    MaterialPageRoute<void>(settings: const RouteSettings(name: '/MyIpPage'), builder: (_) => MyIpPage(state: state)),
+                    MaterialPageRoute<void>(settings: const RouteSettings(name: '/ToolsPage'), builder: (_) => ToolsPage(state: state)),
                   ),
-                  child: _MenuRow(Icons.my_location, tr(context, 'menuMyIp')),
+                  child: _MenuRow(Icons.handyman_outlined, tr(context, 'toolsTitle')),
                 ),
-                PopupMenuItem(
-                  value: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(settings: const RouteSettings(name: '/DnsLeakPage'), builder: (_) => DnsLeakPage(state: state)),
-                  ),
-                  child: _MenuRow(Icons.dns_outlined, tr(context, 'menuDnsLeak')),
-                ),
-                PopupMenuItem(
-                  value: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                        settings: const RouteSettings(name: '/ServiceTestPage'), builder: (_) => ServiceTestPage(state: state)),
-                  ),
-                  child: _MenuRow(Icons.public, tr(context, 'menuServices')),
-                ),
-                PopupMenuItem(
-                  value: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                        settings: const RouteSettings(name: '/TroubleshootPage'), builder: (_) => TroubleshootPage(state: state)),
-                  ),
-                  child: _MenuRow(Icons.help_outline, tr(context, 'menuTroubleshoot')),
-                ),
-                PopupMenuItem(
-                  value: () => Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                        settings: const RouteSettings(name: '/CleanIpPage'), builder: (_) => CleanIpPage(state: state)),
-                  ),
-                  child: _MenuRow(Icons.travel_explore, tr(context, 'cleanIpButton')),
-                ),
-                const PopupMenuDivider(),
                 PopupMenuItem(
                   enabled: state.connected,
                   value: state.reconnectIfConnected,
                   child: _MenuRow(Icons.restart_alt, tr(context, 'menuRestart')),
-                ),
-                if (state.anyTesting)
-                  PopupMenuItem(
-                    value: () async {
-                      final remove = await _askUntested(context);
-                      if (remove != null) state.cancelAllPings(removeUntested: remove);
-                    },
-                    child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest')),
-                  ),
-                PopupMenuItem(
-                  value: () => state.pingAll(real: false),
-                  child: _MenuRow(Icons.network_check, tr(context, 'menuTcpingAll')),
-                ),
-                PopupMenuItem(
-                  enabled: state.canTestReal,
-                  value: () => state.pingAll(real: true),
-                  child: _MenuRow(Icons.speed, tr(context, 'menuRealDelayAll')),
-                ),
-                PopupMenuItem(
-                  value: state.clearTestResults,
-                  child: _MenuRow(Icons.cleaning_services_outlined, tr(context, 'menuClearResults')),
-                ),
-                PopupMenuItem(
-                  enabled: state.subscriptions.isNotEmpty,
-                  value: state.updateAllSubscriptions,
-                  child: _MenuRow(Icons.sync, tr(context, 'menuUpdateSubs')),
                 ),
               ],
             ),
@@ -257,7 +204,7 @@ class HomePage extends StatelessWidget {
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                         ]),
                       ),
-                      Expanded(child: _ServerList(state: state)),
+                      Expanded(child: _ServerList(state: state, onPaste: () => _addFromClipboard(context), onScan: Platform.isAndroid ? () => _scan(context) : null, onFree: () => _openFree(context))),
                     ]),
                   ),
                 ),
@@ -266,12 +213,18 @@ class HomePage extends StatelessWidget {
           }
           return Column(children: [
             _ConnectCard(state: state),
-            Expanded(child: _ServerList(state: state)),
+            Expanded(child: _ServerList(state: state, onPaste: () => _addFromClipboard(context), onScan: Platform.isAndroid ? () => _scan(context) : null, onFree: () => _openFree(context))),
           ]);
         })),
       ),
     );
   }
+
+  void _openFree(BuildContext context) => Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            settings: const RouteSettings(name: '/FreeConnectionsPage'), builder: (_) => FreeConnectionsPage(state: state)),
+      );
 
   /// Windows: files and pictures dropped on the window are added like the Add menu does.
   Widget _withDrop(BuildContext context, Widget child) {
@@ -1138,9 +1091,14 @@ class _Row {
 }
 
 class _ServerList extends StatefulWidget {
-  const _ServerList({required this.state});
+  const _ServerList({required this.state, required this.onPaste, required this.onScan, required this.onFree});
 
   final AppState state;
+
+  /// The ways to add a first server, offered when there is none: paste, scan a code (the phone), free ones.
+  final VoidCallback onPaste;
+  final VoidCallback? onScan;
+  final VoidCallback onFree;
 
   @override
   State<_ServerList> createState() => _ServerListState();
@@ -1154,7 +1112,68 @@ class _ServerListState extends State<_ServerList> {
   Timer? _flashTimer;
   var _scrollTo = false;
 
+  /// The servers picked for an action on several (long press starts it).
+  final _picked = Set<ProxyConfig>.identity();
+  bool get _selecting => _picked.isNotEmpty;
+
   AppState get state => widget.state;
+
+  void _pick(ProxyConfig c) => setState(() {
+        if (!_picked.remove(c)) _picked.add(c);
+      });
+
+  /// Every server of the groups that are open, or none when they all are picked already.
+  void _pickAll(List<ServerGroup> groups) => setState(() {
+        final all = [
+          for (final g in groups)
+            if (_open.contains(g.id)) ...g.configs
+        ];
+        if (all.every(_picked.contains)) {
+          _picked.clear();
+        } else {
+          _picked.addAll(all);
+        }
+      });
+
+  /// The picked servers with the group each is in.
+  List<({ServerGroup group, ProxyConfig config})> _pickedItems() => [
+        for (final g in state.groups)
+          for (final c in g.configs)
+            if (_picked.contains(c)) (group: g, config: c)
+      ];
+
+  /// The tile of a server, that can be swiped: to the end deletes it (with Undo), to the start shares it.
+  Widget _swipeable(ServerGroup g, ProxyConfig c, bool locked) {
+    final tile = _ConfigTile(
+        state: state,
+        group: g,
+        config: c,
+        locked: locked,
+        flash: identical(c, _flash),
+        selecting: _selecting,
+        checked: _picked.contains(c),
+        onPick: () => _pick(c));
+    // The server in use cannot be deleted while connected, and a screen reader has the menu.
+    if (_selecting || (locked && identical(state.selected, c))) return tile;
+    final scheme = Theme.of(context).colorScheme;
+    Widget back(IconData icon, Color color, Color on, AlignmentGeometry align) => Container(
+        color: color, alignment: align, padding: const EdgeInsets.symmetric(horizontal: 20), child: Icon(icon, color: on));
+    return Dismissible(
+      key: ValueKey('swipe-${g.id}-${c.link}'),
+      background: back(Icons.share, scheme.secondaryContainer, scheme.onSecondaryContainer, AlignmentDirectional.centerStart),
+      secondaryBackground:
+          back(Icons.delete_outline, scheme.errorContainer, scheme.onErrorContainer, AlignmentDirectional.centerEnd),
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          showShareSheet(context, text: c.link, copyLabel: S.of(context).copyConfig);
+          return false;
+        }
+        return true;
+      },
+      onDismissed: (_) => _removeWithUndo(context, state, [(group: g, config: c)]),
+      child: tile,
+    );
+  }
 
   @override
   void initState() {
@@ -1197,6 +1216,15 @@ class _ServerListState extends State<_ServerList> {
     final scheme = Theme.of(context).colorScheme;
     final locked = state.vpn.status != VpnStatus.stopped &&
         state.vpn.status != VpnStatus.error;
+    // No server at all (and none being fetched): the ways to add one, not an empty list.
+    if (state.all.isEmpty && state.working.isEmpty && state.refreshing.isEmpty) {
+      return _EmptyServers(onPaste: widget.onPaste, onScan: widget.onScan, onFree: widget.onFree);
+    }
+    // What was picked and is gone (deleted, or the list was updated) is not picked any more.
+    if (_picked.isNotEmpty) {
+      final present = Set<ProxyConfig>.identity()..addAll(state.all);
+      _picked.removeWhere((c) => !present.contains(c));
+    }
     // Each visible group takes its header row plus, when open, its configs (or one note).
     final groups = [
       for (final g in state.groups)
@@ -1250,7 +1278,7 @@ class _ServerListState extends State<_ServerList> {
     }
 
     const radius = Radius.circular(18);
-    return ReorderableListView.builder(
+    final list = ReorderableListView.builder(
       scrollController: _scroll,
       padding: const EdgeInsets.only(top: 4, bottom: 24),
       buildDefaultDragHandles: false,
@@ -1272,27 +1300,25 @@ class _ServerListState extends State<_ServerList> {
         final Widget child;
         if (header) {
           final at = groups.indexOf(g);
-          child = _GroupHeader(
-              state: state,
-              group: g,
-              open: open,
-              onToggle: () => _toggle(g),
-              onMoveUp: at > 0 ? () => state.moveGroup(g, groups[at - 1], after: false) : null,
-              onMoveDown: at < groups.length - 1
-                  ? () => state.moveGroup(g, groups[at + 1], after: true)
-                  : null);
+          child = Column(mainAxisSize: MainAxisSize.min, children: [
+            _GroupHeader(
+                state: state,
+                group: g,
+                open: open,
+                onToggle: () => _toggle(g),
+                onMoveUp: at > 0 ? () => state.moveGroup(g, groups[at - 1], after: false) : null,
+                onMoveDown: at < groups.length - 1
+                    ? () => state.moveGroup(g, groups[at + 1], after: true)
+                    : null),
+            _TestProgress(state: state, group: g),
+          ]);
         } else {
           child = Column(mainAxisSize: MainAxisSize.min, children: [
             Divider(height: 1, color: scheme.outlineVariant),
             if (row.config != null)
               KeyedSubtree(
                   key: identical(row.config, _flash) ? _flashKey : null,
-                  child: _ConfigTile(
-                      state: state,
-                      group: g,
-                      config: row.config!,
-                      locked: locked,
-                      flash: identical(row.config, _flash)))
+                  child: _swipeable(g, row.config!, locked))
             else
               Padding(
                   padding: const EdgeInsets.all(16),
@@ -1321,6 +1347,244 @@ class _ServerListState extends State<_ServerList> {
                 key: key, index: i, child: item)
             : item;
       },
+    );
+    return Column(children: [
+      _selecting
+          ? _SelectionBar(
+              state: state,
+              count: _picked.length,
+              onClose: () => setState(_picked.clear),
+              onAll: () => _pickAll(groups),
+              items: _pickedItems,
+              after: () => setState(_picked.clear))
+          : _ListBar(state: state),
+      Expanded(child: list),
+    ]);
+  }
+}
+
+/// Takes servers out and says so, with a button that puts them back.
+void _removeWithUndo(BuildContext context, AppState state, List<({ServerGroup group, ProxyConfig config})> items) {
+  final removed = state.removeConfigs(items);
+  if (removed.isEmpty) return;
+  toast(context, tr(context, 'removedN', {'n': removed.length}),
+      actionLabel: tr(context, 'undoAction'), onAction: () => state.restoreConfigs(removed));
+}
+
+/// What to do when there is no server: three ways to get one.
+class _EmptyServers extends StatelessWidget {
+  const _EmptyServers({required this.onPaste, required this.onScan, required this.onFree});
+
+  final VoidCallback onPaste;
+  final VoidCallback? onScan;
+  final VoidCallback onFree;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final t = S.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.dns_outlined, size: 64, color: scheme.primary),
+            const SizedBox(height: 16),
+            Text(tr(context, 'emptyTitle'), style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
+            const SizedBox(height: 8),
+            Text(tr(context, 'emptyBody'), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: onPaste,
+                icon: const Icon(Icons.content_paste),
+                label: Text(t.addFromClipboard)),
+            if (onScan != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                  onPressed: onScan,
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: Text(t.scanQr)),
+            ],
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                onPressed: onFree,
+                icon: const Icon(Icons.volunteer_activism_outlined),
+                label: Text(tr(context, 'freeConnections'))),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Above the list: the actions on all the servers (the ones that were in the menu), or, while a test
+/// runs, how far it is, with a way to stop it.
+class _ListBar extends StatelessWidget {
+  const _ListBar({required this.state});
+
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: state,
+        builder: (context, _) {
+          final scheme = Theme.of(context).colorScheme;
+          final running = state.tests.values.where((t) => t.running).toList();
+          if (running.isNotEmpty) {
+            final done = running.fold<int>(0, (n, t) => n + t.done);
+            final total = running.fold<int>(0, (n, t) => n + t.total);
+            return Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(20, 4, 8, 4),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    LinearProgressIndicator(value: total > 0 ? done / total : null, minHeight: 6, borderRadius: BorderRadius.circular(3)),
+                    const SizedBox(height: 4),
+                    Text(tr(context, 'listTesting', {'done': done, 'total': total}),
+                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                  ]),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final remove = await _askUntested(context);
+                    if (remove != null) state.cancelAllPings(removeUntested: remove);
+                  },
+                  child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+                ),
+              ]),
+            );
+          }
+          return SizedBox(
+            height: 52,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              children: [
+                _chip(Icons.network_check, tr(context, 'menuTcpingAll'), () => state.pingAll(real: false)),
+                _chip(Icons.speed, tr(context, 'menuRealDelayAll'), state.canTestReal ? () => state.pingAll(real: true) : null),
+                _chip(Icons.cleaning_services_outlined, tr(context, 'menuClearResults'), state.clearTestResults),
+                _chip(Icons.sync, tr(context, 'menuUpdateSubs'), state.subscriptions.isEmpty ? null : state.updateAllSubscriptions),
+              ],
+            ),
+          );
+        },
+      );
+
+  Widget _chip(IconData icon, String label, VoidCallback? onPressed) => Padding(
+        padding: const EdgeInsetsDirectional.only(end: 8),
+        child: ActionChip(avatar: Icon(icon, size: 18), label: Text(label), onPressed: onPressed),
+      );
+}
+
+/// Above the list while servers are picked: how many, and what can be done with them.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar(
+      {required this.state, required this.count, required this.onClose, required this.onAll, required this.items, required this.after});
+
+  final AppState state;
+  final int count;
+  final VoidCallback onClose;
+  final VoidCallback onAll;
+  final List<({ServerGroup group, ProxyConfig config})> Function() items;
+
+  /// Called when an action is done (the picking ends).
+  final VoidCallback after;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.secondaryContainer,
+      child: Row(children: [
+        IconButton(tooltip: MaterialLocalizations.of(context).closeButtonTooltip, icon: const Icon(Icons.close), onPressed: onClose),
+        Expanded(
+          child: Text(tr(context, 'selectedN', {'n': count}),
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(color: scheme.onSecondaryContainer)),
+        ),
+        IconButton(tooltip: tr(context, 'selectAllRows'), icon: const Icon(Icons.select_all), onPressed: onAll),
+        IconButton(
+          tooltip: S.of(context).tcping,
+          icon: const Icon(Icons.network_check),
+          onPressed: () {
+            for (final it in items()) {
+              if (!it.config.isOpenVpn) state.testOne(it.config, real: false);
+            }
+            after();
+          },
+        ),
+        IconButton(
+          tooltip: tr(context, 'selectCopyLinks'),
+          icon: const Icon(Icons.copy),
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: items().map((e) => e.config.link).join('\n')));
+            toast(context, S.of(context).copied, kind: ToastKind.ok);
+            after();
+          },
+        ),
+        IconButton(
+          tooltip: tr(context, 'selectSave'),
+          icon: const Icon(Icons.playlist_add),
+          onPressed: () async {
+            final links = items().map((e) => e.config.link).join('\n');
+            await state.importText(links);
+            if (context.mounted) toast(context, tr(context, 'savedN', {'n': count}), kind: ToastKind.ok);
+            after();
+          },
+        ),
+        IconButton(
+          tooltip: S.of(context).delete,
+          icon: const Icon(Icons.delete_outline),
+          onPressed: () {
+            // The server in use is not deleted while connected.
+            final locked = state.vpn.status != VpnStatus.stopped && state.vpn.status != VpnStatus.error;
+            _removeWithUndo(context, state, [
+              for (final it in items())
+                if (!(locked && identical(state.selected, it.config))) it
+            ]);
+            after();
+          },
+        ),
+      ]),
+    );
+  }
+}
+
+/// Under the title of a group while it is being tested: how far, and a way to stop.
+class _TestProgress extends StatelessWidget {
+  const _TestProgress({required this.state, required this.group});
+
+  final AppState state;
+  final ServerGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final test = state.tests[group.id];
+    if (test == null || !test.running) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 4, 6),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            LinearProgressIndicator(
+                value: test.total > 0 ? test.done / test.total : null, minHeight: 4, borderRadius: BorderRadius.circular(2)),
+            const SizedBox(height: 2),
+            Text(tr(context, 'listTesting', {'done': test.done, 'total': test.total}),
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+          ]),
+        ),
+        TextButton(
+          onPressed: () async {
+            final remove = await _askUntested(context);
+            if (remove != null) state.cancelPing(group, removeUntested: remove);
+          },
+          child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+        ),
+      ]),
     );
   }
 }
@@ -1492,7 +1756,13 @@ class _GroupHeader extends StatelessWidget {
             copyLabel: S.of(context).copySubscriptionLink);
       case _GroupAction.delete:
         confirmDeletion(context, state).then((ok) {
-          if (ok) state.removeSubscription(group);
+          if (!ok) return;
+          final at = state.subscriptions.indexOf(group);
+          state.removeSubscription(group);
+          if (context.mounted) {
+            toast(context, tr(context, 'removedGroup', {'name': group.name}),
+                actionLabel: tr(context, 'undoAction'), onAction: () => state.restoreSubscription(group, at));
+          }
         });
       case _GroupAction.deleteAll:
         _confirmDeleteAll(context, group.configs.length).then((ok) {
@@ -1888,7 +2158,15 @@ class _ConfigTile extends StatelessWidget {
       required this.group,
       required this.config,
       required this.locked,
-      this.flash = false});
+      this.flash = false,
+      this.selecting = false,
+      this.checked = false,
+      this.onPick});
+
+  /// Servers are being picked (a long press starts it): a tap picks, and there is a box instead of the menu.
+  final bool selecting;
+  final bool checked;
+  final VoidCallback? onPick;
 
   final AppState state;
   final ServerGroup group;
@@ -1914,9 +2192,7 @@ class _ConfigTile extends StatelessWidget {
       case _ConfigAction.share:
         showShareSheet(context, text: config.link, copyLabel: t.copyConfig);
       case _ConfigAction.delete:
-        if (await confirmDeletion(context, state)) {
-          state.removeConfig(group, config);
-        }
+        _removeWithUndo(context, state, [(group: group, config: config)]);
       case _ConfigAction.tcping:
         state.testOne(config, real: false);
       case _ConfigAction.realDelay:
@@ -1940,9 +2216,13 @@ class _ConfigTile extends StatelessWidget {
         curve: Curves.easeOut,
         color: flash
             ? scheme.tertiaryContainer
-            : selected ? scheme.primaryContainer : Colors.transparent,
+            : checked
+                ? scheme.secondaryContainer
+                : selected ? scheme.primaryContainer : Colors.transparent,
         child: ListTile(
           contentPadding: const EdgeInsetsDirectional.only(start: 16, end: 4),
+          leading: selecting ? Checkbox(value: checked, onChanged: (_) => onPick?.call()) : null,
+          onLongPress: onPick,
           selected: selected,
           selectedColor: flash ? scheme.onTertiaryContainer : scheme.onPrimaryContainer,
           title: FlagName(config.name),
@@ -1965,12 +2245,14 @@ class _ConfigTile extends StatelessWidget {
             softWrap: false,
             overflow: TextOverflow.ellipsis,
           ),
-          onTap: state.canSelect
-              ? () => state.select(config)
-              : (state.connected && !state.restartOnChange
-                  ? () => toast(context, tr(context, 'selectBlocked'))
-                  : null),
-          trailing: Row(
+          onTap: selecting
+              ? onPick
+              : state.canSelect
+                  ? () => state.select(config)
+                  : (state.connected && !state.restartOnChange
+                      ? () => toast(context, tr(context, 'selectBlocked'))
+                      : null),
+          trailing: selecting ? null : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               AnimatedSwitcher(

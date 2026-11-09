@@ -531,6 +531,20 @@ class _SettingsPageState extends State<SettingsPage> {
             trailing: const Icon(Icons.arrow_drop_down),
             onTap: _pickAppIcon,
           ),
+        ListTile(
+          leading: const Icon(Icons.color_lens_outlined),
+          title: Text(tr(context, 'themeColor')),
+          subtitle: Text(tr(context, state.themeColor == 'system' ? 'themeColorSystem' : 'themeColorTeal')),
+          trailing: const Icon(Icons.arrow_drop_down),
+          onTap: () => _choose<String>(
+            tr(context, 'themeColor'),
+            state.themeColor,
+            {'teal': tr(context, 'themeColorTeal'), 'system': tr(context, 'themeColorSystem')},
+            state.setThemeColor,
+          ),
+        ),
+        _switch('blackTheme', state.blackTheme, tr(context, 'blackTheme'), tr(context, 'blackThemeDesc')),
+        if (Platform.isAndroid) _switch('haptics', state.haptics, tr(context, 'haptics'), tr(context, 'hapticsDesc')),
         const Divider(height: 1),
         _switch(
             'showSpeed', state.showSpeed, tr(context, 'notifSpeed'), tr(context, 'notifSpeedDesc')),

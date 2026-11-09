@@ -6,7 +6,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
 
 import '../core/ad_lists.dart' show adBaseAsset;
 import '../core/app_icon.dart';
@@ -387,6 +387,30 @@ class AppState extends ChangeNotifier {
   /// Android: a "not connected" notification with a Connect button stays after a disconnect.
   bool idleNotification = true;
 
+  /// A short vibration when a connection is made or ended (the phone only).
+  bool haptics = true;
+
+  /// What the home page is to do as soon as it is there ('paste' or 'free'): the last page of the guide
+  /// sets it.
+  String? pendingHomeAction;
+
+  String? takePendingHomeAction() {
+    final a = pendingHomeAction;
+    pendingHomeAction = null;
+    return a;
+  }
+
+  /// When the servers of VPN Gate were fetched (milliseconds since 1970; 0: never).
+  int vpnGateUpdated = 0;
+
+  /// How many servers of VPN Gate are in the list.
+  int get vpnGateCount => manual.configs.where((c) => c.isOpenVpn && c.name.contains(vpnGateMark)).length;
+
+  /// The colours of the app: 'teal' (Kumo's own) or 'system' (from the wallpaper on Android 12 and
+  /// later, from the accent colour on Windows); and a black background in the dark theme.
+  String themeColor = 'teal';
+  bool blackTheme = false;
+
   /// Warn when a subscription is nearly out of data or about to expire (a notification on
   /// Android, a banner on Windows).
   bool usageAlerts = true;
@@ -578,6 +602,11 @@ class AppState extends ChangeNotifier {
         liveDelay = null;
       }
       if (changed) _syncStandby(const Duration(milliseconds: 800), false);
+      if (changed) {
+        if (s.status == VpnStatus.started) buzz();
+        if (s.status == VpnStatus.stopped) buzz();
+        if (s.status == VpnStatus.error) buzz(strong: true);
+      }
       if (s.status == VpnStatus.started && changed) {
         if (measurePing) _measureLive();
         _misses = 0;
@@ -940,6 +969,10 @@ class AppState extends ChangeNotifier {
       showVolume = flag('showVolume', false);
       showName = flag('showName', true);
       idleNotification = flag('idleNotification', true);
+      haptics = flag('haptics', true);
+      vpnGateUpdated = (j['vpnGateUpdated'] as num?)?.toInt() ?? 0;
+      themeColor = j['themeColor'] == 'system' ? 'system' : 'teal';
+      blackTheme = flag('blackTheme', false);
       usageAlerts = flag('usageAlerts', true);
       measurePing = flag('measurePing', true);
       final si = j['subInterval'];
@@ -1007,6 +1040,10 @@ class AppState extends ChangeNotifier {
           'showVolume': showVolume,
           'showName': showName,
           'idleNotification': idleNotification,
+          'haptics': haptics,
+          'vpnGateUpdated': vpnGateUpdated,
+          'themeColor': themeColor,
+          'blackTheme': blackTheme,
           'usageAlerts': usageAlerts,
           'measurePing': measurePing,
           'subInterval': subInterval,
@@ -1048,6 +1085,11 @@ class AppState extends ChangeNotifier {
       case 'idleNotification':
         idleNotification = value;
         VpnChannel.setIdleNotification(value);
+      case 'haptics':
+        haptics = value;
+        if (value) buzz();
+      case 'blackTheme':
+        blackTheme = value;
       case 'measurePing':
         measurePing = value;
       case 'usageAlerts':
@@ -1062,6 +1104,7 @@ class AppState extends ChangeNotifier {
         }
     }
     _saveSettings();
+    notifyListeners();
   }
 
   /// Booting without a stored VPN permission would fail silently, so ask while the user is here.
@@ -1117,6 +1160,21 @@ class AppState extends ChangeNotifier {
   void setThemeMode(ThemeMode mode) {
     themeMode = mode;
     _saveSettings();
+  }
+
+  void setThemeColor(String value) {
+    themeColor = value == 'system' ? 'system' : 'teal';
+    _saveSettings();
+    notifyListeners();
+  }
+
+  /// A short vibration, when the setting is on (the phone only). [strong]: for the end of a connection
+  /// that was not asked for.
+  void buzz({bool strong = false}) {
+    if (!haptics || !Platform.isAndroid) return;
+    try {
+      strong ? HapticFeedback.mediumImpact() : HapticFeedback.lightImpact();
+    } catch (_) {}
   }
 
   Future<void> setAppIcon(String id) async {
@@ -1905,6 +1963,8 @@ class AppState extends ChangeNotifier {
     try {
       final parsed = parseLinks(await fetchVpnGate()).where((c) => c.isOpenVpn).toList();
       if (parsed.isEmpty) return 0;
+      vpnGateUpdated = DateTime.now().millisecondsSinceEpoch;
+      _saveSettings();
       manual.configs.removeWhere((c) => c.isOpenVpn && c.name.contains(vpnGateMark) && !identical(c, selected));
       _merge(manual, parsed);
       _save();
@@ -1952,6 +2012,45 @@ class AppState extends ChangeNotifier {
   void removeConfig(ServerGroup g, ProxyConfig c) {
     g.configs.remove(c);
     if (selected == c) selected = null;
+    _save();
+    notifyListeners();
+  }
+
+  /// Takes [items] out of their groups and says where each was, for [restoreConfigs].
+  List<RemovedConfig> removeConfigs(Iterable<({ServerGroup group, ProxyConfig config})> items) {
+    final out = <RemovedConfig>[];
+    for (final it in items) {
+      final at = it.group.configs.indexOf(it.config);
+      if (at < 0) continue;
+      it.group.configs.removeAt(at);
+      final wasSelected = identical(selected, it.config);
+      if (wasSelected) selected = null;
+      out.add((group: it.group, config: it.config, index: at, wasSelected: wasSelected));
+    }
+    if (out.isNotEmpty) {
+      _save();
+      notifyListeners();
+    }
+    return out;
+  }
+
+  /// Puts back what [removeConfigs] took out, each where it was.
+  void restoreConfigs(List<RemovedConfig> removed) {
+    for (final r in removed.reversed) {
+      final list = r.group.configs;
+      if (list.contains(r.config)) continue;
+      list.insert(r.index.clamp(0, list.length), r.config);
+      if (r.wasSelected && selected == null) selected = r.config;
+    }
+    _save();
+    notifyListeners();
+  }
+
+  /// Puts back a subscription removed with [removeSubscription], at [index] among them. (What the
+  /// background job had kept of it is gone: the next update brings it back.)
+  void restoreSubscription(ServerGroup g, int index) {
+    if (subscriptions.contains(g)) return;
+    subscriptions.insert(index.clamp(0, subscriptions.length), g);
     _save();
     notifyListeners();
   }
@@ -2914,6 +3013,9 @@ class AppState extends ChangeNotifier {
     }
   }
 }
+
+/// What [AppState.removeConfigs] took out of where.
+typedef RemovedConfig = ({ServerGroup group, ProxyConfig config, int index, bool wasSelected});
 
 /// A short key for the ping of a link in the saved servers: 32 bits of FNV-1a of the link, in hex. Two
 /// links with the same key would only share a ping that is measured again at the next test.

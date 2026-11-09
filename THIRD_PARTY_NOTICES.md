@@ -32,3 +32,7 @@ for interoperability only. Those apps and their formats belong to their authors.
 The packages listed in `pubspec.yaml` are used under their own licenses (BSD, MIT or Apache-2.0).
 To see the full list with license texts, run the app and open *Licenses*, or run
 `flutter pub deps`.
+
+## Vazirmatn
+
+The font of Persian and Arabic text in the app: [Vazirmatn](https://github.com/rastikerdar/vazirmatn) by Saber Rastikerdar, under the SIL Open Font License 1.1 (assets/fonts/OFL.txt).

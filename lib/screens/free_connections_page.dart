@@ -136,12 +136,29 @@ class FreeConnectionsPage extends StatelessWidget {
             title: Text(tr(context, 'vpngateTitle'), style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: Text(tr(context, 'vpngateDesc')),
           ),
+          // What is there already, and when it came.
+          if (state.vpnGateCount > 0)
+            Padding(
+              padding: const EdgeInsetsDirectional.fromSTEB(72, 0, 16, 8),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  tr(context, 'vpngateStatus', {
+                    'n': state.vpnGateCount,
+                    'when': state.vpnGateUpdated == 0
+                        ? '-'
+                        : MaterialLocalizations.of(context).formatShortDate(DateTime.fromMillisecondsSinceEpoch(state.vpnGateUpdated)),
+                  }),
+                  style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                ),
+              ),
+            ),
           Align(
             alignment: AlignmentDirectional.centerEnd,
             child: Padding(
               padding: const EdgeInsetsDirectional.only(end: 12, bottom: 12),
               child: FilledButton.tonalIcon(
-                icon: const Icon(Icons.download, size: 18),
+                icon: Icon(state.vpnGateCount > 0 ? Icons.refresh : Icons.download, size: 18),
                 onPressed: busy
                 ? null
                 : () async {
@@ -154,9 +171,9 @@ class FreeConnectionsPage extends StatelessWidget {
                     } catch (_) {
                       text = failed;
                     }
-                    if (context.mounted) toast(context, text);
+                    if (context.mounted) toast(context, text, kind: text == failed ? ToastKind.error : ToastKind.ok);
                   },
-                label: Text(tr(context, 'vpngateGet')),
+                label: Text(tr(context, state.vpnGateCount > 0 ? 'vpngateUpdate' : 'vpngateGet')),
               ),
             ),
           ),
