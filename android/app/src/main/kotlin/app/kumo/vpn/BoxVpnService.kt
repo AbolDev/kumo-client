@@ -568,7 +568,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     /** Runs with [lifecycle] held, before a core starts: the core of the last connection must be gone. */
     private suspend fun awaitClosing() {
         val c = closing ?: return
-        withTimeoutOrNull(8_000) { c.await() }
+        // Twelve seconds: a core that closes slowly (open connections, lookups) must be gone before the
+        // next one starts, or the next one meets its ports still in use.
+        val done = withTimeoutOrNull(12_000) { c.await() }
+        if (done == null) Log.w(TAG, "the last core was still closing after 12 s")
         if (closing === c) closing = null
     }
 

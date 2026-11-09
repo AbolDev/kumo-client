@@ -360,6 +360,48 @@ nodot
       expect(File('${rules.path}/geoip-ir.srs').existsSync(), isFalse);
     });
 
+    test('the max list: every list merged, less what is allowed, what apps need and what a parent covers', () async {
+      final text = [
+        for (var i = 0; i < 60000; i++) 'ad$i.example.net',
+        'parent.example.org',
+        'child.parent.example.org',
+        'deep.child.parent.example.org',
+        'allowed.example.com',
+        '@@||allowed.example.com^',
+        'graph.facebook.com',
+        'x.graph.facebook.com',
+      ].join('\n');
+      final asked = <String>[];
+      Future<Uint8List?> fetch(String url) async {
+        asked.add(url);
+        return Uint8List.fromList(utf8.encode(text));
+      }
+
+      final found = await ensureRuleSets(dir.path, const [], ads: true, adsLevel: 'max', fetch: fetch, limit: const Duration(seconds: 90));
+      expect(asked, isNotEmpty);
+      expect(found.keys, contains(adMaxTag));
+      final rs = jsonDecode(await File(found[adMaxTag]!).readAsString()) as Map;
+      final names = ((rs['rules'] as List).single as Map)['domain_suffix'] as List;
+      expect(names, contains('parent.example.org'));
+      expect(names, contains('ad59999.example.net'));
+      for (final gone in ['child.parent.example.org', 'deep.child.parent.example.org', 'allowed.example.com', 'graph.facebook.com', 'x.graph.facebook.com']) {
+        expect(names, isNot(contains(gone)), reason: gone);
+      }
+      expect(names.length, 60001);
+      expect((await File('${found[adMaxTag]!}.count').readAsString()).trim(), '60001');
+      // No piece of the writing is left behind.
+      expect(Directory('${dir.path}/rules').listSync().where((f) => f.path.endsWith('.tmp')), isEmpty);
+    });
+
+    test('a name under another one in a list is not kept', () {
+      final names = {'a.com', 'x.a.com', 'y.x.a.com', 'b.com', 'c.b.org', 'a.org'};
+      expect(pruneCovered(names), 2);
+      expect(names, {'a.com', 'b.com', 'c.b.org', 'a.org'});
+      final apps = {'graph.facebook.com', 'a.graph.facebook.com', 'fine.example.com'};
+      dropNeverBlocked(apps);
+      expect(apps, {'fine.example.com'});
+    });
+
     test('nothing yet and no built-in list: an empty status', () async {
       final status = await adsStatus(dir.path, 'max');
       expect(status.lists, 0);

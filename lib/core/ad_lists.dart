@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 /// What "Block ads and trackers" uses: lists that are downloaded and kept up to date, a big list
 /// built into the app (used when the downloads cannot be had: GitHub is often unreachable), and a
 /// short list of the worst offenders that is always there.
@@ -112,29 +115,75 @@ final _abp = RegExp(r'^(@@)?\|\|([^\^/\$|*]+)\^(\$(.*))?$');
 /// a whole domain.
 ({Set<String> block, Set<String> allow}) parseBlocklist(String text) {
   final block = <String>{}, allow = <String>{};
-  for (var line in text.split('\n')) {
-    line = line.trim().toLowerCase();
-    if (line.isEmpty || line.startsWith('#') || line.startsWith('!') || line.startsWith('[')) continue;
-    String? name;
-    var isAllow = false;
-    final abp = _abp.firstMatch(line);
-    if (abp != null) {
-      final mods = abp[4];
-      if (mods != null && mods.isNotEmpty && mods != 'important') continue;
-      isAllow = abp[1] != null;
-      name = abp[2];
-    } else if (_hosts.hasMatch(line)) {
-      name = _hosts.firstMatch(line)![1];
-    } else if (!line.contains(' ') && !line.contains('/') && !line.contains('|')) {
-      name = line;
-    }
-    if (name == null) continue;
-    if (name.startsWith('*.')) name = name.substring(2);
-    if (name.startsWith('.')) name = name.substring(1);
-    if (name == 'localhost' || !name.contains('.') || !_domain.hasMatch(name)) continue;
-    (isAllow ? allow : block).add(name);
+  for (final line in text.split('\n')) {
+    _parseBlocklistLine(line, block, allow);
   }
   return (block: block, allow: allow);
+}
+
+/// What [parseBlocklist] does for one line, adding to [block] or [allow].
+void _parseBlocklistLine(String raw, Set<String> block, Set<String> allow) {
+  final line = raw.trim().toLowerCase();
+  if (line.isEmpty || line.startsWith('#') || line.startsWith('!') || line.startsWith('[')) return;
+  String? name;
+  var isAllow = false;
+  final abp = _abp.firstMatch(line);
+  if (abp != null) {
+    final mods = abp[4];
+    if (mods != null && mods.isNotEmpty && mods != 'important') return;
+    isAllow = abp[1] != null;
+    name = abp[2];
+  } else if (_hosts.hasMatch(line)) {
+    name = _hosts.firstMatch(line)![1];
+  } else if (!line.contains(' ') && !line.contains('/') && !line.contains('|')) {
+    name = line;
+  }
+  if (name == null) return;
+  if (name.startsWith('*.')) name = name.substring(2);
+  if (name.startsWith('.')) name = name.substring(1);
+  if (name == 'localhost' || !name.contains('.') || !_domain.hasMatch(name)) return;
+  (isAllow ? allow : block).add(name);
+}
+
+/// What [parseBlocklist] finds in the file at [path], added to [block] and [allow] and read line by
+/// line: a list of a million names is not held as one big string next to the sets that are built.
+Future<void> addBlocklistFile(String path, Set<String> block, Set<String> allow) async {
+  final lines = File(path).openRead().transform(const Utf8Decoder(allowMalformed: true)).transform(const LineSplitter());
+  await for (final line in lines) {
+    _parseBlocklistLine(line, block, allow);
+  }
+}
+
+/// Removes from [domains] every name that has one of its parents in it too. A `domain_suffix` rule
+/// blocks everything under a name, so the rule of a name under another one says nothing more: it only
+/// makes the list, and what the core builds from it, bigger. Returns how many were removed.
+int pruneCovered(Set<String> domains) {
+  final redundant = <String>[];
+  for (final d in domains) {
+    var at = d.indexOf('.');
+    while (at >= 0) {
+      if (domains.contains(d.substring(at + 1))) {
+        redundant.add(d);
+        break;
+      }
+      at = d.indexOf('.', at + 1);
+    }
+  }
+  domains.removeAll(redundant);
+  return redundant.length;
+}
+
+/// [withoutNeverBlocked], in place.
+void dropNeverBlocked(Set<String> domains) {
+  final never = adNeverBlock.toSet();
+  domains.removeWhere((d) {
+    for (var s = d;;) {
+      if (never.contains(s)) return true;
+      final dot = s.indexOf('.');
+      if (dot < 0) return false;
+      s = s.substring(dot + 1);
+    }
+  });
 }
 
 /// A sing-box rule-set (source format) blocking [domains] and everything under them.

@@ -281,10 +281,10 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
       expect(most, lessThanOrEqualTo(24));
     });
 
-    test('a big scan runs more probes at once, up to 96', () {
+    test('a big scan runs more probes at once, up to 64', () {
       expect(cleanIpWorkers(60), 24);
       expect(cleanIpWorkers(2000), 50);
-      expect(cleanIpWorkers(10000), 96);
+      expect(cleanIpWorkers(10000), 64);
       expect(cleanIpWorkers(10000, gentle: true), gentleWorkers);
       expect(cleanIpCountChoices.last, cleanIpMaxCount);
       expect(cleanIpCountChoices, contains(cleanIpTcpCount));

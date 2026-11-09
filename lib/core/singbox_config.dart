@@ -553,7 +553,7 @@ String buildSingBoxConfig(
     if (adSets.isNotEmpty) adRule({'rule_set': adSets}, {'action': 'reject'}),
     // Public encrypted-DNS servers: an app that uses one hides the ad names it asks for. By name,
     // and by address on their encrypted ports for apps that ask them by address.
-    if (adsStrong) ...[
+    if (adsStrong && o.blockPublicDoh) ...[
       adRule({'domain_suffix': encryptedDnsDomains}, {'action': 'reject'}),
       {'ip_cidr': encryptedDnsIps, 'port': [443, 853], 'action': 'reject'},
     ],

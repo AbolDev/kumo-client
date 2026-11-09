@@ -5,6 +5,8 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'ad_lists.dart';
+import 'singbox_config.dart' show XrayAuth;
+import 'socks_get.dart';
 
 /// Rule sets that list the addresses and sites of a country, as sing-box binary (.srs) files.
 /// Each tag has several mirrors because GitHub itself is often unreachable from some countries.
@@ -73,17 +75,34 @@ Future<void> _writeCount(File list, int n) async {
   } catch (_) {}
 }
 
+/// How a list is fetched: [url]'s body, or null. Where it goes (the network's own way, the local proxy
+/// of a connection, Xray's SOCKS port) is the caller's choice, see [fetchDirect], [fetchViaProxy] and
+/// [fetchViaSocks].
+typedef ListFetch = Future<Uint8List?> Function(String url);
+
+/// The way the app's traffic goes by itself: out the network, or into the tunnel when the app is
+/// inside it.
+Future<Uint8List?> fetchDirect(String url) => _get(url);
+
+/// Through the HTTP proxy on 127.0.0.1:[port] (the local proxy of a connection in the proxy mode).
+ListFetch fetchViaProxy(int port) => (url) => _get(url, proxyPort: port);
+
+/// Through the SOCKS5 proxy on 127.0.0.1:[port] (what Xray opens: the app is outside the tunnel then).
+ListFetch fetchViaSocks(int port, {XrayAuth? auth}) => (url) => socksGet(url, port, auth: auth);
+
 /// Downloads the first address that answers. With [convert] the body is turned into the file to keep
 /// (null: the body is not what it should be, so the next address is tried).
-Future<bool> _download(List<String> urls, File target, {Future<String?> Function(Uint8List)? convert}) =>
+Future<bool> _download(List<String> urls, File target,
+        {Future<String?> Function(Uint8List)? convert, ListFetch fetch = fetchDirect}) =>
     _inFlight.putIfAbsent(
         target.path,
-        () => _downloadOnce(urls, target, convert: convert)
+        () => _downloadOnce(urls, target, convert: convert, fetch: fetch)
             .whenComplete(() => _inFlight.remove(target.path)));
 
 /// [url]'s body, or null.
-Future<Uint8List?> _get(String url) async {
+Future<Uint8List?> _get(String url, {int? proxyPort}) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+  if (proxyPort != null) client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
   try {
     final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 10));
     final res = await req.close().timeout(const Duration(seconds: 10));
@@ -102,10 +121,11 @@ Future<Uint8List?> _get(String url) async {
   }
 }
 
-Future<bool> _downloadOnce(List<String> urls, File target, {Future<String?> Function(Uint8List)? convert}) async {
+Future<bool> _downloadOnce(List<String> urls, File target,
+    {Future<String?> Function(Uint8List)? convert, ListFetch fetch = fetchDirect}) async {
   for (final url in urls) {
     try {
-      final bytes = await _get(url);
+      final bytes = await fetch(url);
       if (bytes == null) continue;
       await target.parent.create(recursive: true);
       final tmp = File('${target.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
@@ -131,7 +151,9 @@ Future<bool> _downloadOnce(List<String> urls, File target, {Future<String?> Func
 /// must not stop meanwhile.
 ({String text, int count})? _listToRuleSet(Uint8List bytes, int min) {
   final p = parseBlocklist(utf8.decode(bytes, allowMalformed: true));
-  final domains = withoutNeverBlocked(p.block.difference(p.allow));
+  final domains = p.block..removeAll(p.allow);
+  dropNeverBlocked(domains);
+  pruneCovered(domains);
   if (domains.length < min) return null;
   return (text: ruleSetOf(domains), count: domains.length);
 }
@@ -156,21 +178,52 @@ bool _rawListOk(Uint8List bytes, int min) => parseBlocklist(utf8.decode(bytes, a
 
 /// The text lists at [paths] merged into the rule-set [out] (written whole, then moved into place);
 /// the number of its domains, or 0 when there were too few to write. Runs on another isolate.
+///
+/// The files are read line by line into one set, what the lists allow and what apps need is taken out,
+/// and so is every name that has a parent in the set; the rule-set is written in pieces. So the most
+/// that is held at once is the set of names (about a million at the max level), not that and the
+/// texts of all the lists and the finished rule-set on top of it.
 Future<int> _mergeInto(List<String> paths, String out) async {
-  final domains = mergeBlocklists([for (final p in paths) await File(p).readAsString()]);
-  if (domains.length < 1000) return 0;
+  final block = <String>{}, allow = <String>{};
+  for (final p in paths) {
+    await addBlocklistFile(p, block, allow);
+  }
+  block.removeAll(allow);
+  allow.clear();
+  dropNeverBlocked(block);
+  pruneCovered(block);
+  if (block.length < 1000) return 0;
   final file = File(out);
   await file.parent.create(recursive: true);
   final tmp = File('$out.${DateTime.now().microsecondsSinceEpoch}.tmp');
-  await tmp.writeAsString(ruleSetOf(domains), flush: true);
+  final sink = tmp.openWrite();
+  try {
+    sink.write('{"version":3,"rules":[{"domain_suffix":["');
+    final piece = StringBuffer();
+    var n = 0;
+    for (final d in block) {
+      if (n > 0) piece.write('","');
+      piece.write(d);
+      if (++n % 5000 == 0) {
+        sink.write(piece.toString());
+        piece.clear();
+      }
+    }
+    sink.write(piece.toString());
+    sink.write('"]}]}');
+    await sink.flush();
+  } finally {
+    await sink.close();
+  }
   await tmp.rename(out);
-  return domains.length;
+  return block.length;
 }
 
 /// The lists of the max level: each kept as text in rules/raw (fetched once a day, an old copy kept
 /// when a fetch fails), and all of them merged into one rule-set, built again when one of them is
 /// newer than it. True when the merged rule-set is there.
-Future<bool> _ensureMaxList(String dir, {required bool wait, bool refresh = true, bool force = false}) async {
+Future<bool> _ensureMaxList(String dir,
+    {required bool wait, bool refresh = true, bool force = false, ListFetch fetch = fetchDirect}) async {
   final merged = File('$dir/rules/$adMaxTag.json');
   var newest = DateTime.fromMillisecondsSinceEpoch(0);
   final raws = <File>[];
@@ -181,7 +234,7 @@ Future<bool> _ensureMaxList(String dir, {required bool wait, bool refresh = true
     if ((!exists && wait) || (old && refresh)) {
       await _inFlight.putIfAbsent(raw.path, () async {
         for (final url in s.urls) {
-          final bytes = await _get(url);
+          final bytes = await fetch(url);
           if (bytes == null) continue;
           if (!await _rawListOkOff(bytes, s.min)) continue;
           await raw.parent.create(recursive: true);
@@ -256,6 +309,7 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
     List<String> tags = const [],
     Future<Uint8List?> Function()? loadBase,
     Future<Uint8List?> Function(String tag)? loadBundled,
+    ListFetch fetch = fetchDirect,
     bool force = false,
     Duration limit = const Duration(seconds: 45)}) async {
   final found = <String, String>{};
@@ -280,7 +334,7 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
               // A list made by a version before 1.12.2-beta.4 (no count kept) is made again.
               (text && !await _countFile(file).exists()));
       if (!exists ? (wait || waitHere) : (old && refresh)) {
-        await _download(urls, file, convert: text ? _textToRuleSet(file) : null);
+        await _download(urls, file, convert: text ? _textToRuleSet(file) : null, fetch: fetch);
       }
       if (await file.exists()) found[tag] = file.path.replaceAll('\\', '/');
     }
@@ -297,7 +351,7 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
       await fetch(s.tag, s.urls, text: s.text, maxAge: adsMaxAge);
     }
     if (adsLevel == 'max') {
-      jobs.add(_ensureMaxList(dir, wait: wait, refresh: refresh, force: force).then((ok) {
+      jobs.add(_ensureMaxList(dir, wait: wait, refresh: refresh, force: force, fetch: fetch).then((ok) {
         if (ok) found[adMaxTag] = '$dir/rules/$adMaxTag.json'.replaceAll('\\', '/');
       }).catchError((_) {}));
     }

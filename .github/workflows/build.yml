@@ -27,12 +27,32 @@ jobs:
 
       - run: flutter pub get
 
+      # Errors and warnings of the analyzer stop the build (hints do not).
+      - run: flutter analyze --no-fatal-infos
+
       # The same sing-box the app ships, so that the tests can ask it to check the configurations the app
       # builds (test/config_check_test.dart): a setting that would stop the core from starting fails here.
       - run: bash tools/fetch_unix_core.sh linux x64
       - run: flutter test
         env:
           KUMO_CORE: ${{ github.workspace }}/linux/core/kumo-core
+
+  # The tests that need Windows itself (the registry, DPAPI, the screen and the clipboard, the OpenVPN
+  # adapter): the Linux job above skips them.
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      - run: flutter pub get
+      - run: flutter test test/win_registry_test.dart test/win_dpapi_test.dart test/win_capture_test.dart test/safe_storage_test.dart test/ovpn_runner_test.dart
 
   # sing-box (libbox.aar) for every Android CPU. Built once, then cached until the version changes.
   native-box:
@@ -641,7 +661,7 @@ jobs:
       startsWith(github.ref, 'refs/tags/v') && !cancelled() &&
       needs.apk.result == 'success' && needs.windows.result == 'success' &&
       needs.test.result == 'success'
-    needs: [apk, windows, windows-arm64, linux, macos, test]
+    needs: [apk, windows, windows-arm64, linux, macos, test, test-windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write

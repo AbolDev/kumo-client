@@ -136,7 +136,7 @@ class _TroubleshootPageState extends State<TroubleshootPage> {
           if (state.connected)
             Text(tr(context, 'tuneDisconnect'), style: TextStyle(color: scheme.error))
           else
-            Row(children: [
+            Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
               FilledButton.tonalIcon(
                 onPressed: _tuning ? null : _tune,
                 icon: _tuning

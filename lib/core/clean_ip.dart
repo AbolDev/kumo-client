@@ -215,9 +215,9 @@ const cleanIpCountChoices = [200, 500, 1000, 2000, 5000, 10000];
 const cleanIpTimeoutChoices = [1, 2, 3, 5];
 
 /// How many probes run at once in the first stage: more for a bigger scan, so that thousands of
-/// addresses take minutes, not an hour.
+/// addresses take minutes, not an hour (and not more than 64: a network may take more for a flood).
 int cleanIpWorkers(int addresses, {bool gentle = false}) =>
-    gentle ? gentleWorkers : (addresses ~/ 40).clamp(24, 96).toInt();
+    gentle ? gentleWorkers : (addresses ~/ 40).clamp(24, 64).toInt();
 const cleanIpMinTimeout = 1;
 const cleanIpMaxTimeout = 10;
 const cleanIpMaxSamples = 5;
@@ -565,99 +565,104 @@ Future<List<CleanIp>> scanCleanIps({
   ScanState snapshot() => ScanState(remaining.toList(), List.of(open));
   Timer? timer;
   if (onCheckpoint != null) timer = Timer.periodic(checkpointEvery, (_) => onCheckpoint(snapshot()));
+  // Whatever happens in the scan (an error included), the saving of its state stops with it.
+  try {
 
-  /// The probes of one address on one port, [ScanOptions.samples] times; null when none answered.
-  Future<CleanIp?> measure(String ip, int port) async {
-    final times = <int>[];
-    for (var s = 0; s < o.samples; s++) {
-      if (halted()) break;
-      await limiter.take();
-      final ms = await probe(ip, port);
-      if (ms >= 0) times.add(ms);
+    /// The probes of one address on one port, [ScanOptions.samples] times; null when none answered.
+    Future<CleanIp?> measure(String ip, int port) async {
+      final times = <int>[];
+      for (var s = 0; s < o.samples; s++) {
+        if (halted()) break;
+        await limiter.take();
+        final ms = await probe(ip, port);
+        if (ms >= 0) times.add(ms);
+      }
+      if (times.isEmpty) return null;
+      times.sort();
+      return CleanIp(ip, times[times.length ~/ 2], null,
+          port: port, loss: (o.samples - times.length) / o.samples, jitterMs: times.last - times.first);
     }
-    if (times.isEmpty) return null;
-    times.sort();
-    return CleanIp(ip, times[times.length ~/ 2], null,
-        port: port, loss: (o.samples - times.length) / o.samples, jitterMs: times.last - times.first);
-  }
 
-  Future<void> firstStage(List<String> batch) async {
-    final jobs = [
-      for (final ip in batch)
-        for (final p in ports) (ip, p),
-    ];
-    total += jobs.length;
-    await _pool(jobs.length, workers, (i) async {
-      final (ip, port) = jobs[i];
-      final r = await measure(ip, port);
-      tested.add(ip);
-      if (port == ports.last) remaining.remove(ip);
-      if (r != null) {
-        open.add(r);
-        if (server == null) {
-          onResult?.call(r);
-          if (o.stopAfter > 0 && open.length >= o.stopAfter) stop = true;
+    Future<void> firstStage(List<String> batch) async {
+      final jobs = [
+        for (final ip in batch)
+          for (final p in ports) (ip, p),
+      ];
+      total += jobs.length;
+      await _pool(jobs.length, workers, (i) async {
+        final (ip, port) = jobs[i];
+        final r = await measure(ip, port);
+        tested.add(ip);
+        if (port == ports.last) remaining.remove(ip);
+        if (r != null) {
+          open.add(r);
+          if (server == null) {
+            onResult?.call(r);
+            if (o.stopAfter > 0 && open.length >= o.stopAfter) stop = true;
+          }
+        }
+        onProgress?.call(1, ++done, total);
+      }, halted);
+    }
+
+    int byQuality(CleanIp a, CleanIp b) => a.loss != b.loss ? a.loss.compareTo(b.loss) : a.tcpMs.compareTo(b.tcpMs);
+
+    if (server != null && o.skipFirst) {
+      open
+        ..clear()
+        ..addAll(list.map((ip) => CleanIp(ip, 0, null, port: ports.first)));
+    } else {
+      await firstStage(list);
+      // The addresses next to the best ones.
+      if (o.neighbors && !halted() && open.isNotEmpty) {
+        final best = [...open]..sort(byQuality);
+        final extra = <String>{};
+        for (final r in best.take(5)) {
+          extra.addAll(neighborsOf(r.ip, skip: tested));
+        }
+        if (extra.isNotEmpty) {
+          remaining.addAll(extra.take(40));
+          await firstStage(extra.take(40).toList());
         }
       }
-      onProgress?.call(1, ++done, total);
-    }, halted);
-  }
-
-  int byQuality(CleanIp a, CleanIp b) => a.loss != b.loss ? a.loss.compareTo(b.loss) : a.tcpMs.compareTo(b.tcpMs);
-
-  if (server != null && o.skipFirst) {
-    open
-      ..clear()
-      ..addAll(list.map((ip) => CleanIp(ip, 0, null, port: ports.first)));
-  } else {
-    await firstStage(list);
-    // The addresses next to the best ones.
-    if (o.neighbors && !halted() && open.isNotEmpty) {
-      final best = [...open]..sort(byQuality);
-      final extra = <String>{};
-      for (final r in best.take(5)) {
-        extra.addAll(neighborsOf(r.ip, skip: tested));
-      }
-      if (extra.isNotEmpty) {
-        remaining.addAll(extra.take(40));
-        await firstStage(extra.take(40).toList());
-      }
+      timer?.cancel();
+      // Stopped by the user: what is left can be taken up again.
+      if (cancelled?.call() == true) onCheckpoint?.call(snapshot());
+      if (cancelled?.call() == true || open.isEmpty) return open.isEmpty ? const [] : (server == null ? (open..sort(byQuality)).take(o.keep).toList() : const []);
+      open.sort(byQuality);
+      if (server == null) return open.take(o.keep).toList();
     }
     timer?.cancel();
-    // Stopped by the user: what is left can be taken up again.
-    if (cancelled?.call() == true) onCheckpoint?.call(snapshot());
-    if (cancelled?.call() == true || open.isEmpty) return open.isEmpty ? const [] : (server == null ? (open..sort(byQuality)).take(o.keep).toList() : const []);
-    open.sort(byQuality);
-    if (server == null) return open.take(o.keep).toList();
-  }
-  timer?.cancel();
 
-  // The real test, with the server's own settings.
-  final test = delay ??
-      ((ProxyConfig c) => realDelay(c, timeout: Duration(seconds: max(6, wait.inSeconds * 3))));
-  final best = open.take(o.skipFirst ? cleanIpMaxRealTests : o.delayCount).toList();
-  stop = false;
-  final answered = <CleanIp>[];
-  var tested2 = 0;
-  await _pool(best.length, o.gentle ? 2 : 3, (i) async {
-    final fields = withCleanIp(server, best[i].ip);
-    final config = fields == null ? null : parseLink(fields.build());
-    var ms = -1;
-    if (config != null) {
-      try {
-        ms = await test(config);
-      } catch (_) {}
-    }
-    if (ms >= 0) {
-      final r = CleanIp(best[i].ip, best[i].tcpMs, ms, port: best[i].port, loss: best[i].loss, jitterMs: best[i].jitterMs);
-      answered.add(r);
-      onResult?.call(r);
-      if (o.stopAfter > 0 && answered.length >= o.stopAfter) stop = true;
-    }
-    onProgress?.call(2, ++tested2, best.length);
-  }, halted);
-  answered.sort((a, b) => a.delayMs!.compareTo(b.delayMs!));
-  return answered;
+    // The real test, with the server's own settings.
+    final test = delay ??
+        ((ProxyConfig c) => realDelay(c, timeout: Duration(seconds: max(6, wait.inSeconds * 3))));
+    final best = open.take(o.skipFirst ? cleanIpMaxRealTests : o.delayCount).toList();
+    stop = false;
+    final answered = <CleanIp>[];
+    var tested2 = 0;
+    await _pool(best.length, o.gentle ? 2 : 3, (i) async {
+      final fields = withCleanIp(server, best[i].ip);
+      final config = fields == null ? null : parseLink(fields.build());
+      var ms = -1;
+      if (config != null) {
+        try {
+          ms = await test(config);
+        } catch (_) {}
+      }
+      if (ms >= 0) {
+        final r = CleanIp(best[i].ip, best[i].tcpMs, ms, port: best[i].port, loss: best[i].loss, jitterMs: best[i].jitterMs);
+        answered.add(r);
+        onResult?.call(r);
+        if (o.stopAfter > 0 && answered.length >= o.stopAfter) stop = true;
+      }
+      onProgress?.call(2, ++tested2, best.length);
+    }, halted);
+    answered.sort((a, b) => a.delayMs!.compareTo(b.delayMs!));
+    return answered;
+  } finally {
+    timer?.cancel();
+  }
 }
 
 // ---------------------------------------------------------------- Cloudflare's data center and speed

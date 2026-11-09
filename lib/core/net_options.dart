@@ -66,6 +66,9 @@ const networkStrategies = ['default', 'hybrid', 'fallback'];
 /// The core a server is run with when both can carry it.
 const cores = ['singbox', 'xray'];
 
+/// The ways to download the rule lists ([NetOptions.listsRoute]).
+const listsRoutes = ['auto', 'tunnel', 'direct'];
+
 /// Countries whose sites can go direct (code, English name).
 const bypassCountries = {
   'ir': 'Iran',
@@ -190,6 +193,14 @@ class NetOptions {
   bool blockCookieBanners = false;
   bool blockAffiliate = false;
 
+  /// At the strong and max levels: refuse public encrypted-DNS servers (by name and by address), so
+  /// that apps cannot hide the ad names they ask for. Off for a phone whose Private DNS names one.
+  bool blockPublicDoh = true;
+
+  /// Where the rule lists (ads, countries) are downloaded: 'auto' (through the connection when it is
+  /// up, else directly), 'tunnel' (only through the connection) or 'direct' (the user's own network).
+  String listsRoute = 'auto';
+
   /// Keep every name lookup inside the VPN: the server names and the DNS server itself are
   /// looked up over encrypted DNS instead of the network's own resolver, and DNS over TLS that
   /// would skip the tunnel's resolver is refused.
@@ -285,6 +296,8 @@ class NetOptions {
         'adAllow': adAllow,
         'blockCookieBanners': blockCookieBanners,
         'blockAffiliate': blockAffiliate,
+        'blockPublicDoh': blockPublicDoh,
+        'listsRoute': listsRoute,
         'strictDns': strictDns,
         'encryptedLookup': encryptedLookup,
         'blockStun': blockStun,
@@ -354,6 +367,8 @@ class NetOptions {
     adsLevel = adLevels.contains(j['adsLevel']) ? j['adsLevel'] as String : defaultAdLevel;
     blockCookieBanners = flag('blockCookieBanners', false);
     blockAffiliate = flag('blockAffiliate', false);
+    blockPublicDoh = flag('blockPublicDoh', true);
+    listsRoute = listsRoutes.contains(j['listsRoute']) ? j['listsRoute'] as String : 'auto';
     adAllow = j['adAllow'] is List ? cleanAllowList((j['adAllow'] as List).whereType<String>()) : [];
     strictDns = flag('strictDns', false);
     encryptedLookup = flag('encryptedLookup', true);

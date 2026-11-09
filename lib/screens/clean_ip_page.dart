@@ -846,6 +846,22 @@ class _CleanIpPageState extends State<CleanIpPage> {
             child: Text(_estimate(), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
           ),
         ]),
+        // A big scan on a network that cuts the connection when it sees a flood: a hint, with the way out.
+        if (_count >= 5000 && !_gentle) ...[
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            color: scheme.tertiaryContainer,
+            child: ListTile(
+              leading: Icon(Icons.warning_amber_rounded, color: scheme.onTertiaryContainer),
+              title: Text(tr(context, 'cleanIpBigHint'), style: TextStyle(color: scheme.onTertiaryContainer)),
+              trailing: TextButton(
+                onPressed: () => setState(() => _gentle = true),
+                child: Text(tr(context, 'cleanIpUseGentle')),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         Card(
           margin: EdgeInsets.zero,
@@ -1082,10 +1098,11 @@ class _CleanIpPageState extends State<CleanIpPage> {
     final shown = _found ?? const <CleanIp>[];
     final links = _targetList.isEmpty ? const <String>[] : [for (final b in _targetList) ...linksFor(b, _picked.isEmpty ? shown : _pickedResults)];
     return PopScope(
-      // From the results, Back goes to the setup of a new scan.
-      canPop: !results,
+      // From the results, Back goes to the setup of a new scan. (Opened from a config's edit page it
+      // goes straight back: the results are for picking one address there, and Back is the way out.)
+      canPop: !results || _fixed,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && results) _newScan();
+        if (!didPop && results && !_fixed) _newScan();
       },
       child: Scaffold(
         appBar: AppBar(

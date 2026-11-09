@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket;
+import 'dart:isolate' show Isolate;
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -828,17 +829,26 @@ class AppState extends ChangeNotifier {
   /// While disconnected, the names of the servers a connection would use are looked up ahead (over
   /// encrypted DNS, as at a connection) and again before the answer is forgotten, so that a
   /// connection finds them ready instead of waiting for the lookup.
-  void _warmLookup([Duration after = const Duration(seconds: 1)]) {
+  void _warmLookup([Duration after = const Duration(seconds: 1), bool again = false]) {
     _warmTimer?.cancel();
     if (!net.encryptedLookup || net.strictDns) return;
+    if (!again) _warmRounds = 0;
     _warmTimer = Timer(after, () async {
       if (!_idle || _preparing || all.isEmpty) return;
       try {
-        await _resolveAhead(_chosenServers());
-      } catch (_) {}
-      _warmLookup(const Duration(minutes: 9));
+        // A group of many servers (the automatic mode) is left to the core: too many names to ask.
+        final chosen = _chosenServers();
+        if (chosen.length <= 5) await _resolveAhead(chosen);
+      } catch (e) {
+        _logQuiet('Looking the server names up ahead', e);
+      }
+      // Again before the answers are forgotten, a few times while nothing is asked of the app (a pick,
+      // a connection or a disconnect starts it over): an app left open in the tray does not ask for ever.
+      if (++_warmRounds < 3) _warmLookup(const Duration(minutes: 9), true);
     });
   }
+
+  var _warmRounds = 0;
 
   Future<void> _reconnect() async {
     _expectStop = true;
@@ -1067,11 +1077,19 @@ class AppState extends ChangeNotifier {
       {bool reconnect = true}) async {
     change(net);
     _saveSettings();
-    if (net.bypass.isNotEmpty || net.blockAds) {
+    final fetch = _listFetch();
+    if ((net.bypass.isNotEmpty || net.blockAds) && fetch != null) {
       // Fetched now, so that the next connection has them (a connection does not wait for lists).
       ensureRuleSets(await VpnChannel.dataDir(), net.bypass,
-              ads: net.blockAds, adsLevel: net.adsLevel, loadBase: _loadAdBase, loadBundled: _loadBundledRules)
-          .catchError((_) => <String, String>{});
+              ads: net.blockAds,
+              adsLevel: net.adsLevel,
+              loadBase: _loadAdBase,
+              loadBundled: _loadBundledRules,
+              fetch: fetch)
+          .catchError((Object e) {
+        _logQuiet('Fetching the lists', e);
+        return <String, String>{};
+      });
     }
     if (reconnect && connected) await _reconnect();
     _syncStandby();
@@ -1137,20 +1155,19 @@ class AppState extends ChangeNotifier {
     // One damaged entry must not take the others down with it (the next save would drop them).
     try {
       // Older versions kept one flat list: that was the collector's.
-      collector.configs.addAll(parseLinks(
+      collector.configs.addAll(await parseLinksOff(
           ((j['collector'] ?? j['links'] ?? const []) as List).cast<String>(),
           secure: !collectorAllowInsecure));
     } catch (e) {
       log('The saved public list was skipped: $e');
     }
     try {
-      manual.configs.addAll(
-          parseLinks(((j['manual'] ?? const []) as List).cast<String>()));
+      manual.configs.addAll(await parseLinksOff(((j['manual'] ?? const []) as List).cast<String>()));
     } catch (e) {
       log('The saved manual configs were skipped: $e');
     }
     try {
-      cleanGroup.configs.addAll(parseLinks(((j['clean'] ?? const []) as List).cast<String>()));
+      cleanGroup.configs.addAll(await parseLinksOff(((j['clean'] ?? const []) as List).cast<String>()));
     } catch (e) {
       log('The saved clean-IP configs were skipped: $e');
     }
@@ -1173,7 +1190,7 @@ class AppState extends ChangeNotifier {
             ..supportUrl = m['supportUrl'] as String?
             ..webPage = m['webPage'] as String?
             ..announce = m['announce'] as String?;
-          g.configs.addAll(parseLinks((m['links'] as List).cast<String>()));
+          g.configs.addAll(await parseLinksOff((m['links'] as List).cast<String>()));
           subscriptions.add(g);
         } catch (e) {
           log('A saved subscription was skipped: $e');
@@ -1185,7 +1202,8 @@ class AppState extends ChangeNotifier {
     try {
       final pings = (j['pings'] as Map?) ?? const {};
       for (final c in all) {
-        final ms = pings[c.link];
+        // The key of this version, or the whole link that older versions used.
+        final ms = pings[pingKey(c.link)] ?? pings[c.link];
         if (ms is num) c.latencyMs = ms.toInt();
       }
       for (final g in [collector, manual, cleanGroup, ...subscriptions]) {
@@ -1484,10 +1502,11 @@ class AppState extends ChangeNotifier {
   Future<void> _writeServers() {
     List<String> links(ServerGroup g, [int? limit]) =>
         g.configs.take(limit ?? g.configs.length).map((c) => c.link).toList();
-    // Ping results, so they survive closing the app.
+    // Ping results, so they survive closing the app. Under a short key of the link, not the link: the
+    // links are in the file already, and each of them twice made it twice as big (and as slow to write).
     Map<String, int> pings(ServerGroup g) => {
           for (final c in g.configs)
-            if (c.latencyMs != null) c.link: c.latencyMs!,
+            if (c.latencyMs != null) pingKey(c.link): c.latencyMs!,
         };
     final data = jsonEncode({
       'collector': links(collector),
@@ -2170,6 +2189,16 @@ class AppState extends ChangeNotifier {
   /// When the disconnect was asked for (for the time it took, in the log).
   DateTime? _stopAsked;
 
+  /// The connection is shown as ended without the program having said so (see [_settleStop]): the
+  /// reason is noted as for any other end, so that it is in the log and the next end of a connection is
+  /// not taken for this one's. When the program does say it later, the state is already the same and
+  /// nothing is noted twice.
+  void _showEnded(VpnState s) {
+    _noteDisconnect(s);
+    _show(s.status);
+    _warmLookup(const Duration(seconds: 3));
+  }
+
   /// After [after], a screen still on "Disconnecting..." takes the state the VPN really has: on the
   /// desktop the stop has done all it waits for by then; on Android the service is asked.
   void _settleStop(Duration after) {
@@ -2177,12 +2206,12 @@ class AppState extends ChangeNotifier {
     Timer(after, () async {
       if (vpn.status != VpnStatus.stopping || _stopAsked != asked) return;
       if (isDesktop) {
-        _show(VpnStatus.stopped);
+        _showEnded(const VpnState(VpnStatus.stopped));
         return;
       }
       final real = await VpnChannel.currentStatus();
       if (vpn.status != VpnStatus.stopping || _stopAsked != asked) return;
-      if (real == VpnStatus.stopped || real == VpnStatus.error) _show(real!);
+      if (real == VpnStatus.stopped || real == VpnStatus.error) _showEnded(VpnState(real!));
     });
   }
 
@@ -2326,6 +2355,30 @@ class AppState extends ChangeNotifier {
   List<String> _connectedTags = const [];
   Timer? _listsTimer;
 
+  /// How the lists are fetched now (Settings > Network > Download the lists), or null when the setting
+  /// is "only through the connection" and none is up.
+  ///
+  /// Through the connection means: where the app's own traffic goes by itself (inside the tunnel on
+  /// the phone, and on a computer with the tunnel mode) a plain download is enough. Where it does not,
+  /// the download is handed to the connection: Xray's SOCKS port on the phone (with Xray the app is
+  /// kept out of the tunnel), the local proxy on a computer in the proxy mode.
+  ListFetch? _listFetch() {
+    final route = net.listsRoute;
+    if (route == 'direct') return fetchDirect;
+    if (!connected) return route == 'tunnel' ? null : fetchDirect;
+    if (Platform.isAndroid) {
+      final port = _xrayPort;
+      return port == null ? fetchDirect : fetchViaSocks(port, auth: _xrayAuth);
+    }
+    if (net.tun) return fetchDirect;
+    // A local proxy with a login is not asked: its answer would be "login needed".
+    if (net.proxyUser.isNotEmpty && net.proxyPassword.isNotEmpty) return fetchDirect;
+    return fetchViaProxy(net.proxyPort);
+  }
+
+  /// A line in the log for something that failed and went on (the places that used to say nothing).
+  void _logQuiet(String where, Object error) => log('$where: $error');
+
   /// A while after a connection is up, the lists are fetched again where they are old or missing
   /// (through the tunnel, so a filter on the way does not stop it), and the big ones are made binary
   /// for the next connection. The connection itself never waits for any of this.
@@ -2334,6 +2387,8 @@ class AppState extends ChangeNotifier {
     if (net.bypass.isEmpty && !net.blockAds && _connectedTags.isEmpty) return;
     _listsTimer = Timer(const Duration(seconds: 8), () async {
       if (!connected) return;
+      final fetch = _listFetch();
+      if (fetch == null) return;
       try {
         final dir = await VpnChannel.dataDir();
         await ensureRuleSets(dir, net.bypass,
@@ -2342,21 +2397,39 @@ class AppState extends ChangeNotifier {
             tags: _connectedTags,
             loadBase: _loadAdBase,
             loadBundled: _loadBundledRules,
+            fetch: fetch,
             limit: const Duration(minutes: 5));
         await compileRuleSets(dir, VpnChannel.compileRuleSet);
         await cleanRuleSets(dir, net.bypass, ads: net.blockAds, adsLevel: net.adsLevel, tags: _connectedTags);
-      } catch (_) {}
+      } catch (e) {
+        _logQuiet('Refreshing the lists', e);
+      }
     });
   }
 
   /// Fetches the ad lists again now (Settings > Update now). True when the main list is there after.
+  /// False too when the setting says "only through the connection" and none is up ([listsNeedConnection]).
   Future<bool> refreshAdLists() async {
+    final fetch = _listFetch();
+    if (fetch == null) return false;
     final dir = await VpnChannel.dataDir();
-    final found = await ensureRuleSets(dir, const [], ads: true, adsLevel: net.adsLevel, loadBase: _loadAdBase, force: true, limit: const Duration(minutes: 3));
+    final found = await ensureRuleSets(dir, const [],
+        ads: true,
+        adsLevel: net.adsLevel,
+        loadBase: _loadAdBase,
+        fetch: fetch,
+        force: true,
+        limit: const Duration(minutes: 3));
     notifyListeners();
-    compileRuleSets(dir, VpnChannel.compileRuleSet).catchError((_) => 0);
+    compileRuleSets(dir, VpnChannel.compileRuleSet).catchError((Object e) {
+      _logQuiet('Making the lists binary', e);
+      return 0;
+    });
     return found.containsKey(mainAdTag(net.adsLevel));
   }
+
+  /// True when the lists cannot be fetched now because the setting wants the connection and none is up.
+  bool get listsNeedConnection => net.listsRoute == 'tunnel' && !connected;
 
   /// [chosen] with the names of the servers already looked up over encrypted DNS (and by the system's
   /// resolver when that does not answer), or [chosen] itself when that is off or not possible.
@@ -2427,9 +2500,15 @@ class AppState extends ChangeNotifier {
       log('Disconnecting');
       await VpnChannel.stop();
       // A stop with nothing running (a core that never started, a service that was already gone) gives
-      // no answer: the screen must not stay on "Disconnecting...".
-      _settleStop(const Duration(seconds: 2));
-      _settleStop(const Duration(seconds: 6));
+      // no answer: the screen must not stay on "Disconnecting...". On the desktop the program itself
+      // says "stopped" within 2.5 s, so this comes after that.
+      if (isDesktop) {
+        _settleStop(const Duration(seconds: 4));
+        _settleStop(const Duration(seconds: 8));
+      } else {
+        _settleStop(const Duration(seconds: 2));
+        _settleStop(const Duration(seconds: 6));
+      }
       return;
     }
     final id = ++_startId;
@@ -2517,7 +2596,10 @@ class AppState extends ChangeNotifier {
               tags: tags,
               wait: false,
               refresh: false,
-              waitForTags: true,
+              // The lists a subscription's rules ask for are the only ones waited for, and only when the
+              // setting allows a download before the connection is up.
+              waitForTags: net.listsRoute != 'tunnel',
+              fetch: fetchDirect,
               limit: const Duration(seconds: 10))
           : <String, String>{};
       if (cancelled()) return;
@@ -2830,5 +2912,27 @@ class AppState extends ChangeNotifier {
     } catch (_) {
       return false;
     }
+  }
+}
+
+/// A short key for the ping of a link in the saved servers: 32 bits of FNV-1a of the link, in hex. Two
+/// links with the same key would only share a ping that is measured again at the next test.
+String pingKey(String link) {
+  var h = 0x811c9dc5;
+  for (final unit in link.codeUnits) {
+    h = ((h ^ unit) * 0x01000193) & 0xFFFFFFFF;
+  }
+  return h.toRadixString(16).padLeft(8, '0');
+}
+
+/// [parseLinks], on another isolate when there are many links (a few hundred take long enough to stop the
+/// screen for a moment at the start of the app). The same on the spot when they are few, or when the
+/// result cannot be handed back.
+Future<List<ProxyConfig>> parseLinksOff(List<String> links, {bool secure = false}) async {
+  if (links.length < 300) return parseLinks(links, secure: secure);
+  try {
+    return await Isolate.run(() => parseLinks(links, secure: secure));
+  } catch (_) {
+    return parseLinks(links, secure: secure);
   }
 }

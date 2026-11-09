@@ -39,12 +39,14 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _refresh = ValueNotifier<int>(0);
+  final _search = TextEditingController();
 
   AppState get state => widget.state;
 
   @override
   void dispose() {
     _refresh.dispose();
+    _search.dispose();
     super.dispose();
   }
 
@@ -730,25 +732,32 @@ class _SettingsPageState extends State<SettingsPage> {
         builder: (context, _) => _page([
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: SearchBar(
-              hintText: tr(context, 'settingsSearch'),
-              leading: const Icon(Icons.search),
-              elevation: const WidgetStatePropertyAll(0),
+            // A plain text field: the search bar of the toolkit gave a screen reader a node without a name
+            // and a tap target of 24 dp.
+            child: TextField(
+              controller: _search,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: tr(context, 'settingsSearch'),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: MaterialLocalizations.of(context).clearButtonTooltip,
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(() {
+                          _search.clear();
+                          _query = '';
+                          _otherLanguages = null;
+                        }),
+                      ),
+                filled: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+              ),
               onChanged: (v) => setState(() {
                 _query = v.trim().toLowerCase();
                 if (_query.isEmpty) _otherLanguages = null;
               }),
-              trailing: [
-                if (_query.isNotEmpty)
-                  IconButton(
-                    tooltip: MaterialLocalizations.of(context).clearButtonTooltip,
-                    icon: const Icon(Icons.close),
-                    onPressed: () => setState(() {
-                      _query = '';
-                      _otherLanguages = null;
-                    }),
-                  ),
-              ],
             ),
           ),
           if (_query.isEmpty)

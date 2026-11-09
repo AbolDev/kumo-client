@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io' show Platform, exit;
+import 'dart:io' show Directory, FileSystemEvent, Platform, exit;
 import 'dart:isolate' show Isolate, RawReceivePort;
 import 'dart:ui' show PlatformDispatcher;
 
@@ -148,6 +148,7 @@ class _KumoAppState extends State<KumoApp>
   @override
   void dispose() {
     _externalTimer?.cancel();
+    _externalWatch?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     if (isDesktop) {
       windowManager.removeListener(this);
@@ -253,6 +254,7 @@ class _KumoAppState extends State<KumoApp>
   final _externalQueue = <String>[];
   var _askingExternal = false;
   Timer? _externalTimer;
+  StreamSubscription<FileSystemEvent>? _externalWatch;
 
   /// Starts listening: the phone tells the app when something was opened with it, a computer is
   /// looked at every two seconds (a second copy of the program leaves it in the data folder).
@@ -260,7 +262,21 @@ class _KumoAppState extends State<KumoApp>
     VpnChannel.onExternal(_pullExternal);
     if (Platform.isMacOS) MacExternal.onExternal(_pullExternal);
     if (isDesktop) {
-      _externalTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pullExternal());
+      // A second copy of the program leaves a file in the data folder: the system says when it comes.
+      // A slow look stands in for a system that does not say (it is quick where watching is not possible).
+      var watching = false;
+      try {
+        final dir = Directory(DesktopVpn.instance.dataDir);
+        if (dir.existsSync()) {
+          _externalWatch = dir
+              .watch(events: FileSystemEvent.create | FileSystemEvent.modify | FileSystemEvent.move)
+              .listen((e) {
+            if (e.path.endsWith(ExternalInbox.fileName)) _pullExternal();
+          }, onError: (Object _) {});
+          watching = true;
+        }
+      } catch (_) {}
+      _externalTimer = Timer.periodic(Duration(seconds: watching ? 30 : 2), (_) => _pullExternal());
     }
     _pullExternal();
   }

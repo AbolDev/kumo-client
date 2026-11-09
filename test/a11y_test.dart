@@ -103,19 +103,13 @@ void main() {
         'labeled': await labeledTapTargetGuideline.evaluate(tester),
         'android 48dp': await androidTapTargetGuideline.evaluate(tester),
       };
-      for (final r in results.entries) {
-        if (!r.value.passed) {
-          // ignore: avoid_print
-          print('FAIL ${e.key} / ${r.key}: ${r.value.reason}');
-        }
-      }
       final ex = tester.takeException();
-      if (ex != null) {
-        // ignore: avoid_print
-        print('EXCEPTION ${e.key}: $ex');
-      }
       await tester.pump(const Duration(seconds: 5));
       handle.dispose();
+      for (final r in results.entries) {
+        expect(r.value.passed, isTrue, reason: '${e.key} / ${r.key}: ${r.value.reason}');
+      }
+      expect(ex, isNull, reason: 'EXCEPTION ${e.key}: $ex');
     });
   }
 }

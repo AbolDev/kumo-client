@@ -89,6 +89,25 @@ List<Widget> networkSections(
             : o.bypass.map((c) => bypassCountries[c] ?? c.toUpperCase()).join(', ')),
         onTap: () => _pickCountries(context, state),
       ),
+      // Where the lists of the countries and of ad blocking are fetched from.
+      if (o.bypass.isNotEmpty || o.blockAds)
+        ListTile(
+          leading: const Icon(Icons.cloud_download_outlined),
+          title: Text(tr(context, 'listsRoute')),
+          subtitle: Text(tr(context, switch (o.listsRoute) {
+            'tunnel' => 'listsRouteTunnel',
+            'direct' => 'listsRouteDirect',
+            _ => 'listsRouteAuto',
+          })),
+          onTap: () async {
+            final v = await pickOption<String>(context, tr(context, 'listsRoute'), o.listsRoute, {
+              'auto': tr(context, 'listsRouteAuto'),
+              'tunnel': tr(context, 'listsRouteTunnel'),
+              'direct': tr(context, 'listsRouteDirect'),
+            });
+            if (v != null) await state.updateNet((o) => o.listsRoute = v, reconnect: false);
+          },
+        ),
       ListTile(
         leading: const Icon(Icons.alt_route),
         title: Text(tr(context, 'ruleTitle')),
@@ -169,6 +188,9 @@ List<Widget> networkSections(
       if (o.blockAds)
         flag(tr(context, 'blockAffiliate'), tr(context, 'blockAffiliateDesc'), o.blockAffiliate,
             (v) => o.blockAffiliate = v),
+      if (o.blockAds && o.adsLevel != 'standard')
+        flag(tr(context, 'blockPublicDoh'), tr(context, 'blockPublicDohDesc'), o.blockPublicDoh,
+            (v) => o.blockPublicDoh = v),
       if (o.blockAds)
         ListTile(
           leading: const Icon(Icons.verified_user_outlined),
@@ -890,6 +912,11 @@ class _AdsStatusTileState extends State<_AdsStatusTile> {
   Future<AdsStatus> _read() async => adsStatus(await VpnChannel.dataDir(), widget.state.net.adsLevel);
 
   Future<void> _update() async {
+    // The setting wants the connection and none is up: say so instead of doing nothing.
+    if (widget.state.listsNeedConnection) {
+      toast(context, tr(context, 'listsNeedConnection'));
+      return;
+    }
     setState(() => _busy = true);
     await widget.state.refreshAdLists();
     if (!mounted) return;

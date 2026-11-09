@@ -41,6 +41,7 @@ void main() {
     sw.reset();
     final slow = _reference(password, salt, 600000, 32);
     final slowMs = sw.elapsedMilliseconds;
+    // ignore: avoid_print
     print('600000 rounds: fast $fastMs ms, library $slowMs ms');
     expect(_hex(fast), _hex(slow));
   }, timeout: const Timeout(Duration(minutes: 2)));
