@@ -22,6 +22,7 @@ import '../l10n/extra.dart';
 import '../widgets/prompt_dialog.dart';
 import 'connections_page.dart';
 import 'logs_page.dart';
+import '../widgets/option_tile.dart';
 import 'network_settings.dart';
 import 'share_sheet.dart';
 import 'update_dialog.dart';
@@ -630,7 +631,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         ListTile(
           leading: const Icon(Icons.memory),
-          title: Text(tr(context, 'coreChoice')),
+          title: taggedTitle(tr(context, 'coreChoice')),
           subtitle: Text(tr(context, 'coreChoiceDesc')),
           trailing: Text(state.net.core == 'xray' ? 'Xray' : 'sing-box'),
           onTap: () async {
@@ -641,7 +642,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         ListTile(
           leading: const Icon(Icons.verified_user_outlined),
-          title: Text(tr(context, 'certStore')),
+          title: taggedTitle(tr(context, 'certStore')),
           subtitle: Text(tr(context, 'certStoreDesc')),
           trailing: Text(tr(context, 'store_${state.net.certStore}')),
           onTap: () async {
@@ -656,12 +657,12 @@ class _SettingsPageState extends State<SettingsPage> {
           secondary: const Icon(Icons.schedule),
           value: state.net.ntp,
           onChanged: (v) => state.updateNet((o) => o.ntp = v),
-          title: Text(tr(context, 'ntp')),
+          title: taggedTitle(tr(context, 'ntp')),
           subtitle: Text(tr(context, 'ntpDesc')),
         ),
         ListTile(
           leading: const Icon(Icons.data_object),
-          title: Text(tr(context, 'extraSingbox')),
+          title: taggedTitle(tr(context, 'extraSingbox')),
           subtitle: Text(tr(context, 'extraSingboxDesc')),
           trailing: state.net.extraSingbox.isEmpty ? null : const Icon(Icons.check),
           onTap: () async {
@@ -672,7 +673,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         ListTile(
           leading: const Icon(Icons.data_object),
-          title: Text(tr(context, 'extraXray')),
+          title: taggedTitle(tr(context, 'extraXray')),
           subtitle: Text(tr(context, 'extraXrayDesc')),
           trailing: state.net.extraXray.isEmpty ? null : const Icon(Icons.check),
           onTap: () async {
@@ -683,7 +684,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         ListTile(
           leading: const Icon(Icons.receipt_long),
-          title: Text(tr(context, 'logLevel')),
+          title: taggedTitle(tr(context, 'logLevel')),
           subtitle: Text(tr(context, 'logLevelDesc')),
           trailing: Text(state.net.logLevel),
           onTap: () => _choose<String>(
@@ -716,7 +717,7 @@ class _SettingsPageState extends State<SettingsPage> {
         by(Icons.desktop_windows),
         by(Icons.backup_outlined),
       ]),
-      with_(by(Icons.lan), [by(Icons.dns), by(Icons.tune)]),
+      with_(by(Icons.lan), [by(Icons.alt_route), by(Icons.dns), by(Icons.shield_moon_outlined), by(Icons.tune)]),
       with_(by(Icons.monitor_heart_outlined), [by(Icons.receipt_long)]),
       by(Icons.info_outline)!,
     ];
@@ -778,8 +779,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// The words a settings row shows (title and description), lower case.
   String _words(Widget w) {
-    String text(Widget? t) => t is Text ? (t.data ?? '') : '';
+    String text(Widget? t) {
+      if (t is Text) return t.data ?? '';
+      // A title with a label after it (taggedTitle).
+      if (t is Row) return t.children.map(text).join(' ');
+      if (t is Flexible) return text(t.child);
+      return '';
+    }
+
     return switch (w) {
+      InfoSwitchTile() => '${w.title} ${w.description}',
       SwitchListTile() => '${text(w.title)} ${text(w.subtitle)}',
       ListTile() => '${text(w.title)} ${text(w.subtitle)}',
       RadioListTile() => text(w.title),

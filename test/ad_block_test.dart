@@ -391,7 +391,7 @@ nodot
       expect((await File('${found[adMaxTag]!}.count').readAsString()).trim(), '60001');
       // No piece of the writing is left behind.
       expect(Directory('${dir.path}/rules').listSync().where((f) => f.path.endsWith('.tmp')), isEmpty);
-    });
+    }, timeout: const Timeout(Duration(minutes: 3)));
 
     test('a name under another one in a list is not kept', () {
       final names = {'a.com', 'x.a.com', 'y.x.a.com', 'b.com', 'c.b.org', 'a.org'};

@@ -129,6 +129,9 @@ qbaLhxGcgyeewWZ44nw0WpeGxlrc8JTGb6EjcoCGKB2HC7MhzHOFkQE/CByomi9m
 aNGbW61PH6/+FJgDIrfgf5I=
 -----END PRIVATE KEY-----''';
 
+// ignore: avoid_print
+void printOnError(Object e) => print('SOCKSGET FAILED: $e');
+
 void main() {
   late HttpServer web;
   late ServerSocket socks;
@@ -174,7 +177,7 @@ void main() {
   });
 
   test('a page is fetched through the proxy, and the proxy is asked for the name, not an address', () async {
-    final body = await socksGet('http://lists.test/hello?x=1', socks.port);
+    final body = await socksGet('http://lists.test/hello?x=1', socks.port, onError: (e) => printOnError(e));
     expect(utf8.decode(body!), 'hello x=1');
     expect(seen, ['lists.test:80']);
   });

@@ -15,6 +15,7 @@ import '../l10n/extra.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
+import '../widgets/option_tile.dart';
 import '../widgets/prompt_dialog.dart';
 import 'app_routing_page.dart';
 import 'routing_rules_page.dart';
@@ -30,12 +31,25 @@ List<Widget> networkSections(
   final o = state.net;
   final win = isDesktop; // the desktop has no per-phone options
 
-  Widget flag(String title, String desc, bool value, void Function(bool) set) =>
-      SwitchListTile(
+  Widget flag(String title, String desc, bool value, void Function(bool) set,
+          {bool advanced = false, bool caution = false}) =>
+      InfoSwitchTile(
+        title: title,
+        description: desc,
         value: value,
+        tag: advanced,
+        caution: caution,
         onChanged: (v) => state.updateNet((o) => set(v)),
-        title: Text(title),
-        subtitle: Text(desc),
+      );
+
+  /// The end of a section: its options back to the defaults.
+  Widget reset(String id) => ListTile(
+        leading: const Icon(Icons.restore),
+        title: Text(tr(context, 'resetSection')),
+        subtitle: Text(tr(context, 'resetSectionDesc')),
+        onTap: () async {
+          if (await confirmReset(context)) await state.updateNet((o) => o.resetSection(id));
+        },
       );
 
   final modeText = switch (o.appMode) {
@@ -70,7 +84,32 @@ List<Widget> networkSections(
             ? tr(context, 'proxyLoginOff')
             : tr(context, 'proxyLoginOn', {'user': o.proxyUser})),
         onTap: () => _editProxyLogin(context, state),
-      ),      ListTile(
+      ),            flag(tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),
+          o.killSwitch, (v) => o.killSwitch = v, caution: true),
+      if (!win)
+        ListTile(
+          leading: const Icon(Icons.shield_outlined),
+          title: Text(tr(context, 'vpnSettings')),
+          onTap: VpnChannel.openVpnSettings,
+        ),
+      flag(tr(context, 'failover'), tr(context, 'failoverDesc'), o.failover,
+          (v) => o.failover = v),
+      SwitchListTile(
+        value: o.shareLan,
+        onChanged: (v) => state.updateNet((o) {
+          o.shareLan = v;
+          if (v && o.lanPassword.isEmpty) o.lanPassword = _newPassword();
+          if (v && o.lanPort == o.proxyPort) o.lanPort = o.proxyPort + 1;
+        }),
+        secondary: const Icon(Icons.wifi_tethering),
+        title: Text(tr(context, 'lanShare')),
+        subtitle: Text(tr(context, 'lanShareDesc')),
+      ),
+      if (o.shareLan) ..._lanTiles(context, state),
+      reset('network'),
+    ]),
+    section(Icons.alt_route, tr(context, 'routingSection'), [
+      ListTile(
         leading: const Icon(Icons.apps_outage),
         title: Text(tr(context, 'appRouting')),
         subtitle: Text(modeText),
@@ -120,28 +159,7 @@ List<Widget> networkSections(
           MaterialPageRoute<void>(settings: const RouteSettings(name: '/RoutingRulesPage'), builder: (_) => RoutingRulesPage(state: state)),
         ),
       ),
-      flag(tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),
-          o.killSwitch, (v) => o.killSwitch = v),
-      if (!win)
-        ListTile(
-          leading: const Icon(Icons.shield_outlined),
-          title: Text(tr(context, 'vpnSettings')),
-          onTap: VpnChannel.openVpnSettings,
-        ),
-      flag(tr(context, 'failover'), tr(context, 'failoverDesc'), o.failover,
-          (v) => o.failover = v),
-      SwitchListTile(
-        value: o.shareLan,
-        onChanged: (v) => state.updateNet((o) {
-          o.shareLan = v;
-          if (v && o.lanPassword.isEmpty) o.lanPassword = _newPassword();
-          if (v && o.lanPort == o.proxyPort) o.lanPort = o.proxyPort + 1;
-        }),
-        secondary: const Icon(Icons.wifi_tethering),
-        title: Text(tr(context, 'lanShare')),
-        subtitle: Text(tr(context, 'lanShareDesc')),
-      ),
-      if (o.shareLan) ..._lanTiles(context, state),
+      reset('routing'),
     ]),
     section(Icons.dns, tr(context, 'dns'), [
       RadioGroupLike(
@@ -165,6 +183,14 @@ List<Widget> networkSections(
           (v) => o.strictDns = v),
       flag(tr(context, 'blockStun'), tr(context, 'blockStunDesc'), o.blockStun,
           (v) => o.blockStun = v),
+      ListTile(
+        leading: const Icon(Icons.travel_explore),
+        title: Text(tr(context, 'dnsCheck')),
+        onTap: () => _leakCheck(context, state),
+      ),
+      reset('dns'),
+    ]),
+    section(Icons.shield_moon_outlined, tr(context, 'adsSection'), [
       flag(tr(context, 'blockAds'), tr(context, 'blockAdsDesc'), o.blockAds,
           (v) => o.blockAds = v),
       if (o.blockAds)
@@ -197,11 +223,8 @@ List<Widget> networkSections(
           title: Text(tr(context, 'adAllow')),
           subtitle: Text(o.adAllow.isEmpty ? tr(context, 'adAllowDesc') : o.adAllow.take(3).join(', ') + (o.adAllow.length > 3 ? ' +${o.adAllow.length - 3}' : '')),
           onTap: () => _editAdAllow(context, state),
-        ),      ListTile(
-        leading: const Icon(Icons.travel_explore),
-        title: Text(tr(context, 'dnsCheck')),
-        onTap: () => _leakCheck(context, state),
-      ),
+        ),
+      reset('ads'),
     ]),
     section(Icons.tune, tr(context, 'advanced'), [
       flag(tr(context, 'tlsFragment'), tr(context, 'tlsFragmentDesc'),
@@ -282,6 +305,7 @@ List<Widget> networkSections(
               ),
         onTap: () => _pickChain(context, state),
       ),
+      reset('advanced'),
     ]),
   ];
 }

@@ -128,6 +128,60 @@ const defaultMtu = 1500;
 
 /// Everything in Settings that changes how traffic is carried.
 class NetOptions {
+  /// Puts the options of one section of Settings > Network ([id]: network, routing, dns, ads, advanced)
+  /// back to what a new install has.
+  void resetSection(String id) {
+    final d = NetOptions();
+    switch (id) {
+      case 'network':
+        tun = d.tun;
+        proxyPort = d.proxyPort;
+        keepProxy = d.keepProxy;
+        proxyUser = d.proxyUser;
+        proxyPassword = d.proxyPassword;
+        killSwitch = d.killSwitch;
+        failover = d.failover;
+        shareLan = d.shareLan;
+        lanPort = d.lanPort;
+        lanUser = d.lanUser;
+        lanPassword = d.lanPassword;
+      case 'routing':
+        appMode = d.appMode;
+        apps = [];
+        bypass = [];
+        listsRoute = d.listsRoute;
+        directRules = [];
+        proxyRules = [];
+        blockRules = [];
+      case 'dns':
+        dns = d.dns;
+        customDns = d.customDns;
+        fakeIp = d.fakeIp;
+        encryptedLookup = d.encryptedLookup;
+        strictDns = d.strictDns;
+        blockStun = d.blockStun;
+      case 'ads':
+        blockAds = d.blockAds;
+        adsLevel = d.adsLevel;
+        adAllow = [];
+        blockCookieBanners = d.blockCookieBanners;
+        blockAffiliate = d.blockAffiliate;
+        blockPublicDoh = d.blockPublicDoh;
+      case 'advanced':
+        tlsFragment = d.tlsFragment;
+        tlsRecordFragment = d.tlsRecordFragment;
+        mux = d.mux;
+        muxProtocol = d.muxProtocol;
+        tcpFastOpen = d.tcpFastOpen;
+        tcpMultiPath = d.tcpMultiPath;
+        connectTimeout = d.connectTimeout;
+        networkStrategy = d.networkStrategy;
+        mtu = d.mtu;
+        fingerprint = d.fingerprint;
+        chain = d.chain;
+    }
+  }
+
   NetOptions();
 
   /// Tunnel the whole device: on by default on Android, off on the desktop (where it needs

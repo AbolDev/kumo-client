@@ -22,11 +22,12 @@ Future<Uint8List?> socksGet(
   Duration timeout = const Duration(seconds: 25),
   int maxBytes = 64 * 1024 * 1024,
   bool Function(X509Certificate certificate)? onBadCertificate,
+  void Function(Object error)? onError,
 }) async {
   var target = Uri.tryParse(url);
   for (var hop = 0; hop < 4; hop++) {
     if (target == null || target.host.isEmpty || (target.scheme != 'http' && target.scheme != 'https')) return null;
-    final reply = await _fetchOnce(target, socksPort, auth, timeout, maxBytes, onBadCertificate);
+    final reply = await _fetchOnce(target, socksPort, auth, timeout, maxBytes, onBadCertificate, onError);
     if (reply == null) return null;
     if (reply.status == 200) return reply.body;
     final where = reply.location;
@@ -40,7 +41,7 @@ Future<Uint8List?> socksGet(
 }
 
 Future<_Reply?> _fetchOnce(Uri uri, int socksPort, XrayAuth? auth, Duration timeout, int maxBytes,
-    bool Function(X509Certificate)? onBad) async {
+    bool Function(X509Certificate)? onBad, void Function(Object error)? onError) async {
   final open = <RawSocket>[];
   Future<_Reply?> run() async {
     final raw = await RawSocket.connect(InternetAddress.loopbackIPv4, socksPort, timeout: timeout);
@@ -58,8 +59,14 @@ Future<_Reply?> _fetchOnce(Uri uri, int socksPort, XrayAuth? auth, Duration time
   }
 
   try {
-    return await run().timeout(timeout, onTimeout: () => null);
-  } catch (_) {
+    final reply = await run().timeout(timeout, onTimeout: () {
+      onError?.call('timeout');
+      return null;
+    });
+    if (reply == null) onError?.call('no answer from ${uri.host}');
+    return reply;
+  } catch (e) {
+    onError?.call(e);
     return null;
   } finally {
     for (final s in open) {
