@@ -124,7 +124,10 @@ class NameResolver {
     String? ip;
     final paused = _dohBlockedUntil != null && _now().isBefore(_dohBlockedUntil!);
     if (!paused) {
-      ip = await _doh(host).timeout(dohWait, onTimeout: () => null).catchError((Object _) => null);
+      // Made a Future<String?> first: a lookup typed Future<String> could not take the null of the timeout.
+      ip = await _doh(host)
+          .then<String?>((v) => v, onError: (Object _) => null)
+          .timeout(dohWait, onTimeout: () => null);
       if (ip == null) _dohBlockedUntil = _now().add(dohPause);
     }
     ip ??= await _system(host);
