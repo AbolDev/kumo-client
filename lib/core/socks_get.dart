@@ -6,6 +6,9 @@ import 'dart:typed_data';
 
 import 'singbox_config.dart' show XrayAuth;
 
+/// For tests: what happens on the sockets, as text.
+void Function(String line)? socksDebug;
+
 /// What a request answered: the status, where it points to when it redirects, and the body.
 typedef _Reply = ({int status, String? location, Uint8List body});
 
@@ -272,6 +275,7 @@ class _Pipe {
   var _closed = false;
 
   void _onEvent(RawSocketEvent event) {
+    socksDebug?.call('event $event');
     if (event == RawSocketEvent.read) {
       while (true) {
         final data = socket.read();
@@ -353,7 +357,9 @@ class _Pipe {
   Future<void> write(List<int> data) async {
     var sent = 0;
     while (sent < data.length) {
-      sent += socket.write(data, sent, data.length - sent);
+      final n = socket.write(data, sent, data.length - sent);
+      socksDebug?.call('write ${data.length - sent} -> $n');
+      sent += n;
       if (sent < data.length) {
         final w = _writable = Completer<void>();
         socket.writeEventsEnabled = true;

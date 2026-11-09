@@ -1458,8 +1458,9 @@ class _ListBar extends StatelessWidget {
               ]),
             );
           }
+          // 56: the chips are 48 high inside the padding (the tap target a finger needs).
           return SizedBox(
-            height: 52,
+            height: 56,
             child: ListView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
