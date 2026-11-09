@@ -4,9 +4,11 @@ import 'dart:io';
 
 import 'proxy_watchdog.dart';
 import 'system_proxy.dart';
+import 'win_registry.dart';
 import 'win_tools.dart';
 
-const _key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
+const _subKey = r'Software\Microsoft\Windows\CurrentVersion\Internet Settings';
+const _key = 'HKCU\\$_subKey';
 
 /// The Windows system proxy (what browsers and most programs follow). The previous setting is
 /// written to a file first, so it can be restored even after the app was killed.
@@ -17,7 +19,11 @@ class WinProxy implements SystemProxy {
 
   File get _backup => File('$dataDir\\system_proxy_backup.json');
 
+  // Through the Windows API (instant); reg.exe only when that cannot be used.
   Future<String?> _query(String name) async {
+    try {
+      return WinRegistry.read(_subKey, name);
+    } catch (_) {}
     final r = await Process.run(winTool('reg'), ['query', _key, '/v', name]);
     if (r.exitCode != 0) return null;
     final m = RegExp('$name\\s+REG_\\w+\\s+(.*)').firstMatch('${r.stdout}');
@@ -25,6 +31,15 @@ class WinProxy implements SystemProxy {
   }
 
   Future<void> _set(String name, String type, String? value) async {
+    try {
+      if (type == 'REG_DWORD' && value != null) {
+        final v = value.startsWith('0x') ? int.parse(value.substring(2), radix: 16) : int.parse(value);
+        WinRegistry.writeDword(_subKey, name, v);
+      } else {
+        WinRegistry.writeString(_subKey, name, value);
+      }
+      return;
+    } catch (_) {}
     if (value == null) {
       await Process.run(winTool('reg'), ['delete', _key, '/v', name, '/f']);
     } else {

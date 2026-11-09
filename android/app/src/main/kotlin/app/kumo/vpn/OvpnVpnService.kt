@@ -260,7 +260,7 @@ class OvpnVpnService : VpnService(), OvpnManagement.Handler {
         process = null
         runCatching { management?.send("signal SIGTERM") }
         if (p != null) {
-            val ended = runCatching { p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS) }.getOrDefault(false)
+            val ended = runCatching { p.waitFor(1, java.util.concurrent.TimeUnit.SECONDS) }.getOrDefault(false)
             if (!ended) runCatching { p.destroyForcibly() }
         }
         runCatching { management?.close() }

@@ -252,7 +252,10 @@ class AppState extends ChangeNotifier {
       lastDisconnect = (key: 'reasonOutside', args: const <String, Object>{});
     }
     _expectStop = false;
-    log('Disconnect reason: ${trFor('en', lastDisconnect!.key, lastDisconnect!.args)}');
+    final asked = _stopAsked;
+    _stopAsked = null;
+    final took = asked == null ? '' : ' (${DateTime.now().difference(asked).inMilliseconds} ms)';
+    log('Disconnect reason: ${trFor('en', lastDisconnect!.key, lastDisconnect!.args)}$took');
   }
 
   /// Delay through the live tunnel, measured after connecting (null = not measured yet).
@@ -2139,6 +2142,25 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// When the disconnect was asked for (for the time it took, in the log).
+  DateTime? _stopAsked;
+
+  /// After [after], a screen still on "Disconnecting..." takes the state the VPN really has: on the
+  /// desktop the stop has done all it waits for by then; on Android the service is asked.
+  void _settleStop(Duration after) {
+    final asked = _stopAsked;
+    Timer(after, () async {
+      if (vpn.status != VpnStatus.stopping || _stopAsked != asked) return;
+      if (isDesktop) {
+        _show(VpnStatus.stopped);
+        return;
+      }
+      final real = await VpnChannel.currentStatus();
+      if (vpn.status != VpnStatus.stopping || _stopAsked != asked) return;
+      if (real == VpnStatus.stopped || real == VpnStatus.error) _show(real!);
+    });
+  }
+
   /// The server(s) a connection would use: the picked one, or in automatic mode the fastest few.
   /// Automatic mode only groups sing-box servers; the ones only Xray can carry (XHTTP, mKCP ...)
   /// need their own Xray process, so they are used when picked by hand (or when nothing else is
@@ -2324,14 +2346,13 @@ class AppState extends ChangeNotifier {
       }
       _show(VpnStatus.stopping);
       _expectStop = true;
+      _stopAsked = DateTime.now();
+      log('Disconnecting');
       await VpnChannel.stop();
-      // On the desktop a stop with nothing running (a core that never started) gives no answer: the screen
-      // must not stay on "Disconnecting...".
-      if (isDesktop) {
-        Timer(const Duration(seconds: 8), () {
-          if (vpn.status == VpnStatus.stopping) _show(VpnStatus.stopped);
-        });
-      }
+      // A stop with nothing running (a core that never started, a service that was already gone) gives
+      // no answer: the screen must not stay on "Disconnecting...".
+      _settleStop(const Duration(seconds: 2));
+      _settleStop(const Duration(seconds: 6));
       return;
     }
     final id = ++_startId;

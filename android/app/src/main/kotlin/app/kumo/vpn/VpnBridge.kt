@@ -74,9 +74,11 @@ object VpnBridge {
         gate.notifyAll()
     }
 
-    fun closeGate() = synchronized(gate) {
+    /** New delay tests are refused from now on; running ones are waited for up to [waitMs]. (They run
+     *  cores of their own, so a stop does not wait for them at all.) */
+    fun closeGate(waitMs: Long = 3_000) = synchronized(gate) {
         closers++
-        val end = System.currentTimeMillis() + 15_000
+        val end = System.currentTimeMillis() + waitMs
         while (runningDelays > 0) {
             val left = end - System.currentTimeMillis()
             if (left <= 0) break

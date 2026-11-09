@@ -200,6 +200,19 @@ class VpnChannel {
   static Future<void> stop() =>
       _win ? DesktopVpn.instance.stop() : _control.invokeMethod('stop');
 
+  /// Android: the state the VPN service holds now (null on the desktop, or when it cannot be asked).
+  /// The screen uses it when an expected change of state never arrived.
+  static Future<VpnStatus?> currentStatus() async {
+    if (_win) return null;
+    try {
+      final m = await _control.invokeMethod<Map<Object?, Object?>>('status');
+      final s = m?['status'];
+      return VpnStatus.values.where((v) => v.name == s).firstOrNull;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Turns the background subscription download job on or off.
   static Future<void> scheduleSubUpdates(bool enabled) async =>
       _win ? null : _control.invokeMethod('scheduleSubUpdates', {'enabled': enabled});

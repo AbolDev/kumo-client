@@ -316,7 +316,7 @@ rm -f "$5"
 set -C
 "$1" run -c "$T/config.json" >"$5" 2>&1 &
 P=$!
-while kill -0 "$P" 2>/dev/null && [ ! -e "$3" ] && kill -0 "$4" 2>/dev/null; do sleep 1; done
+while kill -0 "$P" 2>/dev/null && [ ! -e "$3" ] && kill -0 "$4" 2>/dev/null; do sleep 0.2 2>/dev/null || sleep 1; done
 kill "$P" 2>/dev/null
 wait "$P" 2>/dev/null
 rm -rf "$T"
@@ -391,6 +391,8 @@ rm -rf "$T"
     final output = StringBuffer();
     try {
       await _ready;
+      await _settled();
+      if (stale()) return;
       final cfg = jsonDecode(configJson) as Map<String, dynamic>;
       // The standby proxy holds the same port, so it gives way to a core that serves the proxy too.
       // A tunnel core serves no proxy: the standby stays, and its programs are not cut.
@@ -648,6 +650,7 @@ rm -rf "$T"
     final output = StringBuffer();
     try {
       await _ready;
+      await _settled();
       if (stale()) return false;
       await Directory(dataDir).create(recursive: true);
       if (xrayConfig != null && xrayPort != null) {
@@ -778,10 +781,27 @@ rm -rf "$T"
     }
     _emit(VpnStatus.stopping);
     final gen = _gen;
-    // A tool that never answers (the system proxy setting, a core that does not die) must not keep the
-    // screen on "Disconnecting" for good: after this wait the connection is shown as ended anyway.
-    await _teardown().timeout(const Duration(seconds: 15), onTimeout: () {});
+    // A tool that is slow to answer (the system proxy setting, a core that does not die at once) must
+    // not keep the screen on "Disconnecting": after this short wait the connection is shown as ended,
+    // and what is left finishes in the background. The next connection waits for it (_settled).
+    final teardown = _teardown();
+    _pendingStop = teardown;
+    await teardown.timeout(_stopShownAfter, onTimeout: () {});
     if (gen == _gen) _emit(VpnStatus.stopped);
+  }
+
+  static const _stopShownAfter = Duration(milliseconds: 2500);
+
+  /// The teardown of the last connection, which may still run after it was shown as ended.
+  Future<void>? _pendingStop;
+
+  /// Waits (a while at most) for the teardown of the last connection, so a new connection does not
+  /// meet a core that is still dying or a system proxy that is still being put back.
+  Future<void> _settled() async {
+    final p = _pendingStop;
+    if (p == null) return;
+    await p.timeout(const Duration(seconds: 15), onTimeout: () {});
+    if (identical(_pendingStop, p)) _pendingStop = null;
   }
 
   Future<void> _teardown() async {

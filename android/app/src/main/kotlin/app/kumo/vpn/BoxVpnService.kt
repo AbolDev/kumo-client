@@ -42,6 +42,7 @@ import io.nekohasekai.libbox.StringIterator
 import io.nekohasekai.libbox.SystemProxyStatus
 import io.nekohasekai.libbox.TunOptions
 import io.nekohasekai.libbox.WIFIState
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
@@ -97,6 +99,13 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         // Starting, stopping and restarting never overlap, not even between an old service
         // instance that is still shutting down and the new one that replaces it.
         private val lifecycle = Mutex()
+
+        // The core of a connection the user ended may still be closing in the background (its own
+        // close has no time limit): the next core waits for it a while before it starts.
+        @Volatile private var closing: CompletableDeferred<Unit>? = null
+
+        // How long a disconnect waits for the core to close before it is shown as done.
+        private const val QUICK_CLOSE_MS = 1_500L
 
         // The instance that owns the process-wide VPN state.
         @Volatile private var live: BoxVpnService? = null
@@ -256,6 +265,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     private suspend fun startProxy() {
         val path = standbyPath ?: return
         if (VpnBridge.status != VpnBridge.STOPPED && VpnBridge.status != VpnBridge.ERROR) return
+        awaitClosing()
         VpnBridge.closeGate()
         try {
             App.ensureLibbox()
@@ -505,12 +515,16 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     /** Runs with [lifecycle] held. A stop that arrived while this was queued wins. */
     private suspend fun startVpn(path: String) {
         if (VpnBridge.status != VpnBridge.STARTING) return
+        awaitClosing()
+        if (VpnBridge.status != VpnBridge.STARTING) return
         VpnBridge.closeGate()
         try {
             App.ensureLibbox()
             val content = File(path).readText()
             require(content.isNotBlank()) { "empty configuration" }
             xrayConfigPath?.let { startXray(it) }
+            // A stop that came while Xray was starting: the core is not started at all (its teardown follows).
+            if (VpnBridge.status != VpnBridge.STARTING) return
             DefaultNetworkMonitor.start()
             val server = CommandServer(this, this)
             server.start()
@@ -540,14 +554,22 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         }
     }
 
-    /** Runs with [lifecycle] held. */
-    private suspend fun shutDown() {
-        VpnBridge.closeGate()
+    /** Runs with [lifecycle] held. [quick]: the user ends the connection, so nothing that can be
+     *  left to finish in the background is waited for (see [teardown]). */
+    private suspend fun shutDown(quick: Boolean = false) {
+        VpnBridge.closeGate(if (quick) 0 else 3_000)
         try {
-            teardown()
+            teardown(quick)
         } finally {
             VpnBridge.openGate()
         }
+    }
+
+    /** Runs with [lifecycle] held, before a core starts: the core of the last connection must be gone. */
+    private suspend fun awaitClosing() {
+        val c = closing ?: return
+        withTimeoutOrNull(8_000) { c.await() }
+        if (closing === c) closing = null
     }
 
     private fun stopVpn() {
@@ -556,13 +578,17 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             return
         }
         if (VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.STOPPING) {
-            if (VpnBridge.status == VpnBridge.STOPPED) stopForegroundAndSelf()
+            if (VpnBridge.status == VpnBridge.STOPPED) {
+                stopForegroundAndSelf()
+                // Said again: the app may be showing "Disconnecting" for a connection that never got here.
+                VpnBridge.update(VpnBridge.STOPPED, VpnBridge.lastError)
+            }
             return
         }
         everStarted = false // the user (or the app) ended it: nothing to guard
         VpnBridge.update(VpnBridge.STOPPING)
         scope.launch {
-            lifecycle.withLock { shutDown() }
+            lifecycle.withLock { shutDown(quick = true) }
             // With the proxy kept running the service stays: only the tunnel ends.
             if (standbyPath != null) {
                 runCatching { showProxyForeground() }
@@ -726,21 +752,33 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         false
     }
 
-    private suspend fun teardown() {
+    /** [quick]: the core's close is waited for only [QUICK_CLOSE_MS]; the rest of it finishes on its own
+     *  thread, and the next core waits for that ([awaitClosing]). */
+    private suspend fun teardown(quick: Boolean = false) {
         runCatching { blockFd?.close() }
         blockFd = null
         stopStatsClient()
         // Xray is the core's upstream: stopping it first makes the core's open connections fail at
         // once instead of waiting for them to end, which is what closing the service waits for.
         runCatching { stopXray() }
-        // The core owns the tun descriptor while it runs: let it shut down first, and only
-        // then release our handle, otherwise it can read from a descriptor that is already gone.
-        runCatching { commandServer?.closeService() }
+        val server = commandServer
+        commandServer = null
+        if (server != null) {
+            // The core closes the tunnel early in its close; what comes after (open connections, lookups,
+            // the outbounds) has no time limit and can hold it for many seconds.
+            val done = CompletableDeferred<Unit>()
+            closing = done
+            Thread({
+                runCatching { server.closeService() }
+                runCatching { server.close() }
+                done.complete(Unit)
+            }, "core-close").start()
+            if (quick) withTimeoutOrNull(QUICK_CLOSE_MS) { done.await() } else done.await()
+        }
+        // libbox runs the tunnel on its own copy of the descriptor (a dup), so ours can always go.
         runCatching { tunFd?.close() }
         tunFd = null
         runCatching { DefaultNetworkMonitor.stop() }
-        runCatching { commandServer?.close() }
-        commandServer = null
     }
 
     private fun stopForegroundAndSelf() {
