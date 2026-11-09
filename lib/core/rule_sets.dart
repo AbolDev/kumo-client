@@ -315,7 +315,7 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
   final found = <String, String>{};
   final jobs = <Future<void>>[];
 
-  Future<void> fetch(String tag, List<String> urls,
+  Future<void> fetchList(String tag, List<String> urls,
       {bool text = false, Duration maxAge = _maxAge, bool waitHere = false}) async {
     final file = File('$dir/rules/$tag.${text ? 'json' : 'srs'}');
     Future<void> one() async {
@@ -344,11 +344,11 @@ Future<Map<String, String>> ensureRuleSets(String dir, List<String> countries,
 
   final asked = tags.toSet();
   for (final e in _sourcesFor(countries, ads, tags).entries) {
-    await fetch(e.key, e.value, waitHere: waitForTags && asked.contains(e.key));
+    await fetchList(e.key, e.value, waitHere: waitForTags && asked.contains(e.key));
   }
   if (ads) {
     for (final s in adSources(adsLevel)) {
-      await fetch(s.tag, s.urls, text: s.text, maxAge: adsMaxAge);
+      await fetchList(s.tag, s.urls, text: s.text, maxAge: adsMaxAge);
     }
     if (adsLevel == 'max') {
       jobs.add(_ensureMaxList(dir, wait: wait, refresh: refresh, force: force, fetch: fetch).then((ok) {

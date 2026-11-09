@@ -1,10 +1,10 @@
-import 'dart:convert';
-import 'dart:io';
-
 /// What "Block ads and trackers" uses: lists that are downloaded and kept up to date, a big list
 /// built into the app (used when the downloads cannot be had: GitHub is often unreachable), and a
 /// short list of the worst offenders that is always there.
 library;
+
+import 'dart:convert';
+import 'dart:io';
 
 /// How much is blocked: [standard] is ads and trackers; [strong] adds a much bigger list, the
 /// telemetry and the ad servers of the big companies, and the public encrypted-DNS servers that

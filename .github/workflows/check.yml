@@ -1,0 +1,48 @@
+name: Check
+
+# A quick look at every branch that is not main: the analyzer and the tests, without the builds (those run
+# for main and for tags in build.yml). A branch is checked in a few minutes instead of waiting for a build.
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+
+      # The same sing-box the app ships, so that the tests can ask it to check the configurations the app builds.
+      - run: bash tools/fetch_unix_core.sh linux x64
+      - run: flutter test
+        env:
+          KUMO_CORE: ${{ github.workspace }}/linux/core/kumo-core
+
+  check-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      - run: flutter pub get
+      - run: flutter test test/win_registry_test.dart test/win_dpapi_test.dart test/win_capture_test.dart test/safe_storage_test.dart test/ovpn_runner_test.dart
