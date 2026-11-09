@@ -16,19 +16,13 @@ import 'share_sheet.dart' show toast;
 
 const _stateFile = 'clean_ip_scan.json';
 
-/// How many addresses a scan draws and how long each may take to answer.
-enum _Depth { quick, normal, deep, custom }
-
-const _presets = <_Depth, ({int count, int seconds})>{
-  _Depth.quick: (count: 48, seconds: 2),
-  _Depth.normal: (count: cleanIpTcpCount, seconds: 2),
-  _Depth.deep: (count: 300, seconds: 3),
-};
-
-/// The steps of the number of addresses in the custom depth.
-const _countSteps = [10, 25, 50, 96, 150, 200, 300, 400, 500];
-
 enum _Sort { fast, loss, speed }
+
+/// How many good addresses are drawn while a scan runs (all of them are kept).
+const _liveShown = 30;
+
+/// 10000 as "10,000".
+String _grouped(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
 
 typedef _Server = ({String name, LinkFields fields, ProxyConfig config});
 
@@ -55,8 +49,9 @@ class _CleanIpPageState extends State<CleanIpPage> {
   final _custom = TextEditingController();
   final _ports = TextEditingController(text: '443');
   final _sni = TextEditingController();
-  var _depth = _Depth.normal;
   var _count = cleanIpTcpCount, _seconds = 2, _stopAfter = 0, _samples = 1;
+  // Progress comes for every probe; the screen is redrawn at most this often.
+  var _lastPaint = DateTime(0);
   var _gentle = false, _skip = false, _neighbors = false, _fragment = false, _colo = false, _speed = false;
   String? _listError, _numberError, _note;
 
@@ -288,16 +283,14 @@ class _CleanIpPageState extends State<CleanIpPage> {
       options: options,
       resume: resume,
       onProgress: (s, d, t) {
-        if (mounted) {
-          setState(() {
-            _stage = s;
-            _done = d;
-            _total = t;
-          });
-        }
+        _stage = s;
+        _done = d;
+        _total = t;
+        _paint(force: d == t);
       },
       onResult: (r) {
-        if (mounted) setState(() => _live = [..._live, r]);
+        _live.add(r);
+        _paint();
       },
       onCheckpoint: (state) => _save(state, options, server),
       cancelled: () => _cancel || !mounted,
@@ -309,7 +302,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
       setState(() {
         _running = false;
         _enriching = false;
-        _found = _live.isEmpty ? null : _live;
+        _found = _live.isEmpty ? null : (_sorted(_live).take(cleanIpKeep * 2).toList());
       });
       _loadSaved();
       return;
@@ -339,6 +332,15 @@ class _CleanIpPageState extends State<CleanIpPage> {
       _sort = _Sort.fast;
       if (options.stopAfter > 0 && results.length >= options.stopAfter) _note = tr(context, 'cleanIpStopped');
     });
+  }
+
+  /// Redraws the scan, at most ten times a second (a scan of thousands reports thousands of times).
+  void _paint({bool force = false}) {
+    if (!mounted) return;
+    final now = DateTime.now();
+    if (!force && now.difference(_lastPaint) < const Duration(milliseconds: 100)) return;
+    _lastPaint = now;
+    setState(() {});
   }
 
   Future<void> _resume() async {
@@ -700,6 +702,17 @@ class _CleanIpPageState extends State<CleanIpPage> {
     );
   }
 
+  /// The longest the first stage can take (every address waiting its whole timeout), as a hint.
+  String _estimate() {
+    final ports = _withServer ? 1 : _ports.text.split(RegExp(r'[\s,;]+')).where((p) => p.isNotEmpty).length.clamp(1, cleanIpMaxPorts).toInt();
+    final probes = _count * _samples * ports;
+    final wait = _gentle ? (_seconds < gentleMinTimeout ? gentleMinTimeout : _seconds) : _seconds;
+    var seconds = probes * wait / cleanIpWorkers(probes, gentle: _gentle);
+    if (_gentle && probes / gentleProbesPerSecond > seconds) seconds = probes / gentleProbesPerSecond;
+    final minutes = (seconds / 60).ceil();
+    return minutes <= 1 ? tr(context, 'cleanIpEstimateShort') : tr(context, 'cleanIpEstimate', {'m': minutes});
+  }
+
   // ---- the three faces
 
   Widget _setup() {
@@ -806,50 +819,33 @@ class _CleanIpPageState extends State<CleanIpPage> {
             ),
           ]),
         ],
-        _section(tr(context, 'cleanIpDepth')),
+        // A user list sets its own addresses; the number only says how many are drawn from ranges.
+        _section(tr(context, 'cleanIpHowMany')),
         Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final d in _Depth.values)
+          for (final n in cleanIpCountChoices)
             ChoiceChip(
-              label: Text(tr(context, switch (d) {
-                _Depth.quick => 'cleanIpQuick',
-                _Depth.normal => 'cleanIpNormal',
-                _Depth.deep => 'cleanIpDeep',
-                _Depth.custom => 'cleanIpCustomDepth',
-              })),
-              selected: _depth == d,
-              onSelected: (_) => setState(() {
-                _depth = d;
-                final p = _presets[d];
-                if (p != null) {
-                  _count = p.count;
-                  _seconds = p.seconds;
-                }
-              }),
+              label: Text(_grouped(n), textDirection: TextDirection.ltr),
+              selected: _count == n,
+              onSelected: (_) => setState(() => _count = n),
+            ),
+        ]),
+        _section(tr(context, 'cleanIpTimeout')),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final s in cleanIpTimeoutChoices)
+            ChoiceChip(
+              label: Text(tr(context, 'cleanIpSeconds', {'s': s})),
+              selected: _seconds == s,
+              onSelected: (_) => setState(() => _seconds = s),
             ),
         ]),
         const SizedBox(height: 8),
-        if (_depth == _Depth.custom) ...[
-          _stepper(
-            icon: Icons.format_list_numbered,
-            label: tr(context, 'cleanIpCount'),
-            value: _count,
-            down: _count > _countSteps.first
-                ? () => setState(() => _count = _countSteps.lastWhere((s) => s < _count, orElse: () => _countSteps.first))
-                : null,
-            up: _count < _countSteps.last
-                ? () => setState(() => _count = _countSteps.firstWhere((s) => s > _count, orElse: () => _countSteps.last))
-                : null,
+        Row(children: [
+          Icon(Icons.schedule, size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(_estimate(), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
           ),
-          _stepper(
-            icon: Icons.timer_outlined,
-            label: tr(context, 'cleanIpTimeout'),
-            value: _seconds,
-            down: _seconds > cleanIpMinTimeout ? () => setState(() => _seconds--) : null,
-            up: _seconds < cleanIpMaxTimeout ? () => setState(() => _seconds++) : null,
-          ),
-        ] else
-          Text(tr(context, 'cleanIpDepthSummary', {'n': _count, 's': _seconds}),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ]),
         const SizedBox(height: 16),
         Card(
           margin: EdgeInsets.zero,
@@ -883,7 +879,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final title = _enriching ? 'cleanIpStageEnrichTitle' : (_stage == 1 ? 'cleanIpStage1Title' : 'cleanIpStage2Title');
-    final shown = _sorted(_live);
+    final shown = _sorted(_live).take(_liveShown).toList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [

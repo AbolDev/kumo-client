@@ -176,7 +176,7 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
       expect(found.map((r) => r.tcpMs), orderedEquals([...found.map((r) => r.tcpMs)]..sort()));
     });
 
-    test('the number of addresses is kept between 10 and 500', () async {
+    test('the number of addresses is kept between the limits', () async {
       var seen = 0;
       Future<int> probe(String ip, int p) async {
         seen++;
@@ -279,6 +279,15 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
       );
       expect(most, greaterThan(gentleWorkers));
       expect(most, lessThanOrEqualTo(24));
+    });
+
+    test('a big scan runs more probes at once, up to 96', () {
+      expect(cleanIpWorkers(60), 24);
+      expect(cleanIpWorkers(2000), 50);
+      expect(cleanIpWorkers(10000), 96);
+      expect(cleanIpWorkers(10000, gentle: true), gentleWorkers);
+      expect(cleanIpCountChoices.last, cleanIpMaxCount);
+      expect(cleanIpCountChoices, contains(cleanIpTcpCount));
     });
 
     test('the neighbors of the best addresses are tried too', () async {

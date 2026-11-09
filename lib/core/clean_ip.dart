@@ -200,11 +200,24 @@ String? serverNameOf(LinkFields f) {
 
 // ---------------------------------------------------------------- options and results
 
-/// How many addresses are tried by default, and the limits the user may set.
-const cleanIpTcpCount = 96;
-const cleanIpDelayCount = 10;
+/// How many addresses are tried by default, and the limits the user may set. (Cloudflare's ranges
+/// hold about 1.5 million addresses and Fastly's about 200,000: a scan of thousands is still a small
+/// sample of them.)
+const cleanIpTcpCount = 1000;
+const cleanIpDelayCount = 16;
 const cleanIpMinCount = 10;
-const cleanIpMaxCount = 500;
+const cleanIpMaxCount = 10000;
+
+/// The numbers of addresses the user picks from.
+const cleanIpCountChoices = [200, 500, 1000, 2000, 5000, 10000];
+
+/// The timeouts the user picks from (seconds).
+const cleanIpTimeoutChoices = [1, 2, 3, 5];
+
+/// How many probes run at once in the first stage: more for a bigger scan, so that thousands of
+/// addresses take minutes, not an hour.
+int cleanIpWorkers(int addresses, {bool gentle = false}) =>
+    gentle ? gentleWorkers : (addresses ~/ 40).clamp(24, 96).toInt();
 const cleanIpMinTimeout = 1;
 const cleanIpMaxTimeout = 10;
 const cleanIpMaxSamples = 5;
@@ -212,7 +225,7 @@ const cleanIpMaxPorts = 8;
 
 /// How many of the fastest open addresses are listed when no server takes part, and how many are
 /// given the real test when the first stage is skipped.
-const cleanIpKeep = 30;
+const cleanIpKeep = 50;
 const cleanIpMaxRealTests = 60;
 
 /// Gentle mode, for networks that cut the connection when a scan looks like a flood: few at once, a
@@ -522,7 +535,6 @@ Future<List<CleanIp>> scanCleanIps({
 }) async {
   final o = options.normalized();
   final wait = Duration(seconds: o.gentle ? max(o.timeoutSeconds, gentleMinTimeout) : o.timeoutSeconds);
-  final workers = o.gentle ? gentleWorkers : 24;
   final limiter = _Limiter(o.gentle ? Duration(microseconds: 1000000 ~/ gentleProbesPerSecond) : Duration.zero);
   final ports = server == null ? o.ports : [int.tryParse(server.port) ?? 443];
   final name = server == null ? (o.sni.isEmpty ? null : o.sni) : serverNameOf(server);
@@ -541,6 +553,7 @@ Future<List<CleanIp>> scanCleanIps({
     list = {...addresses.take(cleanIpMaxList), ...drawn}.toList();
   }
   if (list.isEmpty) return const [];
+  final workers = cleanIpWorkers(list.length * ports.length, gentle: o.gentle);
 
   var stop = false;
   bool halted() => stop || cancelled?.call() == true;
