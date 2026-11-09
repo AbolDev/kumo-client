@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data' show BytesBuilder;
 
-import 'latency_tester.dart' show realDelay;
+import 'latency_tester.dart' show realDelay, realSpeed;
 import 'link_fields.dart';
 import 'proxy_config.dart';
 import 'usage/usage_transport.dart' show defaultFragment;
@@ -422,9 +422,9 @@ typedef TcpProbe = Future<int> Function(String ip, int port);
 typedef DelayProbe = Future<int> Function(ProxyConfig config);
 
 /// The speed through a server, Mbit/s (null: not measured): a download, an upload, or both.
-typedef SpeedProbe = Future<({double? down, double? up})> Function(ProxyConfig config, bool down, bool up);
+typedef ViaSpeedProbe = Future<({double? down, double? up})> Function(ProxyConfig config, bool down, bool up);
 
-/// [SpeedProbe] with a throw-away core and Cloudflare's speed test (see [realSpeed]).
+/// [ViaSpeedProbe] with a throw-away core and Cloudflare's speed test (see [realSpeed]).
 Future<({double? down, double? up})> measureSpeedVia(ProxyConfig config, bool down, bool up) async {
   double? d, u;
   if (down) {
@@ -565,7 +565,7 @@ Future<List<CleanIp>> scanCleanIps({
   Random? random,
   TcpProbe? tcp,
   DelayProbe? delay,
-  SpeedProbe? speed,
+  ViaSpeedProbe? speed,
   void Function(int stage, int done, int total)? onProgress,
   void Function(CleanIp result)? onResult,
   void Function(ScanState state)? onCheckpoint,

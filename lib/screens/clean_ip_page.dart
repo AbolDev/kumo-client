@@ -701,7 +701,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
         if (r.colo != null) r.colo!,
         // The speed of a download from the address itself (Cloudflare), or through the server.
         if (r.downMbps != null && r.ttfbMs != null)
-          tr(context, 'cleanIpSpeedRow', {'mbps': r.downMbps!.toStringAsFixed(1), 'ttfb': r.ttfbMs})
+          tr(context, 'cleanIpSpeedRow', {'mbps': r.downMbps!.toStringAsFixed(1), 'ttfb': r.ttfbMs ?? 0})
         else if (r.downMbps != null || r.upMbps != null)
           tr(context, 'cleanIpSpeedVia', {
             'down': r.downMbps == null ? '-' : r.downMbps!.toStringAsFixed(1),
