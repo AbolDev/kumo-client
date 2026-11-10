@@ -18,6 +18,7 @@ import 'package:window_manager/window_manager.dart';
 import '../core/qr_decode.dart';
 import '../core/sources.dart' show SubInfo, cleanUserAgent, headerLines, parseHeaderLines;
 import '../core/config_decryptor.dart';
+import '../core/error_hint.dart';
 import '../core/proxy_config.dart';
 import '../core/sub_formats.dart';
 import '../core/vpn_channel.dart';
@@ -617,6 +618,20 @@ class _ConnectCard extends StatelessWidget {
               ),
             ),
           ),
+          // A connection that failed: the reason in a few words, right under the status.
+          if (status == VpnStatus.error && (state.vpn.error ?? '').isNotEmpty && state.vpn.error != 'revoked')
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                    errorHintKey(state.vpn.error) == null ? shortReason(state.vpn.error) : tr(context, errorHintKey(state.vpn.error)!),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: scheme.error, fontSize: 13)),
+              ),
+            ),
           if (!state.connected && state.standbyUp)
             Padding(
               padding: const EdgeInsets.only(top: 6),
