@@ -402,7 +402,7 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
       Future<int> delay(c) async => 1000 - last(c.host);
       final asked = <String>[];
       final given = <String>[];
-      Future<({double? down, double? up})> speed(config, bool down, bool up) async {
+      Future<({double? down, double? up})> speed(config, bool down, bool up, int bytes) async {
         asked.add('${config.host} $down $up');
         final n = last(config.host).toDouble();
         return (down: down ? n : null, up: up ? n / 2 : null);
@@ -443,7 +443,7 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
         options: const ScanOptions(speedTest: 3),
         tcp: (ip, p) async => 5,
         delay: (c) async => 50,
-        speed: (c, d, u) async {
+        speed: (c, d, u, b) async {
           calls++;
           throw StateError('no core');
         },
@@ -457,7 +457,7 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
           addresses: ['10.0.0.1'],
           tcp: (ip, p) async => 5,
           delay: (c) async => 50,
-          speed: (c, d, u) async {
+          speed: (c, d, u, b) async {
             calls++;
             return (down: 1.0, up: 1.0);
           });
@@ -469,13 +469,30 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
           options: const ScanOptions(speedTest: 1),
           tcp: (ip, p) async => 5,
           delay: (c) async => 50,
-          speed: (c, d, u) async {
+          speed: (c, d, u, b) async {
             calls++;
             stop = true;
             return (down: 1.0, up: null);
           },
           cancelled: () => stop);
       expect(calls, 1); // cancelled after the first
+    });
+
+    test('the most data of a speed test is handed to the measuring, in bytes', () async {
+      final sizes = <int>[];
+      for (final mb in [2, 16]) {
+        await scanCleanIps(
+            server: server,
+            addresses: ['10.0.0.1'],
+            options: ScanOptions(speedTest: 3, speedMb: mb),
+            tcp: (ip, p) async => 5,
+            delay: (c) async => 50,
+            speed: (c, d, u, b) async {
+              sizes.add(b);
+              return (down: 1.0, up: 1.0);
+            });
+      }
+      expect(sizes, [2000000, 16000000]);
     });
 
     test('the speed options are saved and read back, and kept inside their limits', () {
@@ -485,6 +502,11 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
       expect(const ScanOptions(speedTest: 9, speedCount: 99).normalized().speedTest, 3);
       expect(const ScanOptions(speedTest: 9, speedCount: 99).normalized().speedCount, cleanIpMaxSpeedCount);
       expect(ScanOptions.fromJson('junk').speedTest, 0);
+      // The most data of a speed test: kept, brought inside its limits, 8 MB when nothing is said.
+      expect(ScanOptions.fromJson(const ScanOptions(speedMb: 16).toJson()).speedMb, 16);
+      expect(const ScanOptions(speedMb: 0).normalized().speedMb, 1);
+      expect(const ScanOptions(speedMb: 5000).normalized().speedMb, 100);
+      expect(ScanOptions.fromJson(const <String, Object>{}).speedMb, cleanIpSpeedMb);
     });
 
     test('skipping the first stage: no connection tests, every address gets the real test', () async {

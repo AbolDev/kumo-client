@@ -229,6 +229,11 @@ const cleanIpKeep = 50;
 
 /// How many of the best addresses are measured for speed through the server (when asked for), and the most.
 const cleanIpSpeedCount = 8;
+
+/// The most data a speed test of one address may use for its download and for its upload (each), in MB: the choices
+/// and the default.
+const cleanIpSpeedMbChoices = [2, 4, 8, 16, 32];
+const cleanIpSpeedMb = 8;
 const cleanIpMaxSpeedCount = 20;
 const cleanIpMaxRealTests = 60;
 
@@ -254,6 +259,7 @@ class ScanOptions {
     this.delayCount = cleanIpDelayCount,
     this.speedTest = 0,
     this.speedCount = cleanIpSpeedCount,
+    this.speedMb = cleanIpSpeedMb,
   });
 
   /// How many addresses are drawn from the ranges.
@@ -291,6 +297,9 @@ class ScanOptions {
   final int speedTest;
   final int speedCount;
 
+  /// The most data the download and the upload of one address may use each, in MB.
+  final int speedMb;
+
   /// The values brought inside their limits.
   ScanOptions normalized() => ScanOptions(
         count: count.clamp(cleanIpMinCount, cleanIpMaxCount),
@@ -309,6 +318,7 @@ class ScanOptions {
         delayCount: delayCount.clamp(1, cleanIpMaxRealTests),
         speedTest: speedTest.clamp(0, 3),
         speedCount: speedCount.clamp(1, cleanIpMaxSpeedCount),
+        speedMb: speedMb.clamp(1, 100),
       );
 
   Map<String, Object> toJson() => {
@@ -324,6 +334,7 @@ class ScanOptions {
         'fragment': fragment,
         'speedTest': speedTest,
         'speedCount': speedCount,
+        'speedMb': speedMb,
       };
 
   static ScanOptions fromJson(Object? j) {
@@ -343,6 +354,7 @@ class ScanOptions {
       fragment: b('fragment'),
       speedTest: i('speedTest', 0),
       speedCount: i('speedCount', cleanIpSpeedCount),
+      speedMb: i('speedMb', cleanIpSpeedMb),
     ).normalized();
   }
 }
@@ -421,18 +433,20 @@ class ScanState {
 typedef TcpProbe = Future<int> Function(String ip, int port);
 typedef DelayProbe = Future<int> Function(ProxyConfig config);
 
-/// The speed through a server, Mbit/s (null: not measured): a download, an upload, or both.
-typedef ViaSpeedProbe = Future<({double? down, double? up})> Function(ProxyConfig config, bool down, bool up);
+/// The speed through a server, Mbit/s (null: not measured): a download, an upload, or both, of [bytes] each at most.
+typedef ViaSpeedProbe = Future<({double? down, double? up})> Function(ProxyConfig config, bool down, bool up, int bytes);
 
 /// [ViaSpeedProbe] with a throw-away core and Cloudflare's speed test (see [realSpeed]).
-Future<({double? down, double? up})> measureSpeedVia(ProxyConfig config, bool down, bool up) async {
+Future<({double? down, double? up})> measureSpeedVia(ProxyConfig config, bool down, bool up, int bytes) async {
   double? d, u;
+  // A bigger transfer is given more time (a slow line takes minutes for it).
+  final timeout = Duration(seconds: 30 + bytes ~/ 250000);
   if (down) {
-    final v = await realSpeed(config, upload: false);
+    final v = await realSpeed(config, upload: false, bytes: bytes, timeout: timeout);
     if (v >= 0) d = v;
   }
   if (up) {
-    final v = await realSpeed(config, upload: true);
+    final v = await realSpeed(config, upload: true, bytes: bytes, timeout: timeout);
     if (v >= 0) u = v;
   }
   return (down: d, up: u);
@@ -711,7 +725,7 @@ Future<List<CleanIp>> scanCleanIps({
         ({double? down, double? up}) got = (down: null, up: null);
         if (config != null) {
           try {
-            got = await probe(config, o.speedTest & 1 != 0, o.speedTest & 2 != 0);
+            got = await probe(config, o.speedTest & 1 != 0, o.speedTest & 2 != 0, o.speedMb * 1000000);
           } catch (_) {}
         }
         final updated = r.with_(downMbps: got.down, upMbps: got.up);
