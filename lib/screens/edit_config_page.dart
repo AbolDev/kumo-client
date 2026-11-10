@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../core/clean_ip.dart' show withCleanIp;
@@ -19,11 +21,21 @@ const _choices = <String, List<String>>{
     'ios',
     'android',
     'edge',
+    '360',
+    'qq',
     'random',
-    'randomized'
+    'randomized',
+    'randomizednoalpn',
+    'unsafe'
   ],
   'mode': ['auto', 'packet-up', 'stream-up', 'stream-one'],
 };
+
+/// The parameters of the anti-filter section: the fingerprint, the ALPN, the final mask (JSON) and the
+/// cipher suites of the TLS hello. They have a place of their own in the form for the servers that have a
+/// TLS layer (the others have none of them).
+const _antiKeys = ['fp', 'alpn', 'fm', 'cipherSuites'];
+const _antiSchemes = {'vless', 'vmess', 'trojan'};
 
 /// Edits a config with a form instead of the raw link. Pops with the new link,
 /// or with null when cancelled.
@@ -40,6 +52,18 @@ class _EditConfigPageState extends State<EditConfigPage> {
   late final LinkFields? _fields = LinkFields.parse(widget.config.link);
   final _controllers = <String, TextEditingController>{};
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final f = _fields;
+    // The four have a field even when the link has none of them (an empty one is left out of the link).
+    if (f != null && _antiSchemes.contains(f.scheme)) {
+      for (final k in _antiKeys) {
+        f.params.putIfAbsent(k, () => '');
+      }
+    }
+  }
 
   TextEditingController _c(String key, String value) =>
       _controllers.putIfAbsent(key, () => TextEditingController(text: value));
@@ -66,6 +90,18 @@ class _EditConfigPageState extends State<EditConfigPage> {
     if (f.host.isEmpty || port == null || port < 1 || port > 65535) {
       setState(() => _error = t.invalidConfig);
       return;
+    }
+    // The final mask is JSON; it goes into the link in its short form.
+    final mask = f.params['fm'] ?? '';
+    if (mask.isNotEmpty) {
+      try {
+        final j = jsonDecode(mask);
+        if (j is! Map) throw const FormatException('not an object');
+        f.params['fm'] = jsonEncode(j);
+      } catch (_) {
+        setState(() => _error = tr(context, 'antiFmInvalid'));
+        return;
+      }
     }
     final link = f.build();
     if (parseLink(link) == null) {
@@ -125,6 +161,48 @@ class _EditConfigPageState extends State<EditConfigPage> {
           labelText: label,
           border: const OutlineInputBorder(),
         ),
+      ),
+    );
+  }
+
+  /// A text field of the anti-filter section (its own key, for the tests); [lines] above one makes it a box.
+  Widget _anti(String key, String label, String value, {int lines = 1, String? hint}) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: TextField(
+          key: ValueKey('anti:$key'),
+          controller: _c('p:$key', value),
+          minLines: lines,
+          maxLines: lines == 1 ? 1 : lines + 4,
+          textDirection: TextDirection.ltr,
+          style: lines == 1 ? null : const TextStyle(fontFamily: 'monospace', fontSize: 13),
+          decoration: InputDecoration(labelText: label, hintText: hint, border: const OutlineInputBorder()),
+        ),
+      );
+
+  /// The fingerprint (with `unsafe`), the ALPN, the final mask and the cipher suites: what a network that filters
+  /// the TLS hello may need. Closed unless the server already has one of them.
+  Widget _antiFilter(S t, LinkFields f) {
+    final open = _antiKeys.any((k) => (f.params[k] ?? '').isNotEmpty);
+    return Card(
+      margin: const EdgeInsets.only(top: 4, bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        initiallyExpanded: open,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Text(tr(context, 'antiTitle')),
+        subtitle: Text(tr(context, 'antiDesc')),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        children: [
+          _param(t, 'fp', f.params['fp'] ?? ''),
+          _anti('alpn', 'ALPN', f.params['alpn'] ?? '', hint: 'h2,http/1.1'),
+          _anti('fm', tr(context, 'antiFm'), f.params['fm'] ?? '', lines: 4),
+          _anti('cipherSuites', tr(context, 'antiCipher'), f.params['cipherSuites'] ?? ''),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(tr(context, 'antiXrayNote'), style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
       ),
     );
   }
@@ -195,8 +273,10 @@ class _EditConfigPageState extends State<EditConfigPage> {
                     child: Text(t.advanced,
                         style: Theme.of(context).textTheme.titleSmall),
                   ),
-                  for (final e in f.params.entries) _param(t, e.key, e.value),
+                  for (final e in f.params.entries)
+                    if (!(_antiSchemes.contains(f.scheme) && _antiKeys.contains(e.key))) _param(t, e.key, e.value),
                 ],
+                if (_antiSchemes.contains(f.scheme)) _antiFilter(t, f),
                 if (_error != null)
                   Text(_error!,
                       style: TextStyle(

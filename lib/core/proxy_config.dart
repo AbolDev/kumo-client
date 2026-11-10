@@ -512,6 +512,11 @@ ProxyConfig? _make(
   );
 }
 
+/// Whether the link asks for something only Xray does in the TLS hello: the `unsafe` fingerprint (sing-box
+/// has none and would use Chrome's) or a list of cipher suites (`cipherSuites=`).
+bool _xrayOnlyTls(Map<String, String?> q) =>
+    (q['fp'] ?? '').trim().toLowerCase() == 'unsafe' || (q['cipherSuites'] ?? '').trim().isNotEmpty;
+
 /// Whether the link asks for a final mask (`fm=` with a JSON object that is not empty).
 bool _hasFinalmask(Map<String, String?> q) {
   final text = q['fm'] ?? q['finalmask'];
@@ -618,7 +623,7 @@ ProxyConfig? _vless(String link) {
   return _make(link, 'vless', name, u.host, u.port,
       outbound: box,
       xray: xray,
-      preferXray: _hasFinalmask(q),
+      preferXray: _hasFinalmask(q) || _xrayOnlyTls(q),
       xrayNote: _xrayNoteFor(type, q['headerType'], encryption: encryption));
 }
 
@@ -655,6 +660,7 @@ ProxyConfig? _vmess(String link) {
     'pcs': '${j['pcs'] ?? j['pinSHA256'] ?? ''}',
     'ech': '${j['ech'] ?? ''}',
     'fm': '${j['fm'] ?? ''}',
+    'cipherSuites': '${j['cipherSuites'] ?? ''}',
     'xs': '${j['xs'] ?? ''}',
   };
   final xray = _xrayOutbound(
@@ -709,7 +715,7 @@ ProxyConfig? _vmess(String link) {
     }
   }
   return _make(link, 'vmess', name, host, port,
-      outbound: box, xray: xray, preferXray: _hasFinalmask(q), xrayNote: _xrayNoteFor(type, '${j['type'] ?? ''}'));
+      outbound: box, xray: xray, preferXray: _hasFinalmask(q) || _xrayOnlyTls(q), xrayNote: _xrayNoteFor(type, '${j['type'] ?? ''}'));
 }
 
 ProxyConfig? _trojan(String link) {
@@ -757,7 +763,7 @@ ProxyConfig? _trojan(String link) {
     }
   }
   return _make(link, 'trojan', name, u.host, u.port,
-      outbound: box, xray: xray, preferXray: _hasFinalmask(q), xrayNote: _xrayNoteFor(type, q['headerType']));
+      outbound: box, xray: xray, preferXray: _hasFinalmask(q) || _xrayOnlyTls(q), xrayNote: _xrayNoteFor(type, q['headerType']));
 }
 
 ProxyConfig? _shadowsocks(String link) {

@@ -175,6 +175,9 @@ Map<String, dynamic>? _xrayStream(
       if (serverName.isNotEmpty) 'serverName': serverName,
       'fingerprint': _xrayFingerprint(q['fp']),
       if (alpn.isNotEmpty) 'alpn': alpn,
+      // The cipher suites to offer, as Xray takes them (names joined by colons): a way to look less like
+      // the usual client to a filter that reads the hello.
+      if (s('cipherSuites') != null) 'cipherSuites': s('cipherSuites'),
       // A pinned certificate replaces the chain check (see _tls); Xray can check the pin itself.
       if (_truthy(q['allowInsecure']) ||
           _truthy(q['insecure']) ||
