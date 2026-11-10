@@ -193,6 +193,9 @@ class RateMeter {
   /// True once something has arrived.
   bool get started => _clock.isRunning;
 
+  /// How many bytes have arrived.
+  int get total => _total;
+
   /// The time since the first bytes.
   Duration get elapsed => _clock.elapsed;
 
@@ -221,7 +224,7 @@ class RateMeter {
 /// measured. A download counts what comes from [url] from its first byte until it ends or [window] has
 /// passed; an upload sends [bytes] of zeros to [url] and counts the time until the server has answered
 /// (so it must be a page that takes a body, such as Cloudflare's speed test). With a [warmup] the first part
-/// of a download is not counted (see [RateMeter]).
+/// of a download is not counted (see [RateMeter]), and a download stops once [maxBytes] have come.
 ///
 /// [timeout] is for the whole, set-up included. [onBadCertificate] is for tests.
 Future<double> socksSpeed(
@@ -233,6 +236,7 @@ Future<double> socksSpeed(
   Duration timeout = const Duration(seconds: 30),
   Duration window = const Duration(seconds: 12),
   Duration warmup = Duration.zero,
+  int? maxBytes,
   bool Function(X509Certificate certificate)? onBadCertificate,
 }) async {
   final uri = Uri.tryParse(url);
@@ -265,6 +269,7 @@ Future<double> socksSpeed(
       final chunk = await pipe.next().timeout(left, onTimeout: () => null);
       if (chunk == null) break;
       meter.add(chunk.length);
+      if (maxBytes != null && meter.total >= maxBytes) break;
     }
     return meter.mbps();
   }

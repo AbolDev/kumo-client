@@ -48,6 +48,10 @@ void main() {
       expect(speedServerById('cloudflare').canUpload, isTrue);
     });
 
+    test('a server that takes the size in MB takes 4 at least', () {
+      expect(speedServerById('librespeed-fra').download(500000), contains('ckSize=4'));
+    });
+
     test('the size is put in the address', () {
       expect(speedServerById('cloudflare').download(5000000), 'https://speed.cloudflare.com/__down?bytes=5000000');
       expect(speedServerById('librespeed-fra').download(100000000), contains('ckSize=100'));
@@ -67,6 +71,15 @@ void main() {
       expect(list.length, 30);
       expect(list.first.pingMs, 39);
       expect(list.last.pingMs, 10);
+    });
+
+    test('the choice of the most data is kept in the file, and a wrong one is the default', () {
+      expect(decodeCapMb(encodeHistory([], capMb: 250)), 250);
+      expect(decodeCapMb(encodeHistory([], capMb: 7)), speedDefaultMb);
+      expect(decodeCapMb(encodeHistory([])), speedDefaultMb);
+      expect(decodeCapMb('{ nope'), speedDefaultMb);
+      expect(decodeCapMb(null), speedDefaultMb);
+      expect(speedMbChoices, contains(speedDefaultMb));
     });
 
     test('it survives a save, and a damaged or empty file gives nothing', () {
@@ -117,6 +130,28 @@ void main() {
       expect(uploaded, 1000000);
     });
 
+    test('a download stops when it has what it was allowed', () async {
+      var sent = 0;
+      final big = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => big.close(force: true));
+      big.listen((req) async {
+        try {
+          final chunk = Uint8List(65536);
+          for (var i = 0; i < 1000; i++) {
+            req.response.add(chunk);
+            sent += chunk.length;
+            await req.response.flush();
+          }
+          await req.response.close();
+        } catch (_) {}
+      });
+      final v = await httpSpeed('http://127.0.0.1:${big.port}/', upload: false, maxBytes: 1000000, window: const Duration(seconds: 5));
+      expect(v, greaterThan(0));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      // 1000 chunks are 65 MB: far less than that went out once the reader had had enough.
+      expect(sent, lessThan(30000000));
+    });
+
     test('an address that does not answer, or is not a web address, is -1', () async {
       expect(await httpSpeed('ftp://x/y', upload: false), -1);
       expect(await httpSpeed('http://127.0.0.1:1/', upload: false, timeout: const Duration(seconds: 5)), -1);
@@ -141,6 +176,16 @@ void main() {
       expect(r.viaVpn, isFalse);
       expect(partials.length, 3);
       expect(uploaded, greaterThan(0));
+    });
+
+    test('a whole test keeps to the most data asked for', () async {
+      final fake = SpeedServer('fake', 'Fake', '127.0.0.1', url('/down'), url('/ping'), uploadUrl: url('/up'));
+      final r = await runSpeedTest(fake, const SpeedRoute(),
+          pings: 1, streams: 2, maxMb: 1, window: const Duration(seconds: 2), warmup: Duration.zero);
+      expect(r.downMbps, isNotNull);
+      expect(r.upMbps, isNotNull);
+      // The try of 300 kB and what the two connections may send of 1 MB: not more than that and a little.
+      expect(uploaded, lessThanOrEqualTo(1400000));
     });
 
     test('a server without an upload is not asked for one', () async {

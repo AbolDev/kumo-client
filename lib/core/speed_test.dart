@@ -23,7 +23,11 @@ class SpeedServer {
 
   bool get canUpload => uploadUrl != null;
 
-  String download(int bytes) => downloadUrl.replaceAll('{bytes}', '$bytes').replaceAll('{mb}', '${(bytes / 1000000).ceil()}');
+  /// The address of a download of [bytes] (a server that takes the size in MB takes 4 at least).
+  String download(int bytes) {
+    final mb = (bytes / 1000000).ceil();
+    return downloadUrl.replaceAll('{bytes}', '$bytes').replaceAll('{mb}', '${mb < 4 ? 4 : mb}');
+  }
 }
 
 /// The places to choose from. Cloudflare is the first and the default; the others are for when it is slow
@@ -151,7 +155,20 @@ class SpeedResult {
 List<SpeedResult> addToHistory(List<SpeedResult> list, SpeedResult r, {int keep = 30}) =>
     [r, ...list].take(keep).toList();
 
-String encodeHistory(List<SpeedResult> list) => jsonEncode({'tests': [for (final r in list) r.toJson()]});
+/// The file of the tests; [capMb] is the choice of the most data a test may use.
+String encodeHistory(List<SpeedResult> list, {int? capMb}) =>
+    jsonEncode({'tests': [for (final r in list) r.toJson()], if (capMb != null) 'capMb': capMb});
+
+/// The choice of the most data kept in the file, or the default.
+int decodeCapMb(String? text) {
+  try {
+    final j = jsonDecode(text ?? '');
+    final v = j is Map ? j['capMb'] : null;
+    return v is int && speedMbChoices.contains(v) ? v : speedDefaultMb;
+  } catch (_) {
+    return speedDefaultMb;
+  }
+}
 
 /// The saved tests; whatever cannot be read is left out, and a damaged file gives an empty list.
 List<SpeedResult> decodeHistory(String? text) {
@@ -170,6 +187,10 @@ List<SpeedResult> decodeHistory(String? text) {
 
 /// The stage a test is in.
 enum SpeedStage { ping, download, upload }
+
+/// The most data the download and the upload of a test may use each, in MB: the choices and the default.
+const speedMbChoices = [20, 50, 100, 250, 500];
+const speedDefaultMb = 100;
 
 /// A page's delay: two requests over one connection, the second counts (the first opens everything on the
 /// way, as in a real delay), in ms; -1 on failure.
@@ -205,6 +226,7 @@ Future<double> httpSpeed(
   int bytes = 2000000,
   Duration window = const Duration(seconds: 8),
   Duration warmup = Duration.zero,
+  int? maxBytes,
   Duration timeout = const Duration(seconds: 30),
 }) async {
   final uri = Uri.tryParse(url);
@@ -252,6 +274,7 @@ Future<double> httpSpeed(
       final more = await it.moveNext().timeout(left, onTimeout: () => false);
       if (!more) break;
       meter.add(it.current.length);
+      if (maxBytes != null && meter.total >= maxBytes) break;
     }
     return meter.mbps();
   }
@@ -276,7 +299,8 @@ Future<double?> _sum(int count, Future<double> Function(int i) one) async {
 
 /// Tests the speed against [server] through [route]: the delay (the middle of [pings] tries, and how much
 /// it moves), the download and the upload, each of them over [streams] connections for [window]. A
-/// download leaves its first [warmup] out. [onStage] is told what is being measured and [onResult] gets
+/// download leaves its first [warmup] out. Neither the download nor the upload uses more than [maxMb] MB (the
+/// connections share it); a smaller share is cheaper and less exact on a fast line. [onStage] is told what is being measured and [onResult] gets
 /// the numbers as they come; [cancelled] is asked between the stages and the result so far is returned.
 Future<SpeedResult> runSpeedTest(
   SpeedServer server,
@@ -284,6 +308,7 @@ Future<SpeedResult> runSpeedTest(
   String? via,
   int pings = 5,
   int streams = 4,
+  int maxMb = speedDefaultMb,
   Duration window = const Duration(seconds: 8),
   Duration warmup = const Duration(seconds: 2),
   void Function(SpeedStage stage)? onStage,
@@ -293,12 +318,24 @@ Future<SpeedResult> runSpeedTest(
 }) async {
   var r = SpeedResult(at: now ?? DateTime.now(), serverId: server.id, viaVpn: route.viaVpn, via: via);
   bool stop() => cancelled?.call() ?? false;
+  // What each connection may use of the most.
+  final share = (maxMb * 1000000 / streams).floor();
 
   Future<double> down(int bytes) => route.socksPort != null
       ? socksSpeed(server.download(bytes), route.socksPort!,
-          auth: route.auth, upload: false, window: window, warmup: warmup, timeout: window + const Duration(seconds: 20))
+          auth: route.auth,
+          upload: false,
+          window: window,
+          warmup: warmup,
+          maxBytes: bytes,
+          timeout: window + const Duration(seconds: 20))
       : httpSpeed(server.download(bytes),
-          proxyPort: route.proxyPort, upload: false, window: window, warmup: warmup, timeout: window + const Duration(seconds: 20));
+          proxyPort: route.proxyPort,
+          upload: false,
+          window: window,
+          warmup: warmup,
+          maxBytes: bytes,
+          timeout: window + const Duration(seconds: 20));
   Future<double> up(int bytes) => route.socksPort != null
       ? socksSpeed(server.uploadUrl!, route.socksPort!,
           auth: route.auth, upload: true, bytes: bytes, timeout: window + const Duration(seconds: 25))
@@ -330,7 +367,7 @@ Future<SpeedResult> runSpeedTest(
 
   // The download: each connection asks for more than the window can carry.
   onStage?.call(SpeedStage.download);
-  final d = await _sum(streams, (_) => down(100000000));
+  final d = await _sum(streams, (_) => down(share));
   if (d != null) {
     r = r.copyWith(downMbps: d);
     onResult?.call(r);
@@ -343,7 +380,7 @@ Future<SpeedResult> runSpeedTest(
   final probe = await up(300000);
   if (probe >= 0 && !stop()) {
     // (The try is slow because the connection is still speeding up, so twice what it says is asked for.)
-    final perStream = (probe * 1e6 / 8 * window.inSeconds * 2 / streams).clamp(500000, 8000000).toInt();
+    final perStream = (probe * 1e6 / 8 * window.inSeconds * 2 / streams).clamp(100000, share < 8000000 ? share : 8000000).toInt();
     final u = await _sum(streams, (_) => up(perStream));
     if (u != null) {
       r = r.copyWith(upMbps: u);

@@ -26,6 +26,7 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
   SpeedStage? _stage;
   SpeedResult? _result;
   var _history = <SpeedResult>[];
+  var _capMb = speedDefaultMb;
 
   @override
   void initState() {
@@ -46,12 +47,15 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
       text = await VpnChannel.readFile(_historyFile);
     } catch (_) {}
     if (!mounted) return;
-    setState(() => _history = decodeHistory(text));
+    setState(() {
+      _history = decodeHistory(text);
+      _capMb = decodeCapMb(text);
+    });
   }
 
   Future<void> _saveHistory() async {
     try {
-      await VpnChannel.writeFile(_historyFile, encodeHistory(_history));
+      await VpnChannel.writeFile(_historyFile, encodeHistory(_history, capMb: _capMb));
     } catch (_) {}
   }
 
@@ -68,6 +72,7 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
     final r = await runSpeedTest(
       server,
       route,
+      maxMb: _capMb,
       via: route.viaVpn ? widget.state.selected?.name : null,
       onStage: (s) {
         if (mounted) setState(() => _stage = s);
@@ -222,6 +227,22 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
                   padding: const EdgeInsets.only(top: 12),
                   child: Text(tr(context, 'speedFailed'), textAlign: TextAlign.center, style: TextStyle(color: scheme.error)),
                 ),
+              const SizedBox(height: 16),
+              Text(tr(context, 'speedMax'), style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final mb in speedMbChoices)
+                  ChoiceChip(
+                    label: Text('$mb MB', textDirection: TextDirection.ltr),
+                    selected: _capMb == mb,
+                    onSelected: _running
+                        ? null
+                        : (_) {
+                            setState(() => _capMb = mb);
+                            _saveHistory();
+                          },
+                  ),
+              ]),
               const SizedBox(height: 8),
               Text(tr(context, 'speedDataNote'),
                   textAlign: TextAlign.center,
