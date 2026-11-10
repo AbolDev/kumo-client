@@ -333,12 +333,6 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
     ]);
   }
 
-  String _stageText(SpeedStage s) => switch (s) {
-        SpeedStage.ping => tr(context, 'speedStagePing'),
-        SpeedStage.download => tr(context, 'speedStageDownload'),
-        SpeedStage.upload => tr(context, 'speedStageUpload'),
-      };
-
   /// The colour of a stage: the delay, the download and the upload each have their own.
   Color _stageColor(SpeedStage st) {
     final scheme = Theme.of(context).colorScheme;
