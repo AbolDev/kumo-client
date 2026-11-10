@@ -22,6 +22,7 @@ import '../core/provider_routing.dart';
 import '../core/rule_sets.dart';
 import '../core/stun.dart';
 import '../core/singbox_config.dart';
+import '../core/speed_test.dart' show SpeedRoute;
 import '../core/sources.dart';
 import '../core/sub_formats.dart';
 import '../core/sub_surge.dart' show subscriptionDeepLink;
@@ -2468,6 +2469,20 @@ class AppState extends ChangeNotifier {
     // A local proxy with a login is not asked: its answer would be "login needed".
     if (net.proxyUser.isNotEmpty && net.proxyPassword.isNotEmpty) return fetchDirect;
     return fetchViaProxy(net.proxyPort);
+  }
+
+  /// How the speed test reaches the internet now: straight when no VPN is up (the speed of the network
+  /// itself), and through the connection when one is (see [_listFetch] for the three ways). Null where the
+  /// connection cannot be used for it: a local proxy with a login, which a plain request does not pass.
+  SpeedRoute? speedRoute() {
+    if (!connected) return const SpeedRoute();
+    if (Platform.isAndroid) {
+      final port = _xrayPort;
+      return port == null ? const SpeedRoute(viaVpn: true) : SpeedRoute(viaVpn: true, socksPort: port, auth: _xrayAuth);
+    }
+    if (net.tun) return const SpeedRoute(viaVpn: true);
+    if (net.proxyUser.isNotEmpty && net.proxyPassword.isNotEmpty) return null;
+    return SpeedRoute(viaVpn: true, proxyPort: net.proxyPort);
   }
 
   /// A line in the log for something that failed and went on (the places that used to say nothing).
