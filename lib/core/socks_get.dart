@@ -178,10 +178,53 @@ Future<_Reply?> _httpGet(_Pipe p, Uri uri, int maxBytes) async {
   return (status: status, location: headers['location'], body: body.takeBytes());
 }
 
+/// Counts what arrives and says how fast it came, in Mbit/s. The clock starts with the first bytes; with a
+/// [warmup] the first part is left out, because a connection is slow while it speeds up (TCP's slow start) and
+/// that is not the speed of the line. When too little is left after the warm-up (the transfer ended
+/// early) all of it counts.
+class RateMeter {
+  RateMeter({this.warmup = Duration.zero});
+
+  final Duration warmup;
+  final _clock = Stopwatch();
+  var _total = 0, _warmBytes = 0, _warmMicros = 0;
+  var _warmed = false;
+
+  /// True once something has arrived.
+  bool get started => _clock.isRunning;
+
+  /// How many bytes have arrived.
+  int get total => _total;
+
+  /// The time since the first bytes.
+  Duration get elapsed => _clock.elapsed;
+
+  void add(int bytes) {
+    if (!_clock.isRunning) _clock.start();
+    _total += bytes;
+    if (!_warmed && warmup > Duration.zero && _clock.elapsed >= warmup) {
+      _warmed = true;
+      _warmBytes = _total;
+      _warmMicros = _clock.elapsedMicroseconds;
+    }
+  }
+
+  /// Mbit/s, or -1 when nothing came.
+  double mbps() {
+    if (_total == 0) return -1;
+    final micros = _clock.elapsedMicroseconds;
+    if (_warmed && micros - _warmMicros >= 200000) {
+      return (_total - _warmBytes) * 8 / ((micros - _warmMicros) / 1e6) / 1e6;
+    }
+    return _total * 8 / ((micros < 50000 ? 50000 : micros) / 1e6) / 1e6;
+  }
+}
+
 /// How fast data goes through the SOCKS5 proxy at 127.0.0.1:[socksPort], in Mbit/s; -1 when it could not be
 /// measured. A download counts what comes from [url] from its first byte until it ends or [window] has
 /// passed; an upload sends [bytes] of zeros to [url] and counts the time until the server has answered
-/// (so it must be a page that takes a body, such as Cloudflare's speed test).
+/// (so it must be a page that takes a body, such as Cloudflare's speed test). With a [warmup] the first part
+/// of a download is not counted (see [RateMeter]), and a download stops once [maxBytes] have come.
 ///
 /// [timeout] is for the whole, set-up included. [onBadCertificate] is for tests.
 Future<double> socksSpeed(
@@ -192,6 +235,8 @@ Future<double> socksSpeed(
   int bytes = 4000000,
   Duration timeout = const Duration(seconds: 30),
   Duration window = const Duration(seconds: 12),
+  Duration warmup = Duration.zero,
+  int? maxBytes,
   bool Function(X509Certificate certificate)? onBadCertificate,
 }) async {
   final uri = Uri.tryParse(url);
@@ -217,19 +262,16 @@ Future<double> socksSpeed(
     await pipe.write(_request('GET', uri));
     final head = await _readHead(pipe);
     if (head == null || head.status != 200) return -1;
-    var total = 0;
-    Stopwatch? sw;
+    final meter = RateMeter(warmup: warmup);
     while (true) {
-      final left = sw == null ? window : window - sw.elapsed;
+      final left = meter.started ? window - meter.elapsed : window;
       if (left <= Duration.zero) break;
       final chunk = await pipe.next().timeout(left, onTimeout: () => null);
       if (chunk == null) break;
-      sw ??= Stopwatch()..start();
-      total += chunk.length;
+      meter.add(chunk.length);
+      if (maxBytes != null && meter.total >= maxBytes) break;
     }
-    if (sw == null || total == 0) return -1;
-    final seconds = sw.elapsedMicroseconds / 1e6;
-    return total * 8 / (seconds < 0.05 ? 0.05 : seconds) / 1e6;
+    return meter.mbps();
   }
 
   try {
