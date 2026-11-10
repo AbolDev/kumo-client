@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
@@ -54,7 +55,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
   var _lastPaint = DateTime(0);
   var _gentle = false, _skip = false, _neighbors = false, _fragment = false, _colo = false, _speed = false;
   // With a server: the speed of the best addresses through it. 0 none, 1 download, 2 upload, 3 both.
-  var _via = 0, _viaCount = cleanIpSpeedCount;
+  var _via = 0, _viaCount = cleanIpSpeedCount, _viaMb = cleanIpSpeedMb;
   String? _listError, _numberError, _note;
 
   // With a server's settings (true) or addresses only (false).
@@ -131,6 +132,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
   @override
   void dispose() {
     _cancel = true;
+    _paintTimer?.cancel();
     for (final c in [_custom, _ports, _sni]) {
       c.dispose();
     }
@@ -212,6 +214,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
       fragment: _fragment,
       speedTest: _withServer ? _via : 0,
       speedCount: _viaCount,
+      speedMb: _viaMb,
     );
   }
 
@@ -351,10 +354,23 @@ class _CleanIpPageState extends State<CleanIpPage> {
   void _paint({bool force = false}) {
     if (!mounted) return;
     final now = DateTime.now();
-    if (!force && now.difference(_lastPaint) < const Duration(milliseconds: 100)) return;
+    final since = now.difference(_lastPaint);
+    if (!force && since < const Duration(milliseconds: 100)) {
+      // What came inside the pause must still be drawn: the last of a burst (the count of what was found,
+      // a speed that just came) would stay unseen until something else came.
+      _paintTimer ??= Timer(const Duration(milliseconds: 100) - since, () {
+        _paintTimer = null;
+        _paint(force: true);
+      });
+      return;
+    }
+    _paintTimer?.cancel();
+    _paintTimer = null;
     _lastPaint = now;
     setState(() {});
   }
+
+  Timer? _paintTimer;
 
   Future<void> _resume() async {
     final s = _saved, info = _savedInfo;
@@ -603,6 +619,24 @@ class _CleanIpPageState extends State<CleanIpPage> {
                     down: _viaCount > 1 ? () => update(() => _viaCount--) : null,
                     up: _viaCount < cleanIpMaxSpeedCount ? () => update(() => _viaCount++) : null,
                   ),
+                if (_via != 0) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 8),
+                    child: Text(tr(context, 'cleanIpViaMb'), style: Theme.of(context).textTheme.titleSmall),
+                  ),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final mb in cleanIpSpeedMbChoices)
+                      ChoiceChip(
+                        label: Text('$mb MB', textDirection: TextDirection.ltr),
+                        selected: _viaMb == mb,
+                        onSelected: (_) => update(() => _viaMb = mb),
+                      ),
+                  ]),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(tr(context, 'cleanIpViaMbDesc'), style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                ],
               ],
               const Divider(height: 24),
               _stepper(
@@ -636,7 +670,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
       if (_withServer && _skip) tr(context, 'cleanIpSkip'),
       if (_cdn == Cdn.cloudflare && _colo) tr(context, 'cleanIpColoShort'),
       if (_cdn == Cdn.cloudflare && _speed && !_withServer) tr(context, 'cleanIpSpeedShort'),
-      if (_withServer && _via != 0) tr(context, 'cleanIpViaShort'),
+      if (_withServer && _via != 0) '${tr(context, 'cleanIpViaShort')} ($_viaMb MB)',
       if (_stopAfter > 0) '${tr(context, 'cleanIpStopAfterShort')} $_stopAfter',
       if (_samples > 1) '${tr(context, 'cleanIpSamplesShort')} $_samples',
     ];
@@ -732,19 +766,22 @@ class _CleanIpPageState extends State<CleanIpPage> {
               ),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                // The address alone on its line (it was torn in two by the delay beside it); the delay and
+                // the rest under it.
                 Text('${r.ip}:${r.port}',
                     textDirection: TextDirection.ltr,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontFamily: 'monospace')),
-                if (details.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(details,
-                      textDirection: TextDirection.ltr,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontFamily: 'monospace', fontSize: 15)),
+                const SizedBox(height: 6),
+                Wrap(spacing: 8, runSpacing: 4, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                  _latency(_ms(r)),
+                  if (details.isNotEmpty)
+                    Text(details,
+                        textDirection: TextDirection.ltr,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+                ]),
               ]),
             ),
             const SizedBox(width: 8),
-            _latency(_ms(r)),
             if (_fixed && !_running) ...[
               const SizedBox(width: 8),
               FilledButton.tonal(onPressed: () => Navigator.pop(context, r.ip), child: Text(tr(context, 'cleanIpUse'))),
@@ -948,13 +985,33 @@ class _CleanIpPageState extends State<CleanIpPage> {
     };
   }
 
+  /// What the running scan lists. In the first stage the addresses by their time; later the ones that have
+  /// been through the real test come before the ones that only connected (their delay through the server is
+  /// higher, and they would sit under hundreds of plain connections), and in the speed stage the ones with a
+  /// speed come first, the fastest at the top, so each speed is seen as it is measured.
+  List<CleanIp> _liveList() {
+    if (_stage < 2 || _enriching) return _sorted(_live).take(_liveShown).toList();
+    bool speedy(CleanIp r) => r.downMbps != null || r.upMbps != null;
+    int rank(CleanIp r) => speedy(r) ? 0 : (r.delayMs != null ? 1 : 2);
+    final out = [..._live]..sort((a, b) {
+        final c = rank(a).compareTo(rank(b));
+        if (c != 0) return c;
+        if (rank(a) == 0) {
+          final d = (b.downMbps ?? -1).compareTo(a.downMbps ?? -1);
+          return d != 0 ? d : (b.upMbps ?? -1).compareTo(a.upMbps ?? -1);
+        }
+        return _ms(a).compareTo(_ms(b));
+      });
+    return out.take(_liveShown).toList();
+  }
+
   Widget _scanning() {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final title = _enriching
         ? 'cleanIpStageEnrichTitle'
         : switch (_stage) { 1 => 'cleanIpStage1Title', 2 => 'cleanIpStage2Title', _ => 'cleanIpStage3Title' };
-    final shown = _sorted(_live).take(_liveShown).toList();
+    final shown = _liveList();
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
