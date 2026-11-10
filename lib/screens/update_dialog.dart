@@ -9,6 +9,7 @@ import '../core/vpn_channel.dart';
 import '../core/win_tools.dart';
 import '../core/desktop_vpn.dart' show DesktopVpn;
 import '../l10n/extra.dart';
+import '../widgets/mini_markdown.dart';
 import 'share_sheet.dart';
 
 Future<void> openLink(String url) async {
@@ -263,7 +264,7 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                                 childrenPadding:
                                     const EdgeInsets.fromLTRB(16, 0, 16, 12),
                                 expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                                children: [Text(_notesFor(sheet, r.notes))],
+                                children: [MiniMarkdown(_notesFor(sheet, r.notes), onLink: openLink)],
                               ),
                           ],
                         ),
@@ -283,7 +284,7 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                         color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: SingleChildScrollView(child: Text(notes)),
+                      child: SingleChildScrollView(child: MiniMarkdown(notes, onLink: openLink)),
                     ),
                   ),
                 ],
