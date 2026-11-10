@@ -665,6 +665,10 @@ class AppState extends ChangeNotifier {
     await _loadSettings();
     settingsLoaded = true;
     notifyListeners();
+    // The usage count starts as soon as the settings are known (its switch and the way of sending are
+    // among them): it no longer waits for the servers to be read and the subscriptions to be updated.
+    usage.addListener(notifyListeners);
+    unawaited(usage.startup().catchError((Object _) {}));
     _warmLookup(const Duration(seconds: 5));
     if (Platform.isWindows) {
       OvpnRunner.cleanLeftovers(await VpnChannel.dataDir()).catchError((Object _) {});
@@ -703,8 +707,6 @@ class AppState extends ChangeNotifier {
     if (updateOnStartup) await _updateSubscriptionsOnStartup();
     warp.addListener(notifyListeners);
     unawaited(warp.startup().catchError((Object _) {}));
-    usage.addListener(notifyListeners);
-    unawaited(usage.startup().catchError((Object _) {}));
   }
 
   /// Uses what the background job downloaded while the app was closed.

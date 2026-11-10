@@ -36,7 +36,7 @@ class UsageReporter {
     this.log,
     DateTime Function()? now,
     Random? random,
-    this.firstDelay = const Duration(seconds: 25),
+    this.firstDelay = const Duration(seconds: 3),
     this.recheck = const Duration(hours: 3),
     this.backoff = const [Duration(minutes: 15), Duration(hours: 1), Duration(hours: 4), Duration(hours: 12)],
   })  : _now = now ?? DateTime.now,
@@ -136,7 +136,8 @@ class UsageReporter {
     } catch (_) {}
   }
 
-  /// Starts the background work: the first check a little after the app is up, then every few hours.
+  /// Starts the background work: the first check a few seconds after the app opens (a small request, which
+  /// does not hold the start back), then every few hours.
   void start() {
     _timer?.cancel();
     _timer = Timer(firstDelay, _run);
