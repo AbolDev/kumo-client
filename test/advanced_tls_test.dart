@@ -10,13 +10,16 @@ import 'package:kumo/screens/edit_config_page.dart';
 const _plain =
     'vless://11111111-1111-1111-1111-111111111111@v.example.com:443?security=tls&sni=v.example.com&type=ws&path=%2F#plain';
 
+/// [_plain] with more parameters (before its name, which would take them in otherwise).
+String _with(String extra) => _plain.replaceFirst('#plain', '&$extra#plain');
+
 Map<String, dynamic> _tls(ProxyConfig c) =>
     (c.xrayOutbound!['streamSettings'] as Map<String, dynamic>)['tlsSettings'] as Map<String, dynamic>;
 
 void main() {
   group('the TLS options that only Xray has', () {
     test('cipher suites and the unsafe fingerprint reach Xray, and make the server run on it', () {
-      final c = parseLink('$_plain&fp=unsafe&alpn=http%2F1.1&cipherSuites=TLS_AES_128_GCM_SHA256%3ATLS_AES_256_GCM_SHA384')!;
+      final c = parseLink(_with('fp=unsafe&alpn=http%2F1.1&cipherSuites=TLS_AES_128_GCM_SHA256%3ATLS_AES_256_GCM_SHA384'))!;
       expect(c.preferXray, isTrue);
       final tls = _tls(c);
       expect(tls['fingerprint'], 'unsafe');
@@ -25,15 +28,15 @@ void main() {
     });
 
     test('a server with none of them stays as it was', () {
-      final c = parseLink('$_plain&fp=chrome')!;
+      final c = parseLink(_with('fp=chrome'))!;
       expect(c.preferXray, isFalse);
       expect(_tls(c).containsKey('cipherSuites'), isFalse);
       expect(_tls(c)['fingerprint'], 'chrome');
     });
 
     test('either of the two alone is enough', () {
-      expect(parseLink('$_plain&fp=unsafe')!.preferXray, isTrue);
-      expect(parseLink('$_plain&cipherSuites=TLS_AES_128_GCM_SHA256')!.preferXray, isTrue);
+      expect(parseLink(_with('fp=unsafe'))!.preferXray, isTrue);
+      expect(parseLink(_with('cipherSuites=TLS_AES_128_GCM_SHA256'))!.preferXray, isTrue);
     });
   });
 
@@ -62,6 +65,8 @@ void main() {
       tester.view.physicalSize = const Size(900, 3200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      // The texts of the app are loaded before the first page is drawn.
+      await tester.pumpAndSettle();
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Anti-filter settings (Xray)'));
