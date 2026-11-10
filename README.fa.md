@@ -1,10 +1,12 @@
 <div align="center">
 
+[English](README.md) | **فارسی** | [العربية](README.ar.md) | [Русский](README.ru.md) | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-Hans.md) | [繁體中文](README.zh-Hant.md)
+
 <img src="docs/images/banner.png" alt="برنامهٔ VPN کومو روی ویندوز و اندروید، وصل، با فهرست سرورهای عمومی و یک اشتراک" width="100%">
 
 <h1 dir="rtl">کومو: VPN رایگان و متن‌باز برای اندروید، ویندوز، مک و لینوکس</h1>
 
-[وب‌سایت](https://kumo-client.ir/fa/) · [English](README.md) · فارسی
+وب‌سایت: [kumo-client.ir](https://kumo-client.ir/fa/)
 
 </div>
 
@@ -84,7 +86,7 @@
 
 ## ساخت از روی کد
 
-Flutter 3.27 (Dart 3.6): lutter pub get و lutter test. هسته‌های sing-box و Xray در مخزن نیستند: 	ools/fetch_unix_core.sh (لینوکس و macOS)، 	ools/fetch_windows_core.ps1 (ویندوز)، 	ools/build_libbox.ps1 و 	ools/build_xray.ps1 (اندروید). فایل .github/workflows/build.yml ساخت کامل را نشان می‌دهد.
+Flutter 3.27 (Dart 3.6): `flutter pub get` و `flutter test`. هسته‌های sing-box و Xray در مخزن نیستند: `tools/fetch_unix_core.sh` (لینوکس و macOS)، `tools/fetch_windows_core.ps1` (ویندوز)، `tools/build_libbox.ps1` و `tools/build_xray.ps1` (اندروید). فایل `.github/workflows/build.yml` ساخت کامل را نشان می‌دهد.
 
 ## بازخورد
 

@@ -1,10 +1,12 @@
 <div align="center">
 
+**English** | [فارسی](README.fa.md) | [العربية](README.ar.md) | [Русский](README.ru.md) | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-Hans.md) | [繁體中文](README.zh-Hant.md)
+
 <img src="docs/images/banner.png" alt="Kumo VPN app on Windows and Android, connected, with its list of public servers and a subscription" width="100%">
 
 # Kumo: free, open-source VPN client for Android, Windows, macOS and Linux
 
-[Website](https://kumo-client.ir) · English · [فارسی](README.fa.md)
+Website: [kumo-client.ir](https://kumo-client.ir)
 
 </div>
 
