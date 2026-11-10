@@ -137,10 +137,37 @@ class HomePage extends StatelessWidget {
                   ),
                   child: _MenuRow(Icons.handyman_outlined, tr(context, 'toolsTitle')),
                 ),
+                const PopupMenuDivider(),
                 PopupMenuItem(
                   enabled: state.connected,
                   value: state.reconnectIfConnected,
                   child: _MenuRow(Icons.restart_alt, tr(context, 'menuRestart')),
+                ),
+                if (state.anyTesting)
+                  PopupMenuItem(
+                    value: () async {
+                      final remove = await _askUntested(context);
+                      if (remove != null) state.cancelAllPings(removeUntested: remove);
+                    },
+                    child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest')),
+                  ),
+                PopupMenuItem(
+                  value: () => state.pingAll(real: false),
+                  child: _MenuRow(Icons.network_check, tr(context, 'menuTcpingAll')),
+                ),
+                PopupMenuItem(
+                  enabled: state.canTestReal,
+                  value: () => state.pingAll(real: true),
+                  child: _MenuRow(Icons.speed, tr(context, 'menuRealDelayAll')),
+                ),
+                PopupMenuItem(
+                  value: state.clearTestResults,
+                  child: _MenuRow(Icons.cleaning_services_outlined, tr(context, 'menuClearResults')),
+                ),
+                PopupMenuItem(
+                  enabled: state.subscriptions.isNotEmpty,
+                  value: state.updateAllSubscriptions,
+                  child: _MenuRow(Icons.sync, tr(context, 'menuUpdateSubs')),
                 ),
               ],
             ),
@@ -1348,16 +1375,16 @@ class _ServerListState extends State<_ServerList> {
             : item;
       },
     );
+    // Above the list only while servers are picked: what can be done with them.
     return Column(children: [
-      _selecting
-          ? _SelectionBar(
-              state: state,
-              count: _picked.length,
-              onClose: () => setState(_picked.clear),
-              onAll: () => _pickAll(groups),
-              items: _pickedItems,
-              after: () => setState(_picked.clear))
-          : _ListBar(state: state),
+      if (_selecting)
+        _SelectionBar(
+            state: state,
+            count: _picked.length,
+            onClose: () => setState(_picked.clear),
+            onAll: () => _pickAll(groups),
+            items: _pickedItems,
+            after: () => setState(_picked.clear)),
       Expanded(child: list),
     ]);
   }
@@ -1419,66 +1446,6 @@ class _EmptyServers extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Above the list: the actions on all the servers (the ones that were in the menu), or, while a test
-/// runs, how far it is, with a way to stop it.
-class _ListBar extends StatelessWidget {
-  const _ListBar({required this.state});
-
-  final AppState state;
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: state,
-        builder: (context, _) {
-          final scheme = Theme.of(context).colorScheme;
-          final running = state.tests.values.where((t) => t.running).toList();
-          if (running.isNotEmpty) {
-            final done = running.fold<int>(0, (n, t) => n + t.done);
-            final total = running.fold<int>(0, (n, t) => n + t.total);
-            return Padding(
-              padding: const EdgeInsetsDirectional.fromSTEB(20, 4, 8, 4),
-              child: Row(children: [
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    LinearProgressIndicator(value: total > 0 ? done / total : null, minHeight: 6, borderRadius: BorderRadius.circular(3)),
-                    const SizedBox(height: 4),
-                    Text(tr(context, 'listTesting', {'done': done, 'total': total}),
-                        style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-                  ]),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    final remove = await _askUntested(context);
-                    if (remove != null) state.cancelAllPings(removeUntested: remove);
-                  },
-                  child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
-                ),
-              ]),
-            );
-          }
-          // 56: the chips are 48 high inside the padding (the tap target a finger needs).
-          return SizedBox(
-            height: 56,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              children: [
-                _chip(Icons.network_check, tr(context, 'menuTcpingAll'), () => state.pingAll(real: false)),
-                _chip(Icons.speed, tr(context, 'menuRealDelayAll'), state.canTestReal ? () => state.pingAll(real: true) : null),
-                _chip(Icons.cleaning_services_outlined, tr(context, 'menuClearResults'), state.clearTestResults),
-                _chip(Icons.sync, tr(context, 'menuUpdateSubs'), state.subscriptions.isEmpty ? null : state.updateAllSubscriptions),
-              ],
-            ),
-          );
-        },
-      );
-
-  Widget _chip(IconData icon, String label, VoidCallback? onPressed) => Padding(
-        padding: const EdgeInsetsDirectional.only(end: 8),
-        child: ActionChip(avatar: Icon(icon, size: 18), label: Text(label), onPressed: onPressed),
-      );
 }
 
 /// Above the list while servers are picked: how many, and what can be done with them.
