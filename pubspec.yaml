@@ -27,7 +27,7 @@ dependencies:
   country_flags: ^3.2.0
   desktop_drop: ^0.8.4
   package_info_plus: ^8.1.2
-  dynamic_color: ^1.7.0
+  dynamic_color: 1.7.0
 
 dev_dependencies:
   flutter_test:
