@@ -562,7 +562,7 @@ class _ConnectCard extends StatelessWidget {
 
     // No server at all (and none being fetched): the page shows the ways to add one, so the card keeps
     // to the button and the status; the server and the traffic have nothing to say yet.
-    final empty = state.all.isEmpty && state.working.isEmpty && state.refreshing.isEmpty;
+    final empty = state.noServers;
     // Idle is not grey: the app's own colour tints the card, as the green does when connected.
     final accent = status == VpnStatus.stopped ? scheme.primary : color;
     return AnimatedContainer(
@@ -1250,7 +1250,7 @@ class _ServerListState extends State<_ServerList> {
     final locked = state.vpn.status != VpnStatus.stopped &&
         state.vpn.status != VpnStatus.error;
     // No server at all (and none being fetched): the ways to add one, not an empty list.
-    if (state.all.isEmpty && state.working.isEmpty && state.refreshing.isEmpty) {
+    if (state.noServers) {
       return _EmptyServers(onPaste: widget.onPaste, onScan: widget.onScan, onFree: widget.onFree);
     }
     // What was picked and is gone (deleted, or the list was updated) is not picked any more.

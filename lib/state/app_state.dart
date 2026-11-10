@@ -368,6 +368,13 @@ class AppState extends ChangeNotifier {
   /// True once the saved settings have been read (before that the first-run guide must not show).
   bool settingsLoaded = false;
 
+  /// True once the saved servers have been read. Until then an empty list means "not read yet", not "no servers".
+  bool serversLoaded = false;
+
+  /// No server at all, and none being fetched: the home page offers the ways to add one. False while the
+  /// saved servers are still being read, so a user who has some does not see that page for a moment.
+  bool get noServers => serversLoaded && all.isEmpty && working.isEmpty && refreshing.isEmpty;
+
   /// The country the user lives in, chosen in the first-run guide (two letters, or empty).
   String homeCountry = '';
 
@@ -651,6 +658,8 @@ class AppState extends ChangeNotifier {
     // Only now: samples that came in earlier would be overwritten by the saved numbers.
     _listenTraffic();
     await _loadServers();
+    serversLoaded = true;
+    notifyListeners();
     delayTestUrl = delayUrl;
     if (idleNotification) VpnChannel.setIdleNotification(true);
     VpnChannel.scheduleSubUpdates(autoUpdateSubs).catchError((_) {});
