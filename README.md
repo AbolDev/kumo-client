@@ -1,14 +1,16 @@
 <div align="center">
 
-<img src="docs/images/banner.png" alt="Kumo: a free, simple VPN for Android, Windows, Linux and macOS" width="100%">
+<img src="docs/images/banner.png" alt="Kumo VPN app on Windows and Android, connected, with its list of public servers and a subscription" width="100%">
 
-English · [فارسی](README.fa.md)
+# Kumo: free, open-source VPN client for Android, Windows, macOS and Linux
+
+[Website](https://kumo-client.ir) · English · [فارسی](README.fa.md)
 
 </div>
 
 ## What is Kumo?
 
-Kumo is a free VPN app for Android, Windows, Linux and macOS. It collects public servers, tests which ones work, and connects you to the fastest with one tap. You can also add your own servers or subscriptions. It is powered by [sing-box](https://github.com/SagerNet/sing-box) and [Xray](https://github.com/XTLS/Xray-core).
+Kumo is a free, open-source VPN client for Android, Windows, macOS and Linux, with no account to make. It finds public servers that work on your network and connects you to the fastest with one tap. It also opens your own V2Ray, Xray and sing-box configs and subscriptions (VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard and more), the same links other V2Ray and sing-box clients use. It is powered by [sing-box](https://github.com/SagerNet/sing-box) and [Xray](https://github.com/XTLS/Xray-core).
 
 ## Download
 

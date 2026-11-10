@@ -1,8 +1,10 @@
 <div align="center">
 
-<img src="docs/images/banner.png" alt="Kumo: a free, simple VPN for Android, Windows, Linux and macOS" width="100%">
+<img src="docs/images/banner.png" alt="برنامهٔ VPN کومو روی ویندوز و اندروید، وصل، با فهرست سرورهای عمومی و یک اشتراک" width="100%">
 
-[English](README.md) · فارسی
+<h1 dir="rtl">کومو: VPN رایگان و متن‌باز برای اندروید، ویندوز، مک و لینوکس</h1>
+
+[وب‌سایت](https://kumo-client.ir/fa/) · [English](README.md) · فارسی
 
 </div>
 
@@ -10,7 +12,7 @@
 
 ## کومو چیست؟
 
-کومو یک برنامهٔ VPN رایگان برای اندروید، ویندوز، لینوکس و macOS است. سرورهای عمومی را جمع می‌کند، کارکردنشان را بررسی می‌کند و با یک لمس به سریع‌ترین وصل می‌شود. سرور یا اشتراک شخصی هم می‌توانید اضافه کنید. کومو بر پایهٔ [sing-box](https://github.com/SagerNet/sing-box) و [Xray](https://github.com/XTLS/Xray-core) ساخته شده است.
+کومو یک برنامهٔ VPN رایگان و متن‌باز برای اندروید، ویندوز، مک و لینوکس است و ثبت‌نام نمی‌خواهد. سرورهای رایگانی را که در شبکهٔ شما کار می‌کنند پیدا می‌کند و با یک لمس به سریع‌ترینشان وصل می‌شود. کانفیگ‌ها و اشتراک‌های V2Ray، Xray و sing-box خودتان را هم باز می‌کند (VLESS، VMess، Trojan، Shadowsocks، Hysteria2، WireGuard و بیشتر)؛ همان لینک‌هایی که برنامه‌های دیگر V2Ray و sing-box می‌خوانند. کومو بر پایهٔ [sing-box](https://github.com/SagerNet/sing-box) و [Xray](https://github.com/XTLS/Xray-core) ساخته شده است.
 
 ## دانلود
 
