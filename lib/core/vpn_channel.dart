@@ -254,6 +254,14 @@ class VpnChannel {
   }
 
   /// Android: shows or removes the "not connected" notification (it is only shown while the VPN is off).
+  /// Android: the server the widgets show while disconnected and the delay measured through the connection.
+  static Future<void> widgetInfo({String? name, int? ping}) async {
+    if (_win) return;
+    try {
+      await _control.invokeMethod('widgetInfo', {'name': name, 'ping': ping});
+    } catch (_) {}
+  }
+
   static Future<void> setIdleNotification(bool enabled) async {
     if (_win) return;
     try {

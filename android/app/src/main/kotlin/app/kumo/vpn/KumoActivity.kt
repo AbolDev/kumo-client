@@ -194,6 +194,13 @@ class KumoActivity : FlutterActivity() {
                 // Where the Xray program is (it is shipped as libxray.so in the native library directory).
                 "xrayPath" -> result.success(java.io.File(applicationInfo.nativeLibraryDir, "libxray.so").path)
                 // The "not connected" notification: shown (or removed) right away when the switch changes.
+                "widgetInfo" -> {
+                    // The server picked in the app (shown while disconnected) and the delay through the connection.
+                    WidgetTheme.rememberServer(this, call.argument<String>("name"))
+                    VpnBridge.ping = call.argument<Int>("ping")
+                    runCatching { KumoWidget.refreshAll(this) }
+                    result.success(null)
+                }
                 "idleNotification" -> {
                     if (call.argument<Boolean>("enabled") == true) {
                         IdleNotification.show(this, force = true)

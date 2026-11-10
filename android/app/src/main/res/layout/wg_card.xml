@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/wg_round"
+        android:tint="#FFFFFFFF" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+            android:id="@+id/wg_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FF2C2C2A"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:text="Kumo" />
+
+            <TextView
+            android:id="@+id/wg_ping"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FF5F5E5A"
+            android:textSize="11sp"
+            android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="vertical">
+
+            <TextView
+            android:id="@+id/wg_down"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FF2C2C2A"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+            <TextView
+            android:id="@+id/wg_up"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FF5F5E5A"
+            android:textSize="12sp"
+            android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+            android:id="@+id/wg_total"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FF5F5E5A"
+            android:textSize="11sp" />
+
+            <FrameLayout
+            android:id="@+id/wg_button"
+            android:layout_width="36dp"
+            android:layout_height="36dp">
+
+            <ImageView
+                android:id="@+id/wg_btn_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/wg_circle"
+                android:tint="#FFE1F5EE" />
+
+            <ImageView
+                android:id="@+id/wg_ring"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/wg_ring"
+                android:tint="#FF1D9E75" />
+
+            <ImageView
+                android:id="@+id/wg_icon"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@string/widget_toggle"
+                android:src="@drawable/ic_power"
+                android:tint="#FF0F6E56" />
+        </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

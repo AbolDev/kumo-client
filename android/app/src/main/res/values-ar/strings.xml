@@ -15,15 +15,6 @@
     <string name="widget_name_icon">أيقونة Kumo</string>
     <string name="widget_name_stats">حركة بيانات Kumo</string>
     <string name="widget_cfg_title">مظهر الودجت</string>
-    <string name="widget_cfg_color">اللون</string>
-    <string name="widget_cfg_auto">تلقائي (حسب الحالة)</string>
-    <string name="widget_cfg_shape">الشكل</string>
-    <string name="widget_cfg_opacity">الشفافية</string>
-    <string name="widget_cfg_size">حجم النص</string>
-    <string name="widget_cfg_content">يعرض</string>
-    <string name="widget_cfg_speed">السرعة</string>
-    <string name="widget_cfg_total">إجمالي البيانات</string>
-    <string name="widget_cfg_both">كلاهما</string>
     <string name="widget_cfg_done">تم</string>
     <string name="alert_channel">تنبيهات الاشتراك</string>
     <string name="alert_data_low">%1$s: بقي %2$s فقط من البيانات.</string>

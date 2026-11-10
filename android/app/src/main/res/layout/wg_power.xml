@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/wg_round"
+        android:tint="#FFFFFFFF" />
+
+    <FrameLayout
+        android:id="@+id/wg_button"
+        android:layout_gravity="center"
+            android:layout_width="44dp"
+            android:layout_height="44dp">
+
+            <ImageView
+                android:id="@+id/wg_btn_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/wg_circle"
+                android:tint="#FFE1F5EE" />
+
+            <ImageView
+                android:id="@+id/wg_ring"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/wg_ring"
+                android:tint="#FF1D9E75" />
+
+            <ImageView
+                android:id="@+id/wg_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_gravity="center"
+                android:contentDescription="@string/widget_toggle"
+                android:src="@drawable/ic_power"
+                android:tint="#FF0F6E56" />
+        </FrameLayout>
+</FrameLayout>
