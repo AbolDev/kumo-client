@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:configure="app.kumo.vpn.WidgetConfigActivity"
-    android:initialLayout="@layout/widget_stats_2"
-    android:minWidth="140dp"
-    android:minHeight="56dp"
+    android:description="@string/widget_desc_card"
+    android:initialLayout="@layout/wg_card"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
     android:minResizeWidth="110dp"
-    android:minResizeHeight="40dp"
+    android:minResizeHeight="110dp"
+    android:previewLayout="@layout/wg_card"
     android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen"
-    android:widgetFeatures="reconfigurable" />
+    android:widgetFeatures="reconfigurable|configuration_optional" />

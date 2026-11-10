@@ -48,6 +48,14 @@ object VpnBridge {
     @Volatile
     var serverName: String? = null
 
+    /** The delay the app last measured through the connection, in ms, for the widgets (null: none yet). */
+    @Volatile
+    var ping: Int? = null
+
+    /** When the connection came up ([SystemClock.elapsedRealtime]), for the clock of the status card; 0 when down. */
+    @Volatile
+    var startedAt: Long = 0L
+
     fun traffic(up: Long, down: Long, upTotal: Long, downTotal: Long, usageName: String) {
         WidgetFeed.onTraffic(up, down, upTotal, downTotal)
         if (trafficListener == null) {
@@ -90,12 +98,15 @@ object VpnBridge {
     fun openGate() = synchronized(gate) { closers-- }
 
     fun update(newStatus: String, error: String? = null) {
+        if (newStatus == STARTED && status != STARTED) startedAt = android.os.SystemClock.elapsedRealtime()
         status = newStatus
         lastError = error
         if (newStatus == STOPPED || newStatus == ERROR) {
             PendingUsage.reset()
             WidgetFeed.reset()
             serverName = null
+            ping = null
+            startedAt = 0L
         }
         main.post {
             listener?.invoke(newStatus, error)

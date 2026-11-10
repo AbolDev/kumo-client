@@ -15,15 +15,6 @@
     <string name="widget_name_icon">Kumo 圖示</string>
     <string name="widget_name_stats">Kumo 流量</string>
     <string name="widget_cfg_title">小工具樣式</string>
-    <string name="widget_cfg_color">顏色</string>
-    <string name="widget_cfg_auto">自動（隨狀態）</string>
-    <string name="widget_cfg_shape">形狀</string>
-    <string name="widget_cfg_opacity">不透明度</string>
-    <string name="widget_cfg_size">文字大小</string>
-    <string name="widget_cfg_content">顯示內容</string>
-    <string name="widget_cfg_speed">速度</string>
-    <string name="widget_cfg_total">總流量</string>
-    <string name="widget_cfg_both">兩者</string>
     <string name="widget_cfg_done">完成</string>
     <string name="alert_channel">訂閱提醒</string>
     <string name="alert_data_low">%1$s：流量僅剩 %2$s。</string>

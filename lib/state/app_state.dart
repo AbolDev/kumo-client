@@ -115,6 +115,21 @@ const _logFile = 'app.log';
 const _maxLogs = 300;
 
 class AppState extends ChangeNotifier {
+  // What the Android widgets were last told (the server and the delay), so they are told only of a change.
+  String? _widgetSent;
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    if (!Platform.isAndroid) return;
+    final name = (selected ?? autoPick)?.name;
+    final ping = connected && (liveDelay ?? -1) > 0 ? liveDelay : null;
+    final key = '$name|$ping';
+    if (key == _widgetSent) return;
+    _widgetSent = key;
+    VpnChannel.widgetInfo(name: name, ping: ping);
+  }
+
   final collector = ServerGroup('collector', GroupKind.collector);
 
   /// Cloudflare WARP (see warp_controller.dart).

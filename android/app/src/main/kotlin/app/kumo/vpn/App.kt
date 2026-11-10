@@ -3,6 +3,7 @@ package app.kumo.vpn
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.os.Build
 import androidx.core.content.getSystemService
@@ -31,6 +32,13 @@ class App : Application() {
         }
         // Exactly one launcher entry (the picked icon) must be enabled, or the app cannot be opened.
         AppIcons.ensure(this)
+    }
+
+    /** The phone switched between light and dark: before Android 12 the widgets are painted again for it (later
+     *  the launcher switches their colours itself). */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (Build.VERSION.SDK_INT < 31) runCatching { KumoWidget.refreshAll(this) }
     }
 
     companion object {

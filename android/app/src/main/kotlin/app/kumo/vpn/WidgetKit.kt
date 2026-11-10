@@ -6,11 +6,12 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
+import android.content.res.Configuration
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.os.SystemClock
-import android.util.TypedValue
+import android.view.View
 import android.widget.RemoteViews
 import java.util.Locale
 
@@ -30,80 +31,99 @@ object WidgetState {
 }
 
 /**
- * What one placed widget looks like. It is chosen in [WidgetConfigActivity] and kept per widget
- * id, so every widget on the home screen can have its own colour, shape, opacity and text size.
+ * The colours of a widget in one look (light or dark): the card and its texts while disconnected and
+ * while connected, the power button, and the small chip.
  */
-class WidgetStyle(
-    /** 0 follows the connection state (green / orange / grey); otherwise an ARGB colour. */
-    val color: Int = 0,
-    /** 0 square, 1 rounded, 2 pill. */
-    val shape: Int = 1,
-    /** Index into [OPACITY]. */
-    val opacity: Int = 3,
-    /** 0 small, 1 medium, 2 large. */
-    val textSize: Int = 1,
-    /** Traffic widget: 0 speed, 1 total data, 2 both. */
-    val content: Int = 2,
+class WidgetColors(
+    val offBg: Int, val offText: Int, val offSub: Int,
+    val ring: Int, val offBtn: Int, val offIcon: Int,
+    val onBg: Int, val onText: Int, val onSub: Int,
+    val onBtn: Int, val onIcon: Int,
+    val chipOffBg: Int, val chipOffText: Int, val chipOnBg: Int, val chipOnText: Int,
 ) {
-    val alpha: Int get() = OPACITY[opacity.coerceIn(0, OPACITY.size - 1)] * 255 / 100
-
-    val scale: Float get() = SIZES[textSize.coerceIn(0, SIZES.size - 1)]
-
-    fun background(state: Int): Int {
-        if (color != 0) return color
-        return when (state) {
-            WidgetState.ON -> 0xFF0E9F8E.toInt()
-            WidgetState.OFF -> 0xFF546E7A.toInt()
-            else -> 0xFFF59E0B.toInt()
-        }
-    }
-
-    /** Dark text on light backgrounds, white on dark ones. A see-through widget sits on an unknown
-     *  wallpaper, so it keeps white text with the shadow-free default. */
-    fun textColor(state: Int): Int {
-        val bg = background(state)
-        val luminance = 0.299 * Color.red(bg) + 0.587 * Color.green(bg) + 0.114 * Color.blue(bg)
-        return if (luminance > 170 && OPACITY[opacity.coerceIn(0, OPACITY.size - 1)] >= 60) 0xFF1B1B1B.toInt() else Color.WHITE
-    }
-
     companion object {
-        val PALETTE = intArrayOf(
-            0xFF0E9F8E.toInt(), 0xFF1976D2.toInt(), 0xFF3F51B5.toInt(), 0xFF8E24AA.toInt(),
-            0xFFD81B60.toInt(), 0xFFE53935.toInt(), 0xFFFB8C00.toInt(), 0xFFFFB300.toInt(),
-            0xFF43A047.toInt(), 0xFF546E7A.toInt(), 0xFF212121.toInt(), 0xFFF5F5F5.toInt(),
+        private fun c(v: Long) = v.toInt()
+
+        /** Kumo's own teal, where the system gives no colours of its own (before Android 12). */
+        val TEAL_LIGHT = WidgetColors(
+            c(0xFFFFFFFF), c(0xFF2C2C2A), c(0xFF5F5E5A),
+            c(0xFF1D9E75), c(0xFFE1F5EE), c(0xFF0F6E56),
+            c(0xFF0F6E56), c(0xFFFFFFFF), c(0xFF9FE1CB),
+            c(0xFFE1F5EE), c(0xFF085041),
+            c(0xFFEDECE6), c(0xFF444441), c(0xFF1D9E75), c(0xFFE1F5EE),
         )
-        val OPACITY = intArrayOf(40, 60, 80, 100)
-        val SIZES = floatArrayOf(0.85f, 1f, 1.2f)
+        val TEAL_DARK = WidgetColors(
+            c(0xFF2F2F2D), c(0xFFF1EFE8), c(0xFFB4B2A9),
+            c(0xFF5DCAA5), c(0xFF04342C), c(0xFF9FE1CB),
+            c(0xFF9FE1CB), c(0xFF04342C), c(0xFF085041),
+            c(0xFF085041), c(0xFFE1F5EE),
+            c(0xFF444441), c(0xFFD3D1C7), c(0xFF5DCAA5), c(0xFF04342C),
+        )
 
-        private fun prefs(context: Context) = context.getSharedPreferences("widgets", Context.MODE_PRIVATE)
-
-        fun load(context: Context, id: Int): WidgetStyle {
-            val p = prefs(context)
-            return WidgetStyle(
-                color = p.getInt("color_$id", 0),
-                shape = p.getInt("shape_$id", 1),
-                opacity = p.getInt("opacity_$id", 3),
-                textSize = p.getInt("size_$id", 1),
-                content = p.getInt("content_$id", 2),
-            )
+        /** Android 12 and later: the colours of the wallpaper (Material You). */
+        fun dynamic(context: Context, dark: Boolean): WidgetColors? {
+            if (Build.VERSION.SDK_INT < 31) return null
+            return runCatching {
+                fun r(id: Int) = context.getColor(id)
+                val a = android.R.color::class.java
+                fun s(name: String) = r(a.getField(name).getInt(null))
+                if (!dark) {
+                    WidgetColors(
+                        s("system_neutral1_10"), s("system_neutral1_900"), s("system_neutral2_700"),
+                        s("system_accent1_600"), s("system_accent1_100"), s("system_accent1_700"),
+                        s("system_accent1_600"), s("system_accent1_0"), s("system_accent1_100"),
+                        s("system_accent1_100"), s("system_accent1_800"),
+                        s("system_neutral2_100"), s("system_neutral2_800"), s("system_accent1_400"), s("system_accent1_0"),
+                    )
+                } else {
+                    WidgetColors(
+                        s("system_neutral1_800"), s("system_neutral1_50"), s("system_neutral2_200"),
+                        s("system_accent1_300"), s("system_accent1_800"), s("system_accent1_100"),
+                        s("system_accent1_200"), s("system_accent1_900"), s("system_accent1_700"),
+                        s("system_accent1_700"), s("system_accent1_50"),
+                        s("system_neutral2_700"), s("system_neutral2_100"), s("system_accent1_300"), s("system_accent1_900"),
+                    )
+                }
+            }.getOrNull()
         }
 
-        fun save(context: Context, id: Int, s: WidgetStyle) {
-            prefs(context).edit()
-                .putInt("color_$id", s.color)
-                .putInt("shape_$id", s.shape)
-                .putInt("opacity_$id", s.opacity)
-                .putInt("size_$id", s.textSize)
-                .putInt("content_$id", s.content)
-                .apply()
-        }
+        fun light(context: Context) = dynamic(context, false) ?: TEAL_LIGHT
+        fun dark(context: Context) = dynamic(context, true) ?: TEAL_DARK
+    }
+}
 
-        fun forget(context: Context, id: Int) {
-            prefs(context).edit()
-                .remove("color_$id").remove("shape_$id").remove("opacity_$id")
-                .remove("size_$id").remove("content_$id")
-                .apply()
-        }
+/**
+ * The look of one placed widget, chosen in [WidgetConfigActivity] and kept per widget id: follow the
+ * phone (light or dark, with the wallpaper's colours on Android 12+), always light, always dark, or see-through.
+ */
+object WidgetTheme {
+    const val AUTO = 0
+    const val LIGHT = 1
+    const val DARK = 2
+    const val CLEAR = 3
+
+    private fun prefs(context: Context) = context.getSharedPreferences("widgets", Context.MODE_PRIVATE)
+
+    fun load(context: Context, id: Int): Int = prefs(context).getInt("theme_$id", AUTO).coerceIn(AUTO, CLEAR)
+
+    fun save(context: Context, id: Int, theme: Int) {
+        prefs(context).edit().putInt("theme_$id", theme).apply()
+    }
+
+    fun forget(context: Context, id: Int) {
+        // The keys of the older widgets go too.
+        val e = prefs(context).edit().remove("theme_$id")
+        for (k in listOf("color", "shape", "opacity", "size", "content")) e.remove("${k}_$id")
+        e.apply()
+    }
+
+    /** The last server used, shown while disconnected (and the delay the app measured for it). */
+    fun lastServer(context: Context): String? = prefs(context).getString("last_server", null)
+
+    fun rememberServer(context: Context, name: String?) {
+        if (name.isNullOrBlank()) return
+        if (lastServer(context) == name) return
+        prefs(context).edit().putString("last_server", name).apply()
     }
 }
 
@@ -120,7 +140,7 @@ private fun size(bytes: Long): String = when {
     else -> String.format(Locale.US, "%d B", bytes)
 }
 
-/** The latest live numbers; the traffic widgets redraw from them every few seconds. */
+/** The latest live numbers; the widgets redraw from them every few seconds. */
 object WidgetFeed {
     @Volatile var up = 0L
     @Volatile var down = 0L
@@ -144,7 +164,90 @@ object WidgetFeed {
         val context = App.instance
         if (!context.getSystemService(PowerManager::class.java).isInteractive) return
         last = now
-        runCatching { VpnWidgetStats.refreshStats(context) }
+        runCatching { KumoWidget.refreshLive(context) }
+    }
+}
+
+/**
+ * Paints one widget: the colours of its look and state, with light and dark both given on Android 12+
+ * so the launcher switches them itself when the phone does.
+ */
+class WidgetPainter(private val context: Context, private val v: RemoteViews, theme: Int, private val state: Int) {
+    private val on = state != WidgetState.OFF
+    private val nightNow = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+        Configuration.UI_MODE_NIGHT_YES
+    private val clear = theme == WidgetTheme.CLEAR
+
+    // The light and the dark colours: the same when the look is fixed.
+    private val light: WidgetColors
+    private val dark: WidgetColors
+
+    init {
+        val l = WidgetColors.light(context)
+        val d = WidgetColors.dark(context)
+        when (theme) {
+            WidgetTheme.LIGHT -> { light = l; dark = l }
+            WidgetTheme.DARK, WidgetTheme.CLEAR -> { light = d; dark = d }
+            else -> { light = l; dark = d }
+        }
+    }
+
+    private fun set(id: Int, method: String, pick: (WidgetColors) -> Int) {
+        val a = pick(light)
+        val b = pick(dark)
+        if (Build.VERSION.SDK_INT >= 31 && a != b) {
+            v.setColorInt(id, method, a, b)
+        } else {
+            v.setInt(id, method, if (nightNow) b else a)
+        }
+    }
+
+    fun background() {
+        set(R.id.widget_bg, "setColorFilter") { if (on) it.onBg else it.offBg }
+        // See-through: the wallpaper shows through the card (less while connected, so the state reads).
+        v.setInt(R.id.widget_bg, "setImageAlpha", if (!clear) 255 else if (on) 210 else 110)
+    }
+
+    fun button() {
+        set(R.id.wg_btn_bg, "setColorFilter") { if (on) it.onBtn else it.offBtn }
+        set(R.id.wg_icon, "setColorFilter") { if (on) it.onIcon else it.offIcon }
+        set(R.id.wg_ring, "setColorFilter") { it.ring }
+        v.setViewVisibility(R.id.wg_ring, if (on) View.GONE else View.VISIBLE)
+    }
+
+    /** A main text (the name, the speeds). */
+    fun main(id: Int, text: CharSequence) {
+        v.setTextViewText(id, text)
+        set(id, "setTextColor") { if (clear) WHITE else if (on) it.onText else it.offText }
+    }
+
+    /** A quieter text under it. */
+    fun sub(id: Int, text: CharSequence) {
+        v.setTextViewText(id, text)
+        set(id, "setTextColor") { if (clear) WHITE_SOFT else if (on) it.onSub else it.offSub }
+    }
+
+    /** The quiet colour alone, for a view that writes its own text (the clock of the session). */
+    fun subColor(id: Int) = set(id, "setTextColor") { if (clear) WHITE_SOFT else if (on) it.onSub else it.offSub }
+
+    fun chip(text: CharSequence?) {
+        if (text.isNullOrEmpty()) {
+            v.setViewVisibility(R.id.wg_chip_box, View.GONE)
+            return
+        }
+        v.setViewVisibility(R.id.wg_chip_box, View.VISIBLE)
+        v.setTextViewText(R.id.wg_chip, text)
+        set(R.id.wg_chip_bg, "setColorFilter") { if (on) it.chipOnBg else it.chipOffBg }
+        set(R.id.wg_chip, "setTextColor") { if (on) it.chipOnText else it.chipOffText }
+    }
+
+    fun hide(id: Int) = v.setViewVisibility(id, View.GONE)
+
+    fun show(id: Int) = v.setViewVisibility(id, View.VISIBLE)
+
+    private companion object {
+        const val WHITE = 0xFFFFFFFF.toInt()
+        const val WHITE_SOFT = 0xD9FFFFFF.toInt()
     }
 }
 
@@ -161,23 +264,36 @@ abstract class KumoWidget : AppWidgetProvider() {
     }
 
     override fun onDeleted(context: Context, ids: IntArray) {
-        ids.forEach { WidgetStyle.forget(context, it) }
+        ids.forEach { WidgetTheme.forget(context, it) }
     }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        super.onReceive(context, intent)
+        if (intent.action != ACTION_TOGGLE) return
+        val done = try {
+            VpnControl.toggle(context)
+        } catch (_: Exception) {
+            false
+        }
+        if (!done) openApp(context)
+    }
+
+    /** The width the launcher gives the widget, in dp (the narrower of its two orientations). */
+    protected fun widthDp(options: Bundle?): Int = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) ?: 0
 
     companion object {
         const val ACTION_TOGGLE = "app.kumo.vpn.WIDGET_TOGGLE"
 
         private val kinds: List<() -> KumoWidget> = listOf({ VpnWidget() }, { VpnWidgetIcon() }, { VpnWidgetStats() })
 
-        /** Paints the background, the icon and the tap action that every widget has. */
-        fun paint(context: Context, v: RemoteViews, style: WidgetStyle, state: Int, withIcon: Boolean = true) {
-            val shapes = intArrayOf(R.drawable.widget_shape_square, R.drawable.widget_shape_round, R.drawable.widget_shape_pill)
-            v.setImageViewResource(R.id.widget_bg, shapes[style.shape.coerceIn(0, 2)])
-            v.setInt(R.id.widget_bg, "setColorFilter", style.background(state))
-            v.setInt(R.id.widget_bg, "setImageAlpha", style.alpha)
-            if (withIcon) v.setInt(R.id.widget_icon, "setColorFilter", style.textColor(state))
+        private fun openApp(context: Context) {
+            context.startActivity(Intent(context, KumoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+
+        /** A tap on [viewId] connects or disconnects. */
+        fun toggleOn(context: Context, v: RemoteViews, viewId: Int) {
             v.setOnClickPendingIntent(
-                R.id.widget_root,
+                viewId,
                 PendingIntent.getBroadcast(
                     context, 0,
                     Intent(context, VpnWidget::class.java).setAction(ACTION_TOGGLE),
@@ -186,10 +302,16 @@ abstract class KumoWidget : AppWidgetProvider() {
             )
         }
 
-        fun text(v: RemoteViews, id: Int, value: String, color: Int, sp: Float, scale: Float, alpha: Int = 255) {
-            v.setTextViewText(id, value)
-            v.setTextColor(id, (color and 0x00FFFFFF) or (alpha shl 24))
-            v.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, sp * scale)
+        /** A tap on [viewId] opens the app. */
+        fun openOn(context: Context, v: RemoteViews, viewId: Int) {
+            v.setOnClickPendingIntent(
+                viewId,
+                PendingIntent.getActivity(
+                    context, 1,
+                    Intent(context, KumoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
         }
 
         fun stateText(context: Context, state: Int): String = context.getString(
@@ -201,15 +323,35 @@ abstract class KumoWidget : AppWidgetProvider() {
             },
         )
 
-        /** Redraws every placed widget (called when the connection state changes). */
-        fun refreshAll(context: Context) {
+        /** The server shown: the one in use, else the last one used, else the app's name. */
+        fun serverName(context: Context): String {
+            val now = VpnBridge.serverName
+            if (!now.isNullOrBlank()) {
+                WidgetTheme.rememberServer(context, now)
+                return now
+            }
+            return WidgetTheme.lastServer(context) ?: "Kumo"
+        }
+
+        fun pingText(): String? = VpnBridge.ping?.takeIf { it > 0 }?.let { "$it ms" }
+
+        fun downText(): String = "↓ ${speed(WidgetFeed.down)}"
+        fun upText(): String = "↑ ${speed(WidgetFeed.up)}"
+        fun totalText(): String = size(WidgetFeed.downTotal + WidgetFeed.upTotal)
+
+        private fun redraw(context: Context, providers: List<KumoWidget>) {
             val manager = AppWidgetManager.getInstance(context)
-            for (make in kinds) {
-                val provider = make()
+            for (provider in providers) {
                 val ids = manager.getAppWidgetIds(ComponentName(context, provider::class.java))
                 ids.forEach { manager.updateAppWidget(it, provider.build(context, it, manager.getAppWidgetOptions(it))) }
             }
         }
+
+        /** Redraws every placed widget (the state, the server, the look changed). */
+        fun refreshAll(context: Context) = redraw(context, kinds.map { it() })
+
+        /** Redraws the widgets that show live numbers. */
+        fun refreshLive(context: Context) = redraw(context, listOf(VpnWidget(), VpnWidgetStats()))
 
         fun refreshOne(context: Context, id: Int) {
             val manager = AppWidgetManager.getInstance(context)
@@ -217,122 +359,90 @@ abstract class KumoWidget : AppWidgetProvider() {
             val provider = kinds.map { it() }.firstOrNull { it::class.java.name == info.provider.className } ?: return
             manager.updateAppWidget(id, provider.build(context, id, manager.getAppWidgetOptions(id)))
         }
-
-        fun speedLine(): String = "↓ ${speed(WidgetFeed.down)}   ↑ ${speed(WidgetFeed.up)}"
-        fun totalLine(): String = "Σ ↓ ${size(WidgetFeed.downTotal)}   ↑ ${size(WidgetFeed.upTotal)}"
-        fun downLine(content: Int): String =
-            if (content == 1) "↓ ${size(WidgetFeed.downTotal)}" else "↓ ${speed(WidgetFeed.down)}"
-        fun upLine(content: Int): String =
-            if (content == 1) "↑ ${size(WidgetFeed.upTotal)}" else "↑ ${speed(WidgetFeed.up)}"
     }
 }
 
-/** The classic widget: icon, name and state in one tappable bar. */
+/** The quick bar (2×1 by default): the power button, the server and its state; wider, the speed and the delay. */
 class VpnWidget : KumoWidget() {
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action != ACTION_TOGGLE) return
-        val done = try {
-            VpnControl.toggle(context)
-        } catch (_: Exception) {
-            false
-        }
-        if (!done) {
-            context.startActivity(Intent(context, KumoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        }
-    }
-
     override fun build(context: Context, id: Int, options: Bundle?): RemoteViews {
-        val style = WidgetStyle.load(context, id)
         val state = WidgetState.current()
-        val v = RemoteViews(context.packageName, R.layout.widget_vpn)
-        paint(context, v, style, state)
-        val color = style.textColor(state)
-        text(v, R.id.widget_title, "Kumo", color, 16f, style.scale)
-        text(v, R.id.widget_state, stateText(context, state), color, 13f, style.scale, 204)
+        val wide = widthDp(options) >= 170
+        val v = RemoteViews(context.packageName, if (wide) R.layout.wg_bar_wide else R.layout.wg_bar)
+        val p = WidgetPainter(context, v, WidgetTheme.load(context, id), state)
+        p.background()
+        p.button()
+        p.main(R.id.wg_title, serverName(context))
+        val sub = if (state == WidgetState.ON) {
+            if (wide) "${downText()} · ${upText()}" else stateText(context, state)
+        } else {
+            stateText(context, state)
+        }
+        p.sub(R.id.wg_sub, sub)
+        if (wide) p.chip(pingText())
+        openOn(context, v, R.id.widget_root)
+        toggleOn(context, v, R.id.wg_button)
         return v
     }
 }
 
-/** A button the size of an icon: the colour tells the state, a tap connects or disconnects. */
+/** The power button (1×1 by default); wider, the state beside it. A tap anywhere connects or disconnects. */
 class VpnWidgetIcon : KumoWidget() {
     override fun build(context: Context, id: Int, options: Bundle?): RemoteViews {
-        val style = WidgetStyle.load(context, id)
         val state = WidgetState.current()
-        val v = RemoteViews(context.packageName, R.layout.widget_icon)
-        paint(context, v, style, state)
+        val wide = widthDp(options) >= 100
+        val v = RemoteViews(context.packageName, if (wide) R.layout.wg_power_wide else R.layout.wg_power)
+        val p = WidgetPainter(context, v, WidgetTheme.load(context, id), state)
+        p.background()
+        p.button()
+        if (wide) p.main(R.id.wg_title, stateText(context, state))
+        toggleOn(context, v, R.id.widget_root)
         return v
     }
 }
 
-/** Live speed and/or total data; shows more (the server name, both lines) as it is made bigger. */
+/** The status card (2×2 by default): server, delay, live speeds and the data of the session; wider, the full card. */
 class VpnWidgetStats : KumoWidget() {
     override fun build(context: Context, id: Int, options: Bundle?): RemoteViews {
-        val style = WidgetStyle.load(context, id)
         val state = WidgetState.current()
-        val heightDp = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) ?: 0
-        val layout = when {
-            heightDp >= 110 -> 3
-            heightDp >= 72 -> 2
-            else -> 1
-        }
-        val v = RemoteViews(
-            context.packageName,
-            when (layout) {
-                3 -> R.layout.widget_stats_3
-                2 -> R.layout.widget_stats_2
-                else -> R.layout.widget_stats_1
-            },
-        )
-        paint(context, v, style, state)
-        val color = style.textColor(state)
-        val s = style.scale
+        val wide = widthDp(options) >= 170
+        val v = RemoteViews(context.packageName, if (wide) R.layout.wg_card_wide else R.layout.wg_card)
+        val p = WidgetPainter(context, v, WidgetTheme.load(context, id), state)
+        p.background()
+        p.button()
         val on = state == WidgetState.ON
-        val content = style.content
-        when (layout) {
-            1 -> {
-                val line = when {
-                    !on -> stateText(context, state)
-                    content == 1 -> totalLine()
-                    else -> speedLine()
-                }
-                text(v, R.id.widget_l1, line, color, 14f, s)
-            }
-            2 -> {
-                val (a, b) = lines(context, state, content)
-                text(v, R.id.widget_l1, a, color, 15f, s)
-                text(v, R.id.widget_l2, b, color, 12f, s, 204)
-                v.setViewVisibility(R.id.widget_l2, if (b.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE)
-            }
-            else -> {
-                val name = if (on) (VpnBridge.serverName ?: "Kumo") else "Kumo"
-                text(v, R.id.widget_title, name, color, 14f, s)
-                text(v, R.id.widget_state, stateText(context, state), color, 11f, s, 204)
-                val (a, b) = lines(context, state, content)
-                text(v, R.id.widget_l1, a, color, 18f, s)
-                text(v, R.id.widget_l2, b, color, 13f, s, 204)
-                v.setViewVisibility(R.id.widget_l2, if (b.isEmpty()) android.view.View.GONE else android.view.View.VISIBLE)
+        if (wide) {
+            p.main(R.id.wg_brand, "Kumo")
+            p.chip(stateText(context, state))
+            p.sub(R.id.wg_title, listOfNotNull(serverName(context), pingText()).joinToString(" · "))
+        } else {
+            p.main(R.id.wg_title, serverName(context))
+            val ping = pingText()
+            if (ping == null) p.hide(R.id.wg_ping) else { p.show(R.id.wg_ping); p.sub(R.id.wg_ping, ping) }
+        }
+        if (on) {
+            p.main(R.id.wg_down, downText())
+            p.show(R.id.wg_up)
+            if (wide) p.main(R.id.wg_up, upText()) else p.sub(R.id.wg_up, upText())
+            p.show(R.id.wg_total)
+            p.sub(R.id.wg_total, totalText())
+        } else {
+            // Disconnected: the state where the speed would be, and nothing of a session.
+            p.main(R.id.wg_down, stateText(context, state))
+            p.hide(R.id.wg_up)
+            p.hide(R.id.wg_total)
+        }
+        if (wide) {
+            if (on && VpnBridge.startedAt > 0) {
+                p.show(R.id.wg_time)
+                v.setChronometer(R.id.wg_time, VpnBridge.startedAt, null, true)
+                p.subColor(R.id.wg_time)
+            } else {
+                v.setChronometer(R.id.wg_time, SystemClock.elapsedRealtime(), null, false)
+                p.hide(R.id.wg_time)
             }
         }
+        openOn(context, v, R.id.widget_root)
+        toggleOn(context, v, R.id.wg_button)
         return v
-    }
-
-    /** Two lines for the medium and large sizes. */
-    private fun lines(context: Context, state: Int, content: Int): Pair<String, String> {
-        if (state != WidgetState.ON) return Pair(stateText(context, state), "")
-        return when (content) {
-            2 -> Pair(speedLine(), totalLine())
-            else -> Pair(downLine(content), upLine(content))
-        }
-    }
-
-    companion object {
-        fun refreshStats(context: Context) {
-            val manager = AppWidgetManager.getInstance(context)
-            val provider = VpnWidgetStats()
-            manager.getAppWidgetIds(ComponentName(context, VpnWidgetStats::class.java)).forEach {
-                manager.updateAppWidget(it, provider.build(context, it, manager.getAppWidgetOptions(it)))
-            }
-        }
     }
 }
