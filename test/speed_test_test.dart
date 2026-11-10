@@ -141,13 +141,15 @@ void main() {
             req.response.add(chunk);
             sent += chunk.length;
             await req.response.flush();
+            // Not faster than a reader that stops can stop: on a loopback everything would be out at once.
+            await Future<void>.delayed(const Duration(milliseconds: 10));
           }
           await req.response.close();
         } catch (_) {}
       });
       final v = await httpSpeed('http://127.0.0.1:${big.port}/', upload: false, maxBytes: 1000000, window: const Duration(seconds: 5));
       expect(v, greaterThan(0));
-      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await Future<void>.delayed(const Duration(milliseconds: 500));
       // 1000 chunks are 65 MB: far less than that went out once the reader had had enough.
       expect(sent, lessThan(30000000));
     });
