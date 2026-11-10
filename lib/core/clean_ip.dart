@@ -446,10 +446,35 @@ Future<({double? down, double? up})> measureSpeedVia(ProxyConfig config, bool do
     if (v >= 0) d = v;
   }
   if (up) {
-    final v = await realSpeed(config, upload: true, bytes: bytes, timeout: timeout);
-    if (v >= 0) u = v;
+    // A small upload first: a slow line (uploads through a server are often far slower than downloads) gets
+    // its number from it within seconds instead of running out of time on the whole size. Only a line that
+    // sent it quickly is asked for more, sized for a few seconds, so its number is not cut short by the start.
+    final first = bytes < cleanIpUploadFirst ? bytes : cleanIpUploadFirst;
+    final v = await realSpeed(config, upload: true, bytes: first, timeout: const Duration(seconds: 45));
+    if (v >= 0) {
+      u = v;
+      final more = uploadFollowUp(v, first, bytes);
+      if (more != null) {
+        final w = await realSpeed(config, upload: true, bytes: more, timeout: const Duration(seconds: 30));
+        if (w >= 0) u = w;
+      }
+    }
   }
   return (down: d, up: u);
+}
+
+/// The size of the first upload of an address, in bytes.
+const cleanIpUploadFirst = 1000000;
+
+/// After a first upload of [first] bytes at [mbps]: the size of a second, longer one (about six seconds of
+/// it, at most [max] bytes), or null when the first was slow enough to count as it is (two seconds or more)
+/// or there is no more to send.
+int? uploadFollowUp(double mbps, int first, int max) {
+  if (mbps <= 0 || max <= first) return null;
+  final seconds = first * 8 / (mbps * 1e6);
+  if (seconds >= 2) return null;
+  final size = (mbps * 1e6 / 8 * 6).round();
+  return size < first * 2 ? first * 2 > max ? max : first * 2 : (size > max ? max : size);
 }
 
 /// A TCP connection to [ip]:[port]: the time it took in ms, -1 when it did not happen within [timeout].
