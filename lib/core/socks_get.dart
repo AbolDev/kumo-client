@@ -254,7 +254,7 @@ int _headEnd(Uint8List b) {
 class _Pipe {
   _Pipe(this.socket) {
     socket.listen((data) {
-      _chunks.add(data is Uint8List ? data : Uint8List.fromList(data));
+      _chunks.add(data);
       _wake();
     }, onError: (Object e) {
       _error = e;
