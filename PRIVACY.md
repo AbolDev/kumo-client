@@ -33,6 +33,10 @@ Your server list, subscriptions, settings, usage statistics and logs are kept in
 
 Public servers are run by unknown third parties and can see the traffic that is not encrypted end to end. Do not use them for sensitive activity.
 
+## No ad or bandwidth-sharing code
+
+Kumo contains no advertising SDK, no analytics SDK from another company and no "bandwidth sharing" or "idle bandwidth" code: your connection is never used to carry anyone else's traffic. The only network requests are the ones listed above.
+
 ## Changes
 
 If this changes, the new version is published in this file in the repository.
