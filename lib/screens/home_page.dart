@@ -560,6 +560,9 @@ class _ConnectCard extends StatelessWidget {
         ? state.liveDelay
         : shown?.latencyMs;
 
+    // No server at all (and none being fetched): the page shows the ways to add one, so the card keeps
+    // to the button and the status; the server and the traffic have nothing to say yet.
+    final empty = state.all.isEmpty && state.working.isEmpty && state.refreshing.isEmpty;
     // Idle is not grey: the app's own colour tints the card, as the green does when connected.
     final accent = status == VpnStatus.stopped ? scheme.primary : color;
     return AnimatedContainer(
@@ -642,6 +645,7 @@ class _ConnectCard extends StatelessWidget {
                 ),
               ),
             ),
+          if (!empty) ...[
           const SizedBox(height: 8),
           Semantics(
             button: shown != null,
@@ -696,6 +700,8 @@ class _ConnectCard extends StatelessWidget {
                 ),
             ]),
           )))),
+          ],
+          if (!empty)
           Padding(
             padding: const EdgeInsets.only(top: 10),
             child: ValueListenableBuilder<Traffic>(
