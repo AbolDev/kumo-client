@@ -213,6 +213,24 @@ void main() {
     expect(await socksGet('http://lists.test/hello', locked.port), isNull);
   });
 
+  test('speed: an upload that runs out of time gives the speed of what went out, not nothing', () async {
+    // A server that takes the body and never answers.
+    final mute = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+    mute.listen((c) => c.listen((_) {}, onError: (Object _) {}));
+    final proxy = await _fakeSocks({'speed.test:80': mute.port});
+    addTearDown(() {
+      mute.close();
+      proxy.close();
+    });
+    final up = await socksSpeed('http://speed.test/up', proxy.port,
+        upload: true, bytes: 1000000, timeout: const Duration(seconds: 2));
+    expect(up, greaterThan(0));
+    // Nothing sent at all (the proxy cannot reach the place): still nothing.
+    final none = await socksSpeed('http://nowhere.test/up', proxy.port,
+        upload: true, bytes: 1000000, timeout: const Duration(seconds: 2));
+    expect(none, -1);
+  });
+
   test('speed: a download is counted from its first byte; an upload until the server has answered', () async {
     final speedWeb = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => speedWeb.close(force: true));

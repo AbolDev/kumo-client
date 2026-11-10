@@ -563,6 +563,37 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
           isEmpty);
     });
 
+    test('what is left of a scan: by its own pace once it has one, else by what it usually takes', () {
+      // 10 of 100 in 20 s: 180 s more.
+      expect(scanSecondsLeft(elapsedInStage: 20, done: 10, total: 100, priorPerItem: 1), closeTo(180, 0.1));
+      // Just started: the usual 1 s an item, less the 1 s gone, and the next stages.
+      expect(scanSecondsLeft(elapsedInStage: 1, done: 0, total: 10, priorPerItem: 1, later: [5, 5]), closeTo(19, 0.1));
+      // Slower than usual, still nothing done: never below a fifth of what it should take.
+      expect(scanSecondsLeft(elapsedInStage: 50, done: 0, total: 10, priorPerItem: 1), closeTo(2, 0.1));
+      // All done: only the stages to come.
+      expect(scanSecondsLeft(elapsedInStage: 9, done: 4, total: 4, priorPerItem: 3, later: [7]), closeTo(7, 0.1));
+      expect(cleanIpRealParallel(), greaterThan(cleanIpRealParallel(gentle: true)));
+    });
+
+    test('a stage says when it starts, and the speed stage names the address it measures', () async {
+      final events = <String>[];
+      await scanCleanIps(
+          server: server,
+          addresses: ['10.0.0.1', '10.0.0.2'],
+          options: const ScanOptions(speedTest: 1, speedCount: 1),
+          tcp: (ip, p) async => 5,
+          delay: (c) async => 50,
+          speed: (c, d, u, b) async => (down: 1.0, up: null),
+          onProgress: (s, d, t) => events.add('$s:$d/$t'),
+          onActive: (ip) => events.add('active $ip'));
+      expect(events.first, '1:0/2');
+      expect(events, contains('2:0/2'));
+      final three = events.indexOf('3:0/1');
+      expect(three, greaterThan(0));
+      expect(events[three + 1], startsWith('active 10.0.0.'));
+      expect(events.last, '3:1/1');
+    });
+
     test('progress in both stages, a cancel, and a server that cannot sit behind a CDN', () async {
       final stages = <int>{};
       await scanCleanIps(

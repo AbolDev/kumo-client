@@ -244,11 +244,14 @@ Future<double> socksSpeed(
   final uri = Uri.tryParse(url);
   if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) return -1;
   final open = <Socket>[];
+  // What an upload has sent, and since when: when the time runs out half-way, they give its speed.
+  var sent = 0;
+  final sw = Stopwatch();
   Future<double> run() async {
     final pipe = await _connect(uri, socksPort, auth, timeout, onBadCertificate, open);
     if (upload) {
       await pipe.write(_request('POST', uri, 'Content-Type: application/octet-stream\r\nContent-Length: $bytes\r\n'));
-      final sw = Stopwatch()..start();
+      sw.start();
       final chunk = Uint8List(32768);
       var left = bytes;
       while (left > 0) {
@@ -256,6 +259,7 @@ Future<double> socksSpeed(
         await pipe.write(n == chunk.length ? chunk : Uint8List.sublistView(chunk, 0, n));
         left -= n;
         onBytes?.call(n);
+        sent += n;
       }
       final head = await _readHead(pipe);
       sw.stop();
@@ -278,8 +282,11 @@ Future<double> socksSpeed(
     return meter.mbps();
   }
 
+  // An upload out of time: the speed of what went out (at least 64 KB of it); anything else out of time is -1.
+  double outOfTime() =>
+      upload && sent >= 65536 && sw.elapsedMicroseconds > 0 ? sent * 8 / (sw.elapsedMicroseconds / 1e6) / 1e6 : -1;
   try {
-    return await run().timeout(timeout, onTimeout: () => -1);
+    return await run().timeout(timeout, onTimeout: outOfTime);
   } catch (_) {
     return -1;
   } finally {
