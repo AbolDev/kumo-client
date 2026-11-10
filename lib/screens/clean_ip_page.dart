@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show max;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -74,8 +75,15 @@ class _CleanIpPageState extends State<CleanIpPage> {
   var _sort = _Sort.fast;
   // What the last scan was: the server (the "Add" buttons copy it) and how many steps it had.
   LinkFields? _scanned;
-  var _scanSteps = 1;
   var _scanEnrich = false;
+  // The clock of the scan: when it and the stage that runs began, what was asked, and the address whose speed
+  // is being measured. A timer redraws every second, so the time left and the time gone move.
+  DateTime? _scanStart, _stageStart;
+  var _stageSeen = 0;
+  ScanOptions? _scanOptions;
+  var _scanServer = false;
+  String? _activeIp;
+  Timer? _tick;
   var _scanSkip = false;
   String _scanSummary = '';
   // The addresses the user ticked, and the configs they are meant for (a copy of each config is made for
@@ -133,6 +141,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
   void dispose() {
     _cancel = true;
     _paintTimer?.cancel();
+    _tick?.cancel();
     for (final c in [_custom, _ports, _sni]) {
       c.dispose();
     }
@@ -276,7 +285,15 @@ class _CleanIpPageState extends State<CleanIpPage> {
       _scanned = server;
       _scanEnrich = enrich;
       _scanSkip = options.skipFirst;
-      _scanSteps = (server != null && !options.skipFirst ? 2 : 1) + (server != null && options.speedTest != 0 ? 1 : 0) + (enrich ? 1 : 0);
+      _scanStart = _stageStart = DateTime.now();
+      _stageSeen = 1;
+      _scanOptions = options;
+      _scanServer = server != null;
+      _activeIp = null;
+      _tick?.cancel();
+      _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted && _running) setState(() {});
+      });
       _scanSummary = [
         _cdnName(_cdn),
         server == null ? tr(context, 'cleanIpModeOnly') : _nameOf(server),
@@ -293,6 +310,11 @@ class _CleanIpPageState extends State<CleanIpPage> {
       options: options,
       resume: resume,
       onProgress: (s, d, t) {
+        if (s != _stageSeen) {
+          _stageSeen = s;
+          _stageStart = DateTime.now();
+          _activeIp = null;
+        }
         _stage = s;
         _done = d;
         _total = t;
@@ -308,11 +330,16 @@ class _CleanIpPageState extends State<CleanIpPage> {
         }
         _paint();
       },
+      onActive: (ip) {
+        _activeIp = ip;
+        _paint(force: true);
+      },
       onCheckpoint: (state) => _save(state, options, server),
       cancelled: () => _cancel || !mounted,
     );
     if (!mounted) return;
     if (_cancel) {
+      _tick?.cancel();
       // Stopped by the user: the checkpoint holds what is left, and what was found so far is shown (with
       // nothing found, the setup, where the scan can be resumed).
       setState(() {
@@ -328,6 +355,9 @@ class _CleanIpPageState extends State<CleanIpPage> {
     if (enrich && results.isNotEmpty) {
       setState(() {
         _enriching = true;
+        _stageSeen = 4;
+        _stageStart = DateTime.now();
+        _activeIp = null;
         _done = 0;
         _total = results.length < 20 ? results.length : 20;
         _live = results;
@@ -340,6 +370,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
           },
           cancelled: () => _cancel || !mounted);
     }
+    _tick?.cancel();
     if (!mounted) return;
     setState(() {
       _running = false;
@@ -976,13 +1007,88 @@ class _CleanIpPageState extends State<CleanIpPage> {
     );
   }
 
-  int get _stepNow {
-    if (_enriching) return _scanSteps;
-    return switch (_stage) {
-      1 => 1,
-      2 => _scanSkip ? 1 : 2,
-      _ => _scanSteps - (_scanEnrich ? 1 : 0),
-    };
+  /// The steps of the scan that runs: 1 the connections, 2 the real test, 3 the speed, 4 Cloudflare's data center.
+  List<int> get _steps => [
+        if (!(_scanServer && _scanSkip)) 1,
+        if (_scanServer) 2,
+        if (_scanServer && (_scanOptions?.speedTest ?? 0) != 0) 3,
+        if (_scanEnrich) 4,
+      ];
+
+  int get _stepId => _enriching ? 4 : _stage;
+
+  /// What the scan has left, in seconds (see [scanSecondsLeft]): the step that runs by its pace, the others by
+  /// what they usually take with these options.
+  double? _secondsLeft() {
+    final o = _scanOptions;
+    final start = _stageStart;
+    if (o == null || start == null) return null;
+    final wait = o.gentle ? max(o.timeoutSeconds, gentleMinTimeout) : o.timeoutSeconds;
+    double per(int id) => switch (id) {
+          1 => wait * o.samples / cleanIpWorkers(max(1, _stage == 1 ? _total : o.count), gentle: o.gentle),
+          2 => max(6, wait * 3) * 0.5 / cleanIpRealParallel(gentle: o.gentle),
+          3 => ((o.speedTest & 1) != 0 ? 4 + o.speedMb * 8 / 20 : 0.0) + ((o.speedTest & 2) != 0 ? 4 + o.speedMb * 8 / 10 : 0.0),
+          _ => _speed ? 2.0 : 0.5,
+        };
+    int count(int id) => switch (id) {
+          1 => o.count,
+          2 => o.skipFirst ? cleanIpMaxRealTests : o.delayCount,
+          3 => o.speedCount,
+          _ => 20,
+        };
+    final steps = _steps;
+    final at = steps.indexOf(_stepId);
+    return scanSecondsLeft(
+      elapsedInStage: DateTime.now().difference(start).inMilliseconds / 1000,
+      done: _done,
+      total: _total > 0 ? _total : count(_stepId),
+      priorPerItem: per(_stepId),
+      later: [for (final id in steps.skip(at + 1)) per(id) * count(id)],
+    );
+  }
+
+  String _leftText(double seconds) {
+    if (seconds < 8) return tr(context, 'cleanIpLeftSoon');
+    if (seconds < 60) return tr(context, 'cleanIpLeftSec', {'s': ((seconds / 5).ceil() * 5).toString()});
+    return tr(context, 'cleanIpLeftMin', {'m': (seconds / 60).ceil()});
+  }
+
+  static String _clock(Duration d) =>
+      '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  /// One step in the row at the top of the scan: a circle (a tick when it is done) and its name.
+  Widget _stepDot(int n, String label, {required bool now, required bool done}) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = done || now ? scheme.primary : scheme.outlineVariant;
+    return Expanded(
+      child: Column(children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: done ? scheme.primary : (now ? scheme.primaryContainer : null),
+            border: Border.all(color: color, width: 2),
+          ),
+          alignment: Alignment.center,
+          child: done
+              ? Icon(Icons.check, size: 16, color: scheme.onPrimary)
+              : Text('$n',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: now ? scheme.onPrimaryContainer : scheme.onSurfaceVariant)),
+        ),
+        const SizedBox(height: 4),
+        Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: now ? scheme.onSurface : scheme.onSurfaceVariant, fontWeight: now ? FontWeight.w700 : null)),
+      ]),
+    );
   }
 
   /// What the running scan lists. In the first stage the addresses by their time; later the ones that have
@@ -1012,6 +1118,15 @@ class _CleanIpPageState extends State<CleanIpPage> {
         ? 'cleanIpStageEnrichTitle'
         : switch (_stage) { 1 => 'cleanIpStage1Title', 2 => 'cleanIpStage2Title', _ => 'cleanIpStage3Title' };
     final shown = _liveList();
+    final steps = _steps;
+    final stepNow = _stepId;
+    const stepNames = {1: 'cleanIpStepConnect', 2: 'cleanIpStepReal', 3: 'cleanIpStepSpeed', 4: 'cleanIpStepColo'};
+    final left = _secondsLeft();
+    final gone = _scanStart == null ? 0.0 : DateTime.now().difference(_scanStart!).inMilliseconds / 1000;
+    final overall = left == null || gone + left <= 0 ? null : (gone / (gone + left)).clamp(0.0, 1.0).toDouble();
+    final activity = !_enriching && _stage == 3 && _activeIp != null
+        ? tr(context, 'cleanIpMeasuring', {'ip': ltr(_activeIp!)})
+        : (_total > 0 && _done >= _total ? tr(context, 'cleanIpFinishing') : null);
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
@@ -1020,21 +1135,42 @@ class _CleanIpPageState extends State<CleanIpPage> {
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Expanded(
-                  child: Text(tr(context, 'cleanIpStep', {'n': _stepNow, 'total': _scanSteps}),
-                      style: text.labelLarge?.copyWith(color: scheme.primary)),
-                ),
-                if (_total > 0) Text('$_done / $_total', textDirection: TextDirection.ltr, style: text.labelLarge),
-              ]),
-              const SizedBox(height: 6),
+              if (steps.length > 1) ...[
+                Row(children: [
+                  for (final (i, id) in steps.indexed)
+                    _stepDot(i + 1, tr(context, stepNames[id]!), now: id == stepNow, done: i < steps.indexOf(stepNow)),
+                ]),
+                const SizedBox(height: 14),
+              ],
               Text(tr(context, title), style: text.titleMedium),
               const SizedBox(height: 12),
+              // The whole scan, by its time: what is gone against what is gone and what is left.
               LinearProgressIndicator(
-                value: _total > 0 ? _done / _total : null,
+                value: overall,
                 minHeight: 8,
                 borderRadius: BorderRadius.circular(4),
               ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                  child: Text(left == null ? '' : _leftText(left),
+                      style: text.labelLarge?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
+                ),
+                Text(
+                    [if (_total > 0) '$_done / $_total', if (_scanStart != null) _clock(DateTime.now().difference(_scanStart!))]
+                        .join('  ·  '),
+                    textDirection: TextDirection.ltr,
+                    style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+              ]),
+              // What is happening now, so a long test does not look stuck.
+              if (activity != null) ...[
+                const SizedBox(height: 10),
+                Row(children: [
+                  const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(activity, style: text.bodyMedium)),
+                ]),
+              ],
               const SizedBox(height: 12),
               Row(children: [
                 Icon(Icons.check_circle_outline, size: 18, color: scheme.primary),

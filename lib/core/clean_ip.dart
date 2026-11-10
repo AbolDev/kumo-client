@@ -519,6 +519,30 @@ class _Limiter {
   }
 }
 
+/// How many real tests (each with a core of its own) run at once: six, two in the gentle mode.
+int cleanIpRealParallel({bool gentle = false}) => gentle ? 2 : 6;
+
+/// What a scan has left, in seconds. The stage that runs is judged by its own pace once it has one (a few
+/// seconds and some of it done), else by [priorPerItem] (seconds for one item, the parallel ones counted);
+/// the stages still to come by what they usually take ([later], in seconds each).
+double scanSecondsLeft({
+  required double elapsedInStage,
+  required int done,
+  required int total,
+  required double priorPerItem,
+  List<double> later = const [],
+}) {
+  final left = max(0, total - done);
+  double now;
+  if (done > 0 && elapsedInStage >= 3) {
+    now = elapsedInStage / done * left;
+  } else {
+    // Not enough of the stage yet: what it should take, less what has passed of it.
+    now = max(priorPerItem * left - (done == 0 ? elapsedInStage : 0), priorPerItem * left * 0.2);
+  }
+  return now + later.fold<double>(0, (a, b) => a + b);
+}
+
 /// Runs [job] for 0 until [count], [parallel] at a time, until [halted] says stop.
 Future<void> _pool(int count, int parallel, Future<void> Function(int i) job, bool Function() halted) async {
   var next = 0;
@@ -567,8 +591,9 @@ List<String> neighborsOf(String ip, {int reach = 8, Set<String> skip = const {}}
 /// [ScanOptions.sni], by a TLS handshake. The answer is the best [ScanOptions.keep] open addresses
 /// (the least loss, then the fastest).
 ///
-/// [onResult] gets each good address as it is found; [onProgress] the stage (1 or 2), how many are
-/// done and how many there are; [onCheckpoint] the state of the first stage every [checkpointEvery]
+/// [onResult] gets each good address as it is found; [onProgress] the stage (1, 2 or 3), how many are
+/// done and how many there are (also when a stage starts, with none done); [onActive] the address whose speed
+/// is being measured; [onCheckpoint] the state of the first stage every [checkpointEvery]
 /// and when the scan is stopped, to be resumed later.
 Future<List<CleanIp>> scanCleanIps({
   LinkFields? server,
@@ -582,6 +607,7 @@ Future<List<CleanIp>> scanCleanIps({
   ViaSpeedProbe? speed,
   void Function(int stage, int done, int total)? onProgress,
   void Function(CleanIp result)? onResult,
+  void Function(String ip)? onActive,
   void Function(ScanState state)? onCheckpoint,
   Duration checkpointEvery = const Duration(seconds: 20),
   bool Function()? cancelled,
@@ -642,6 +668,7 @@ Future<List<CleanIp>> scanCleanIps({
           for (final p in ports) (ip, p),
       ];
       total += jobs.length;
+      onProgress?.call(1, done, total);
       await _pool(jobs.length, workers, (i) async {
         final (ip, port) = jobs[i];
         final r = await measure(ip, port);
@@ -693,7 +720,8 @@ Future<List<CleanIp>> scanCleanIps({
     stop = false;
     final answered = <CleanIp>[];
     var tested2 = 0;
-    await _pool(best.length, o.gentle ? 2 : 3, (i) async {
+    onProgress?.call(2, 0, best.length);
+    await _pool(best.length, cleanIpRealParallel(gentle: o.gentle), (i) async {
       final fields = withCleanIp(server, best[i].ip);
       final config = fields == null ? null : parseLink(fields.build());
       var ms = -1;
@@ -718,8 +746,10 @@ Future<List<CleanIp>> scanCleanIps({
       final probe = speed ?? measureSpeedVia;
       final best = answered.take(o.speedCount).toList();
       var measured = 0;
+      onProgress?.call(3, 0, best.length);
       for (final r in best) {
         if (cancelled?.call() == true) break;
+        onActive?.call(r.ip);
         final fields = withCleanIp(server, r.ip);
         final config = fields == null ? null : parseLink(fields.build());
         ({double? down, double? up}) got = (down: null, up: null);
