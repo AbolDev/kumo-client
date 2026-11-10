@@ -166,12 +166,13 @@ class _SpeedTestPageState extends State<SpeedTestPage> {
             children: [
               DropdownButtonFormField<String>(
                 value: _server.id,
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: tr(context, 'speedServer'),
                   border: const OutlineInputBorder(),
                 ),
                 items: [
-                  for (final s in speedServers) DropdownMenuItem(value: s.id, child: Text(s.name)),
+                  for (final s in speedServers) DropdownMenuItem(value: s.id, child: Text(s.name, overflow: TextOverflow.ellipsis)),
                 ],
                 onChanged: _running ? null : (id) => setState(() => _server = speedServerById(id)),
               ),
