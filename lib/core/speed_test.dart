@@ -190,7 +190,49 @@ enum SpeedStage { ping, download, upload }
 
 /// The most data the download and the upload of a test may use each, in MB: the choices and the default.
 const speedMbChoices = [20, 50, 100, 250, 500];
-const speedDefaultMb = 100;
+const speedDefaultMb = 50;
+
+/// Counts the bytes of all the connections of a stage and says, every [every], how fast they went over the
+/// last [span] (in Mbit/s), with the time since the start: the live number of a test.
+class LiveRate {
+  LiveRate(this.onRate, {this.every = const Duration(milliseconds: 250), this.span = const Duration(seconds: 1)});
+
+  final void Function(double mbps, Duration elapsed) onRate;
+  final Duration every, span;
+  var _bytes = 0;
+  final _clock = Stopwatch();
+  final _samples = <(int, int)>[];
+  Timer? _timer;
+
+  int get total => _bytes;
+
+  void add(int n) => _bytes += n;
+
+  void start() {
+    _clock.start();
+    _samples.add((0, 0));
+    _timer = Timer.periodic(every, (_) => tick());
+  }
+
+  /// One reading (the timer's; called by hand in tests).
+  void tick() {
+    final now = _clock.elapsedMicroseconds;
+    _samples.add((now, _bytes));
+    while (_samples.length > 2 && now - _samples.first.$1 > span.inMicroseconds) {
+      _samples.removeAt(0);
+    }
+    final first = _samples.first;
+    final dt = now - first.$1;
+    if (dt <= 0) return;
+    onRate((_bytes - first.$2) * 8 / (dt / 1e6) / 1e6, _clock.elapsed);
+  }
+
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+    _clock.stop();
+  }
+}
 
 /// A page's delay: two requests over one connection, the second counts (the first opens everything on the
 /// way, as in a real delay), in ms; -1 on failure.
@@ -227,6 +269,7 @@ Future<double> httpSpeed(
   Duration window = const Duration(seconds: 8),
   Duration warmup = Duration.zero,
   int? maxBytes,
+  void Function(int bytes)? onBytes,
   Duration timeout = const Duration(seconds: 30),
 }) async {
   final uri = Uri.tryParse(url);
@@ -249,6 +292,7 @@ Future<double> httpSpeed(
         req.add(n == chunk.length ? chunk : Uint8List.sublistView(chunk, 0, n));
         left -= n;
         sinceFlush += n;
+        onBytes?.call(n);
         if (sinceFlush >= 262144) {
           await req.flush();
           sinceFlush = 0;
@@ -274,6 +318,7 @@ Future<double> httpSpeed(
       final more = await it.moveNext().timeout(left, onTimeout: () => false);
       if (!more) break;
       meter.add(it.current.length);
+      onBytes?.call(it.current.length);
       if (maxBytes != null && meter.total >= maxBytes) break;
     }
     return meter.mbps();
@@ -301,7 +346,8 @@ Future<double?> _sum(int count, Future<double> Function(int i) one) async {
 /// it moves), the download and the upload, each of them over [streams] connections for [window]. A
 /// download leaves its first [warmup] out. Neither the download nor the upload uses more than [maxMb] MB (the
 /// connections share it); a smaller share is cheaper and less exact on a fast line. [onStage] is told what is being measured and [onResult] gets
-/// the numbers as they come; [cancelled] is asked between the stages and the result so far is returned.
+/// the numbers as they come, [onLive] the speed of the download or the upload while it runs (four times a second);
+/// [cancelled] is asked between the stages and the result so far is returned.
 Future<SpeedResult> runSpeedTest(
   SpeedServer server,
   SpeedRoute route, {
@@ -313,6 +359,7 @@ Future<SpeedResult> runSpeedTest(
   Duration warmup = const Duration(seconds: 2),
   void Function(SpeedStage stage)? onStage,
   void Function(SpeedResult partial)? onResult,
+  void Function(SpeedStage stage, double mbps, Duration elapsed)? onLive,
   bool Function()? cancelled,
   DateTime? now,
 }) async {
@@ -321,13 +368,14 @@ Future<SpeedResult> runSpeedTest(
   // What each connection may use of the most.
   final share = (maxMb * 1000000 / streams).floor();
 
-  Future<double> down(int bytes) => route.socksPort != null
+  Future<double> down(int bytes, LiveRate live) => route.socksPort != null
       ? socksSpeed(server.download(bytes), route.socksPort!,
           auth: route.auth,
           upload: false,
           window: window,
           warmup: warmup,
           maxBytes: bytes,
+          onBytes: live.add,
           timeout: window + const Duration(seconds: 20))
       : httpSpeed(server.download(bytes),
           proxyPort: route.proxyPort,
@@ -335,12 +383,13 @@ Future<SpeedResult> runSpeedTest(
           window: window,
           warmup: warmup,
           maxBytes: bytes,
+          onBytes: live.add,
           timeout: window + const Duration(seconds: 20));
-  Future<double> up(int bytes) => route.socksPort != null
+  Future<double> up(int bytes, LiveRate live) => route.socksPort != null
       ? socksSpeed(server.uploadUrl!, route.socksPort!,
-          auth: route.auth, upload: true, bytes: bytes, timeout: window + const Duration(seconds: 25))
+          auth: route.auth, upload: true, bytes: bytes, onBytes: live.add, timeout: window + const Duration(seconds: 25))
       : httpSpeed(server.uploadUrl!,
-          proxyPort: route.proxyPort, upload: true, bytes: bytes, timeout: window + const Duration(seconds: 25));
+          proxyPort: route.proxyPort, upload: true, bytes: bytes, onBytes: live.add, timeout: window + const Duration(seconds: 25));
 
   // The delay.
   onStage?.call(SpeedStage.ping);
@@ -367,7 +416,9 @@ Future<SpeedResult> runSpeedTest(
 
   // The download: each connection asks for more than the window can carry.
   onStage?.call(SpeedStage.download);
-  final d = await _sum(streams, (_) => down(share));
+  final liveDown = LiveRate((v, e) => onLive?.call(SpeedStage.download, v, e))..start();
+  final d = await _sum(streams, (_) => down(share, liveDown));
+  liveDown.stop();
   if (d != null) {
     r = r.copyWith(downMbps: d);
     onResult?.call(r);
@@ -377,15 +428,20 @@ Future<SpeedResult> runSpeedTest(
   // The upload: a small try tells how much each connection may send in the window, so a slow line is not
   // asked for minutes and a fast one is not asked for too little to count.
   onStage?.call(SpeedStage.upload);
-  final probe = await up(300000);
+  final liveUp = LiveRate((v, e) => onLive?.call(SpeedStage.upload, v, e))..start();
+  try {
+  final probe = await up(300000, liveUp);
   if (probe >= 0 && !stop()) {
     // (The try is slow because the connection is still speeding up, so twice what it says is asked for.)
     final perStream = (probe * 1e6 / 8 * window.inSeconds * 2 / streams).clamp(100000, share < 8000000 ? share : 8000000).toInt();
-    final u = await _sum(streams, (_) => up(perStream));
+    final u = await _sum(streams, (_) => up(perStream, liveUp));
     if (u != null) {
       r = r.copyWith(upMbps: u);
       onResult?.call(r);
     }
+  }
+  } finally {
+    liveUp.stop();
   }
   return r;
 }

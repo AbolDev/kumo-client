@@ -34,6 +34,30 @@ void main() {
     });
   });
 
+  group('the live number', () {
+    test('the speed of the last second, with the time since the start', () async {
+      final got = <double>[];
+      final live = LiveRate((v, e) => got.add(v), every: const Duration(hours: 1), span: const Duration(seconds: 1));
+      live.start();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      live.add(250000); // 2 Mbit in about 0.2 s
+      live.tick();
+      expect(got.single, greaterThan(2));
+      expect(got.single, lessThan(20));
+      expect(live.total, 250000);
+      live.stop();
+    });
+
+    test('nothing that came is zero, not an error', () async {
+      final got = <double>[];
+      final live = LiveRate((v, e) => got.add(v), every: const Duration(hours: 1))..start();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      live.tick();
+      expect(got.single, 0);
+      live.stop();
+    });
+  });
+
   group('the servers', () {
     test('the first is Cloudflare and every other has a download and a page for the delay', () {
       expect(speedServers.first.id, 'cloudflare');
