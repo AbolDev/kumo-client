@@ -187,7 +187,9 @@ void main() {
       final fake = SpeedServer('fake', 'Fake', '127.0.0.1', url('/down'), url('/ping'), uploadUrl: url('/up'));
       final stages = <SpeedStage>[];
       final partials = <SpeedResult>[];
+      final tries = <String>[];
       final r = await runSpeedTest(fake, const SpeedRoute(),
+          onPingTry: (done, total, ms) => tries.add('$done/$total ${ms >= 0}'),
           pings: 3,
           streams: 2,
           window: const Duration(seconds: 2),
@@ -195,6 +197,7 @@ void main() {
           onStage: stages.add,
           onResult: partials.add);
       expect(stages, [SpeedStage.ping, SpeedStage.download, SpeedStage.upload]);
+      expect(tries, ['1/3 true', '2/3 true', '3/3 true']);
       expect(r.pingMs, isNotNull);
       expect(r.jitterMs, isNotNull);
       expect(r.downMbps, greaterThan(0));

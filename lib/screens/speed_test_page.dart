@@ -10,9 +10,6 @@ import '../state/app_state.dart';
 
 const _historyFile = 'speed_history.json';
 
-/// The highest speed on the gauge, in Mbit/s (the scale is logarithmic, so slow lines still move it).
-const _gaugeMax = 500.0;
-
 /// The speed of the connection: the delay, the download and the upload, against a server of the user's
 /// choice (Cloudflare unless changed). With a VPN up the test goes through it, otherwise it measures the
 /// network itself. Three faces: ready (a big start button and the choices), running (a live gauge, the
@@ -35,10 +32,10 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
   var _history = <SpeedResult>[];
   var _capMb = speedDefaultMb;
 
-  // The live speed of the stage that runs, its trace and how long it has run.
+  // The live speed of the stage that runs and how long it has run; the tries of the delay.
   double _live = 0;
-  final _trace = <double>[];
   Duration _elapsed = Duration.zero;
+  var _pingDone = 0, _pingTotal = 5, _pingLast = -1;
 
   late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 2200))
     ..repeat();
@@ -84,8 +81,9 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
       _result = null;
       _stage = SpeedStage.ping;
       _live = 0;
-      _trace.clear();
       _elapsed = Duration.zero;
+      _pingDone = 0;
+      _pingLast = -1;
     });
     final r = await runSpeedTest(
       _server,
@@ -97,7 +95,6 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
         setState(() {
           _stage = s;
           _live = 0;
-          _trace.clear();
           _elapsed = Duration.zero;
         });
       },
@@ -109,8 +106,14 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
         setState(() {
           _live = mbps;
           _elapsed = elapsed;
-          _trace.add(mbps);
-          if (_trace.length > 120) _trace.removeAt(0);
+        });
+      },
+      onPingTry: (done, total, ms) {
+        if (!mounted) return;
+        setState(() {
+          _pingDone = done;
+          _pingTotal = total;
+          if (ms >= 0) _pingLast = ms;
         });
       },
       cancelled: () => _cancel || !mounted,
@@ -336,56 +339,127 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
         SpeedStage.upload => tr(context, 'speedStageUpload'),
       };
 
+  /// The colour of a stage: the delay, the download and the upload each have their own.
+  Color _stageColor(SpeedStage st) {
+    final scheme = Theme.of(context).colorScheme;
+    return switch (st) {
+      SpeedStage.ping => scheme.secondary,
+      SpeedStage.download => scheme.primary,
+      SpeedStage.upload => scheme.tertiary,
+    };
+  }
+
+  /// How far each stage is, 0 to 1: the ones done are full, the one running fills with its tries or its time.
+  List<double> _progress() {
+    final stages = [SpeedStage.ping, SpeedStage.download, if (_server.canUpload) SpeedStage.upload];
+    final now = stages.indexOf(_stage ?? SpeedStage.ping);
+    return [
+      for (final (i, st) in stages.indexed)
+        if (i < now)
+          1.0
+        else if (i > now)
+          0.0
+        else if (st == SpeedStage.ping)
+          _pingTotal == 0 ? 0.0 : _pingDone / _pingTotal
+        else
+          (_elapsed.inMilliseconds / 8000).clamp(0.0, 1.0).toDouble(),
+    ];
+  }
+
+  Widget _legend(String label, String value, {required bool now, required bool done}) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final color = now ? scheme.onSurface : (done ? scheme.onSurfaceVariant : scheme.outline);
+    return Expanded(
+      child: Column(children: [
+        Text(label, style: text.labelMedium?.copyWith(color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 2),
+        Text(value,
+            textDirection: TextDirection.ltr,
+            style: text.titleMedium?.copyWith(color: color, fontWeight: now ? FontWeight.w700 : FontWeight.w500)),
+      ]),
+    );
+  }
+
   Widget _runningView() {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final stage = _stage ?? SpeedStage.ping;
-    final measuring = stage != SpeedStage.ping;
-    final color = stage == SpeedStage.upload ? scheme.tertiary : scheme.primary;
+    final r = _result;
+    final stages = [SpeedStage.ping, SpeedStage.download, if (_server.canUpload) SpeedStage.upload];
+    final color = _stageColor(stage);
+    final (title, value, unit) = switch (stage) {
+      SpeedStage.ping => (
+          tr(context, 'speedPing'),
+          _pingLast < 0 ? '…' : '$_pingLast',
+          'ms · ${ltr('$_pingDone / $_pingTotal')}',
+        ),
+      SpeedStage.download => ('↓ ${tr(context, 'speedDownload')}', _mbps(_live), 'Mbps · ${ltr('${_elapsed.inSeconds} s')}'),
+      SpeedStage.upload => ('↑ ${tr(context, 'speedUpload')}', _mbps(_live), 'Mbps · ${ltr('${_elapsed.inSeconds} s')}'),
+    };
+    final size = math.min(MediaQuery.sizeOf(context).width - 64, 280.0);
     return Column(children: [
-      _row(runningNow: true),
-      const SizedBox(height: 16),
-      Semantics(
-        label: measuring ? '${_mbps(_live)} Mbps' : _stageText(stage),
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: measuring ? _live : 0),
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-          builder: (context, value, _) => CustomPaint(
-            size: const Size(300, 170),
-            painter: _GaugePainter(
-              value: value,
-              track: scheme.surfaceContainerHighest,
-              fill: color,
-              needle: scheme.onSurface,
-              label: scheme.onSurfaceVariant,
+      const SizedBox(height: 8),
+      SizedBox(
+        width: size,
+        height: size,
+        child: Stack(alignment: Alignment.center, children: [
+          TweenAnimationBuilder<List<double>>(
+            tween: _ListTween(end: _progress()),
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOut,
+            builder: (context, parts, _) => CustomPaint(
+              size: Size.square(size),
+              painter: _RingPainter(
+                parts: parts,
+                colors: [for (final st in stages) _stageColor(st)],
+                track: scheme.surfaceContainerHighest,
+              ),
             ),
           ),
-        ),
-      ),
-      Text(measuring ? _mbps(_live) : '…',
-          textDirection: TextDirection.ltr, style: text.displayMedium?.copyWith(fontWeight: FontWeight.w700, color: scheme.onSurface)),
-      Text(
-        measuring ? 'Mbps · ${_stageText(stage)} · ${ltr('${_elapsed.inSeconds} s')}' : _stageText(stage),
-        style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-        textAlign: TextAlign.center,
-      ),
-      const SizedBox(height: 12),
-      SizedBox(
-        height: 52,
-        width: double.infinity,
-        child: CustomPaint(painter: _TracePainter(List.of(_trace), color)),
+          Container(
+            width: size * 0.66,
+            height: size * 0.66,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: scheme.surfaceContainerLow),
+            child: Semantics(
+              liveRegion: false,
+              label: '$title $value $unit',
+              excludeSemantics: true,
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(title, style: text.labelLarge?.copyWith(color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(value,
+                      textDirection: TextDirection.ltr,
+                      style: text.displayMedium?.copyWith(fontWeight: FontWeight.w700, color: scheme.onSurface, height: 1.1)),
+                ),
+                Text(unit, style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              ]),
+            ),
+          ),
+        ]),
       ),
       const SizedBox(height: 16),
-      OutlinedButton.icon(
-        style: OutlinedButton.styleFrom(
+      Row(children: [
+        _legend(tr(context, 'speedPing'), r?.pingMs == null ? (stage == SpeedStage.ping && _pingLast >= 0 ? '$_pingLast ms' : '—') : '${r!.pingMs} ms',
+            now: stage == SpeedStage.ping, done: r?.pingMs != null),
+        _legend(tr(context, 'speedDownload'),
+            stage == SpeedStage.download ? _mbps(_live) : _mbps(r?.downMbps),
+            now: stage == SpeedStage.download, done: r?.downMbps != null),
+        if (_server.canUpload)
+          _legend(tr(context, 'speedUpload'), stage == SpeedStage.upload ? _mbps(_live) : _mbps(r?.upMbps),
+              now: stage == SpeedStage.upload, done: r?.upMbps != null),
+      ]),
+      const SizedBox(height: 20),
+      IconButton.outlined(
+        tooltip: tr(context, 'speedStop'),
+        style: IconButton.styleFrom(
           foregroundColor: scheme.error,
           side: BorderSide(color: scheme.error.withValues(alpha: 0.6)),
-          minimumSize: const Size(140, 48),
+          minimumSize: const Size(52, 52),
         ),
         onPressed: _cancel ? null : () => setState(() => _cancel = true),
         icon: const Icon(Icons.stop_rounded),
-        label: Text(tr(context, 'speedStop')),
       ),
     ]);
   }
@@ -529,101 +603,50 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
   }
 }
 
-/// Where a speed sits on the gauge, 0 to 1: logarithmic, so 1 and 10 Mbit/s are as far apart as 50 and 500.
-double gaugeFraction(double mbps) {
-  final v = mbps.isNaN || mbps < 0 ? 0.0 : (mbps > _gaugeMax ? _gaugeMax : mbps);
-  return math.log(1 + v) / math.log(1 + _gaugeMax);
+/// Tweens a list of numbers one by one (the parts of the ring), from wherever they were.
+class _ListTween extends Tween<List<double>> {
+  _ListTween({required List<double> end}) : super(begin: end, end: end);
+
+  @override
+  List<double> lerp(double t) {
+    final a = begin ?? end!;
+    final b = end!;
+    return [for (var i = 0; i < b.length; i++) (i < a.length ? a[i] : 0.0) + (b[i] - (i < a.length ? a[i] : 0.0)) * t];
+  }
 }
 
-/// A half circle with the speed: a track, the part reached, the marks and a needle.
-class _GaugePainter extends CustomPainter {
-  _GaugePainter({required this.value, required this.track, required this.fill, required this.needle, required this.label});
+/// A ring in as many parts as there are stages, with a small gap between them: a part that is done is full,
+/// the one running fills, the next ones are only their track.
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.parts, required this.colors, required this.track});
 
-  final double value;
-  final Color track, fill, needle, label;
+  final List<double> parts;
+  final List<Color> colors;
+  final Color track;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const stroke = 16.0;
-    final radius = math.min(size.width / 2, size.height - 12) - stroke / 2;
-    final center = Offset(size.width / 2, size.height - 10);
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    final base = Paint()
+    final n = parts.length;
+    if (n == 0) return;
+    final stroke = size.width * 0.06;
+    final rect = Rect.fromCircle(center: size.center(Offset.zero), radius: size.width / 2 - stroke / 2 - 2);
+    // The gap, in radians, plus what the round ends take.
+    final gap = 0.09 + stroke / rect.width;
+    final sweep = (2 * math.pi - n * gap) / n;
+    final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
-    canvas.drawArc(rect, math.pi, math.pi, false, base..color = track);
-    final f = gaugeFraction(value);
-    if (f > 0.001) canvas.drawArc(rect, math.pi, math.pi * f, false, base..color = fill);
-
-    // The marks, inside the arc.
-    for (final mark in const [0, 1, 5, 10, 50, 100, 250, 500]) {
-      final a = math.pi + math.pi * gaugeFraction(mark.toDouble());
-      final p = Offset(center.dx + math.cos(a) * (radius - 26), center.dy + math.sin(a) * (radius - 26));
-      final tp = TextPainter(
-        text: TextSpan(text: '$mark', style: TextStyle(color: label, fontSize: 10)),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, p - Offset(tp.width / 2, tp.height / 2));
+    for (var i = 0; i < n; i++) {
+      final start = -math.pi / 2 + gap / 2 + i * (sweep + gap);
+      canvas.drawArc(rect, start, sweep, false, paint..color = track);
+      final f = parts[i].clamp(0.0, 1.0).toDouble();
+      if (f > 0.005) canvas.drawArc(rect, start, sweep * f, false, paint..color = colors[i % colors.length]);
     }
-
-    // The needle.
-    final a = math.pi + math.pi * f;
-    final tip = Offset(center.dx + math.cos(a) * (radius - 10), center.dy + math.sin(a) * (radius - 10));
-    canvas.drawLine(
-        center,
-        tip,
-        Paint()
-          ..color = needle
-          ..strokeWidth = 4
-          ..strokeCap = StrokeCap.round);
-    canvas.drawCircle(center, 8, Paint()..color = needle);
-    canvas.drawCircle(center, 3.5, Paint()..color = fill);
   }
 
   @override
-  bool shouldRepaint(_GaugePainter old) =>
-      old.value != value || old.fill != fill || old.track != track || old.needle != needle;
-}
-
-/// The speed over the stage, as a line with a soft fill under it.
-class _TracePainter extends CustomPainter {
-  _TracePainter(this.points, this.color);
-
-  final List<double> points;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (points.length < 2) return;
-    final top = points.reduce(math.max);
-    if (top <= 0) return;
-    final step = size.width / (points.length - 1);
-    final line = Path();
-    for (var i = 0; i < points.length; i++) {
-      final p = Offset(i * step, size.height - points[i] / top * (size.height - 4));
-      if (i == 0) {
-        line.moveTo(p.dx, p.dy);
-      } else {
-        line.lineTo(p.dx, p.dy);
-      }
-    }
-    final area = Path.from(line)
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(area, Paint()..color = color.withValues(alpha: 0.15));
-    canvas.drawPath(
-        line,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.5
-          ..strokeJoin = StrokeJoin.round);
-  }
-
-  @override
-  bool shouldRepaint(_TracePainter old) => true;
+  bool shouldRepaint(_RingPainter old) => true;
 }
 
 /// Rings that grow out of the start button and fade.

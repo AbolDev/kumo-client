@@ -346,7 +346,7 @@ Future<double?> _sum(int count, Future<double> Function(int i) one) async {
 /// it moves), the download and the upload, each of them over [streams] connections for [window]. A
 /// download leaves its first [warmup] out. Neither the download nor the upload uses more than [maxMb] MB (the
 /// connections share it); a smaller share is cheaper and less exact on a fast line. [onStage] is told what is being measured and [onResult] gets
-/// the numbers as they come, [onLive] the speed of the download or the upload while it runs (four times a second);
+/// the numbers as they come, [onPingTry] each try of the delay (-1: it failed), [onLive] the speed of the download or the upload while it runs (four times a second);
 /// [cancelled] is asked between the stages and the result so far is returned.
 Future<SpeedResult> runSpeedTest(
   SpeedServer server,
@@ -360,6 +360,7 @@ Future<SpeedResult> runSpeedTest(
   void Function(SpeedStage stage)? onStage,
   void Function(SpeedResult partial)? onResult,
   void Function(SpeedStage stage, double mbps, Duration elapsed)? onLive,
+  void Function(int done, int total, int ms)? onPingTry,
   bool Function()? cancelled,
   DateTime? now,
 }) async {
@@ -398,6 +399,7 @@ Future<SpeedResult> runSpeedTest(
   for (var i = 0; i < pings && !stop(); i++) {
     final ms = await _ping(pingUri, route, const Duration(seconds: 6));
     if (ms >= 0) times.add(ms);
+    onPingTry?.call(i + 1, pings, ms);
   }
   if (times.isNotEmpty) {
     final sorted = [...times]..sort();
