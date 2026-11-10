@@ -18,7 +18,9 @@ import (
 // It starts a throw-away sing-box instance that holds only the outbound tagged "proxy" and measures how fast
 // data goes through it, in Mbit/s. With upload false it downloads testURL and counts what arrives from the
 // first byte until the end or the timeout; with upload true it sends size bytes to testURL and counts the time
-// until the server has answered. timeoutMs is for the whole, set-up included.
+// from the first byte sent until the server has answered. timeoutMs is for the whole, set-up included; when it
+// runs out in the middle of an upload, the speed is that of what was sent until then (a slow line still gets
+// its number instead of nothing).
 func MeasureSpeed(configContent string, testURL string, upload bool, size int32, timeoutMs int32) (float64, error) {
 	ctx := baseContext(nil)
 	options, err := parseConfig(ctx, configContent)
@@ -50,15 +52,23 @@ func MeasureSpeed(configContent string, testURL string, upload bool, size int32,
 	client := &http.Client{Transport: transport}
 
 	if upload {
-		request, err := http.NewRequestWithContext(ctx, http.MethodPost, testURL, &zeroReader{left: int64(size)})
+		body := &zeroReader{left: int64(size)}
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, testURL, body)
 		if err != nil {
 			return 0, err
 		}
 		request.ContentLength = int64(size)
 		request.Header.Set("Content-Type", "application/octet-stream")
-		start := time.Now()
 		response, err := client.Do(request)
 		if err != nil {
+			// Out of time half-way: what went out so far tells the speed (at least 64 KB of it, or it is noise).
+			if ctx.Err() != nil && body.sent >= 64*1024 && !body.first.IsZero() {
+				seconds := time.Since(body.first).Seconds()
+				if seconds < 0.05 {
+					seconds = 0.05
+				}
+				return float64(body.sent) * 8 / seconds / 1e6, nil
+			}
 			return 0, err
 		}
 		_, _ = io.Copy(io.Discard, response.Body)
@@ -66,8 +76,8 @@ func MeasureSpeed(configContent string, testURL string, upload bool, size int32,
 		if response.StatusCode >= 400 {
 			return 0, E.New("bad status ", response.Status)
 		}
-		seconds := time.Since(start).Seconds()
-		if seconds < 0.05 {
+		seconds := time.Since(body.first).Seconds()
+		if body.first.IsZero() || seconds < 0.05 {
 			seconds = 0.05
 		}
 		return float64(size) * 8 / seconds / 1e6, nil
@@ -110,14 +120,20 @@ func MeasureSpeed(configContent string, testURL string, upload bool, size int32,
 	return float64(total) * 8 / seconds / 1e6, nil
 }
 
-// zeroReader gives left bytes of zeros: the body of an upload.
+// zeroReader gives left bytes of zeros: the body of an upload. It keeps how much was taken and when the first
+// of it was, for the speed of an upload that runs out of time.
 type zeroReader struct {
-	left int64
+	left  int64
+	sent  int64
+	first time.Time
 }
 
 func (z *zeroReader) Read(p []byte) (int, error) {
 	if z.left <= 0 {
 		return 0, io.EOF
+	}
+	if z.first.IsZero() {
+		z.first = time.Now()
 	}
 	if int64(len(p)) > z.left {
 		p = p[:z.left]
@@ -126,5 +142,6 @@ func (z *zeroReader) Read(p []byte) (int, error) {
 		p[i] = 0
 	}
 	z.left -= int64(len(p))
+	z.sent += int64(len(p))
 	return len(p), nil
 }

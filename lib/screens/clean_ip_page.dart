@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' show max;
+import 'dart:math' show max, min;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -1027,7 +1027,8 @@ class _CleanIpPageState extends State<CleanIpPage> {
     double per(int id) => switch (id) {
           1 => wait * o.samples / cleanIpWorkers(max(1, _stage == 1 ? _total : o.count), gentle: o.gentle),
           2 => max(6, wait * 3) * 0.5 / cleanIpRealParallel(gentle: o.gentle),
-          3 => ((o.speedTest & 1) != 0 ? 4 + o.speedMb * 8 / 20 : 0.0) + ((o.speedTest & 2) != 0 ? 10.0 : 0.0),
+          3 => ((o.speedTest & 1) != 0 ? min(4 + o.speedMb * 8 / 20, cleanIpSpeedSeconds.toDouble()) : 0.0) +
+              ((o.speedTest & 2) != 0 ? min(4 + o.speedMb * 8 / 5, cleanIpSpeedSeconds.toDouble()) : 0.0),
           _ => _speed ? 2.0 : 0.5,
         };
     int count(int id) => switch (id) {

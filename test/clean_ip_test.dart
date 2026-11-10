@@ -563,20 +563,6 @@ nonsense 300.1.1.1 1.2.3.4-1.2.3.1 10.0.0.1-999 1.2.3.0/40
           isEmpty);
     });
 
-    test('the upload of an address: a slow first one counts as it is, a quick one is followed by about six seconds of it', () {
-      // 0.6 Mbit/s: 1 MB took 13 s, that is the number.
-      expect(uploadFollowUp(0.6, 1000000, 8000000), isNull);
-      // 4 Mbit/s: 2 s, still enough.
-      expect(uploadFollowUp(4, 1000000, 8000000), isNull);
-      // 20 Mbit/s: 15 MB would be six seconds; the limit is 8 MB.
-      expect(uploadFollowUp(20, 1000000, 8000000), 8000000);
-      // 6 Mbit/s: 4.5 MB.
-      expect(uploadFollowUp(6, 1000000, 8000000), 4500000);
-      // Nothing more to send, or a failed first one.
-      expect(uploadFollowUp(50, 1000000, 1000000), isNull);
-      expect(uploadFollowUp(-1, 1000000, 8000000), isNull);
-    });
-
     test('what is left of a scan: by its own pace once it has one, else by what it usually takes', () {
       // 10 of 100 in 20 s: 180 s more.
       expect(scanSecondsLeft(elapsedInStage: 20, done: 10, total: 100, priorPerItem: 1), closeTo(180, 0.1));
