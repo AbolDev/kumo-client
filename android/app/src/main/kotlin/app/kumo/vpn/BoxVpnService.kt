@@ -106,6 +106,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
         // How long a disconnect waits for the core to close before it is shown as done.
         private const val QUICK_CLOSE_MS = 1_500L
+        private const val CLOSING_WAIT_MS = 1_000L
 
         // The instance that owns the process-wide VPN state.
         @Volatile private var live: BoxVpnService? = null
@@ -279,7 +280,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             val server = CommandServer(this, this)
             server.start()
             commandServer = server
-            server.startOrReloadService(content, OverrideOptions())
+            startCore(server, content)
             proxyMode = true
             VpnBridge.setStandby(true)
         } catch (e: Throwable) {
@@ -529,7 +530,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
             val server = CommandServer(this, this)
             server.start()
             commandServer = server
-            server.startOrReloadService(content, OverrideOptions())
+            startCore(server, content)
             if (VpnBridge.status != VpnBridge.STARTING) return // stopped meanwhile: its teardown follows
             VpnBridge.update(VpnBridge.STARTED)
             everStarted = true
@@ -568,11 +569,27 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     /** Runs with [lifecycle] held, before a core starts: the core of the last connection must be gone. */
     private suspend fun awaitClosing() {
         val c = closing ?: return
-        // Twelve seconds: a core that closes slowly (open connections, lookups) must be gone before the
-        // next one starts, or the next one meets its ports still in use.
-        val done = withTimeoutOrNull(12_000) { c.await() }
-        if (done == null) Log.w(TAG, "the last core was still closing after 12 s")
-        if (closing === c) closing = null
+        // Only a moment: the user must not wait for a core that closes slowly (open connections, lookups).
+        // The next core can listen on the proxy ports while that one still holds them (the configuration
+        // has "reuse_addr"), and a port that is taken all the same is tried again in [startCore].
+        val done = withTimeoutOrNull(CLOSING_WAIT_MS) { c.await() }
+        if (done == null) Log.w(TAG, "the last core is still closing: the next one starts beside it")
+        else if (closing === c) closing = null
+    }
+
+    /** Starts the core. When a port is still held by the core of the last connection, which is closing in
+     *  the background, that one is waited for and the start is tried once more. */
+    private suspend fun startCore(server: CommandServer, content: String) {
+        try {
+            server.startOrReloadService(content, OverrideOptions())
+        } catch (e: Throwable) {
+            val c = closing
+            if (c == null || e.message?.contains("address already in use") != true) throw e
+            Log.w(TAG, "a port is still held by the last core: waiting for it", e)
+            withTimeoutOrNull(12_000) { c.await() }
+            if (closing === c) closing = null
+            server.startOrReloadService(content, OverrideOptions())
+        }
     }
 
     private fun stopVpn() {

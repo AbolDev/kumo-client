@@ -453,12 +453,17 @@ String buildSingBoxConfig(
   }
   outbounds.add({'type': 'direct', 'tag': 'direct'});
 
+  // On the phone the core of the last connection closes in the background after a disconnect, and can
+  // hold the proxy ports for a while yet. With "reuse_addr" (SO_REUSEPORT) the next core listens on
+  // them at once instead of failing with "address already in use". On the desktop the core is a
+  // program that is killed, so its ports are free the moment it is gone.
   final inbounds = <Map<String, dynamic>>[
     {
       'type': 'mixed',
       'tag': 'mixed-in',
       'listen': '127.0.0.1',
       'listen_port': o.proxyPort,
+      if (!windows) 'reuse_addr': true,
       // The login applies when the proxy is not the app's own way in: with the tunnel, and when it
       // is kept running alone. (The system proxy and the app's own tests have no login.)
       if ((o.tun || localLogin) && o.proxyUser.isNotEmpty && o.proxyPassword.isNotEmpty)
@@ -475,6 +480,7 @@ String buildSingBoxConfig(
       'tag': 'lan-in',
       'listen': '0.0.0.0',
       'listen_port': o.lanPort,
+      if (!windows) 'reuse_addr': true,
       'users': [
         {'username': o.lanUser, 'password': o.lanPassword},
       ],
