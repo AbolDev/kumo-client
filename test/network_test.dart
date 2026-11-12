@@ -32,6 +32,20 @@ void main() {
         '127.0.0.1:9999');
   });
 
+  test('on the phone the proxy ports can be listened on while the last core still holds them', () {
+    final o = NetOptions()
+      ..tun = true
+      ..shareLan = true
+      ..lanPassword = 'p';
+    final phone = build(o);
+    final mixed = [for (final i in phone['inbounds']) if (i['type'] == 'mixed') i];
+    expect(mixed.map((i) => i['tag']), ['mixed-in', 'lan-in']);
+    expect(mixed.every((i) => i['reuse_addr'] == true), isTrue);
+    // The desktop core is a program that is killed: nothing is shared there.
+    final desktop = build(o, windows: true);
+    expect([for (final i in desktop['inbounds']) i.containsKey('reuse_addr')], everyElement(isFalse));
+  });
+
   test('the tunnel, the port and the MTU follow the options', () {
     final o = NetOptions()
       ..tun = true
