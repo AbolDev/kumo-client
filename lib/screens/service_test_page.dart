@@ -144,20 +144,24 @@ class _ServiceTestPageState extends State<ServiceTestPage> {
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: vpn ? scheme.primaryContainer : scheme.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(20),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: vpn ? scheme.primaryContainer : scheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(vpn ? Icons.vpn_lock : Icons.public_off_outlined,
+                              size: 16, color: vpn ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(tr(context, vpn ? 'svcModeVpn' : 'svcModeDirect'),
+                                style: text.labelMedium?.copyWith(
+                                    color: vpn ? scheme.onPrimaryContainer : scheme.onSurfaceVariant)),
+                          ),
+                        ]),
                       ),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(vpn ? Icons.vpn_lock : Icons.public_off_outlined,
-                            size: 16, color: vpn ? scheme.onPrimaryContainer : scheme.onSurfaceVariant),
-                        const SizedBox(width: 6),
-                        Text(tr(context, vpn ? 'svcModeVpn' : 'svcModeDirect'),
-                            style: text.labelMedium?.copyWith(
-                                color: vpn ? scheme.onPrimaryContainer : scheme.onSurfaceVariant)),
-                      ]),
                     ),
                   ]),
                   const SizedBox(height: 14),
