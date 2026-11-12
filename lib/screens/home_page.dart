@@ -278,7 +278,8 @@ class HomePage extends StatelessWidget {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyV, control: true): () => _addFromClipboard(context),
       },
-      child: Focus(autofocus: true, child: _dropTarget(context, child)),
+      // (With a remote, the page is not itself a place for the focus to rest: the buttons are.)
+      child: Focus(autofocus: !isTv, canRequestFocus: !isTv, child: _dropTarget(context, child)),
     );
   }
 
