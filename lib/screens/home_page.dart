@@ -805,6 +805,10 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
   bool _down = false;
   bool _focused = false;
 
+  /// The focus of this button. On a television it is asked for once the page is drawn: the page's own
+  /// focus can take it first when only "autofocus" is used, and then the arrows start from the whole page.
+  final _node = FocusNode(debugLabel: 'power');
+
   // The time that moves the rings around the button, in seconds. It only runs while connected
   // (and only ticks when the app is in front); it carries on from where it stopped.
   final _time = ValueNotifier<double>(0);
@@ -819,6 +823,7 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
       final t = _base + elapsed.inMicroseconds / 1e6;
       if (t - _time.value >= 1 / 31) _time.value = t;
     });
+    if (isTv) WidgetsBinding.instance.addPostFrameCallback((_) => mounted ? _node.requestFocus() : null);
   }
 
   /// The system setting "remove animations" (also used by people who get dizzy from motion).
@@ -850,6 +855,7 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
   void dispose() {
     _ticker.dispose();
     _time.dispose();
+    _node.dispose();
     super.dispose();
   }
 
@@ -859,7 +865,7 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
     // A remote control (Android TV) or the keyboard moves focus here and presses with OK / Enter.
     return Focus(
       // On a television the remote starts here: OK connects, and the arrows go on to the list.
-      autofocus: isTv,
+      focusNode: _node,
       onFocusChange: (v) => setState(() => _focused = v),
       onKeyEvent: (_, event) {
         final key = event.logicalKey;

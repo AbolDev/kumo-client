@@ -58,12 +58,12 @@ void main() {
       // The connect card and the server list side by side, as on a computer: the title of the list is to the
       // right of the card that is 380 wide.
       expect(tester.getTopLeft(find.byIcon(Icons.dns_outlined)).dx, greaterThan(380));
-      // OK (select) on the power button is what the remote does: nothing else has the focus.
+      // OK (select) on the power button is what the remote does: the focus is on the button itself (128 wide),
+      // not on the page around it.
       final focus = FocusManager.instance.primaryFocus;
       expect(focus, isNotNull);
-      expect(focus!.context, isNotNull);
-      expect(find.descendant(of: find.byWidget(focus.context!.widget), matching: find.byIcon(Icons.power_settings_new)),
-          findsOneWidget);
+      expect(focus!.debugLabel, 'power');
+      expect(focus.rect.width, 128);
     });
 
     testWidgets('the right arrow goes from the power button on to the lists', (tester) async {
