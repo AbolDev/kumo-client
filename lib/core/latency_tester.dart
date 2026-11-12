@@ -24,6 +24,44 @@ const oldDefaultDelayUrl = 'https://www.google.com/generate_204';
 /// The address used for the real delay; changed in Settings.
 String delayTestUrl = defaultDelayUrl;
 
+/// How slow the network of this device is, learnt from the TCP connect times the tests saw last. On a slow
+/// one (H+, a weak signal) the usual time limits call working servers dead and move a connection off a
+/// server that only needed longer, so the limits grow with it: up to three times as long.
+class NetPace {
+  NetPace._();
+
+  static final _recent = <int>[];
+
+  /// A TCP connect that succeeded, in ms.
+  static void note(int ms) {
+    if (ms < 0) return;
+    _recent.add(ms);
+    if (_recent.length > 60) _recent.removeAt(0);
+  }
+
+  static void reset() => _recent.clear();
+
+  /// 1 on an ordinary network (half of the servers connect within 400 ms), up to 3 on a slow one.
+  static double get factor {
+    if (_recent.length < 5) return 1;
+    final sorted = [..._recent]..sort();
+    return (sorted[sorted.length ~/ 2] / 400).clamp(1.0, 3.0);
+  }
+
+  /// [limit], made longer on a slow network.
+  static Duration scale(Duration limit) => Duration(milliseconds: (limit.inMilliseconds * factor).round());
+}
+
+/// How long the check of a running connection waits for an answer before it counts as a miss: the usual
+/// five seconds, longer on a slow network, and at least four times the delay this connection measured
+/// ([liveDelayMs]); twenty seconds at most.
+Duration healthTimeout(int? liveDelayMs) {
+  final usual = NetPace.scale(const Duration(seconds: 5));
+  final own = Duration(milliseconds: (liveDelayMs ?? 0) > 0 ? liveDelayMs! * 4 : 0);
+  final limit = own > usual ? own : usual;
+  return limit > const Duration(seconds: 20) ? const Duration(seconds: 20) : limit;
+}
+
 /// Protocols that run over UDP: a TCP connect to their port always fails, so they skip that stage.
 const _udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
 
@@ -81,8 +119,9 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) => resolve
 ///
 /// With [options] the server is tried with those advanced options (fragmenting, a fingerprint, mux)
 /// instead of a plain outbound; this is for servers sing-box carries.
-Future<int> realDelay(ProxyConfig c,
-    {Duration timeout = const Duration(seconds: 8), NetOptions? options}) async {
+Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options}) async {
+  // The usual limit grows on a slow network; one the caller gives is kept as it is.
+  timeout ??= NetPace.scale(const Duration(seconds: 8));
   // An OpenVPN server is measured by the OpenVPN program itself: the time until the handshake is done.
   if (c.isOpenVpn) {
     if (!Platform.isWindows) return -2;
@@ -126,7 +165,8 @@ Future<int> tunnelDelay(
     XrayAuth? socksAuth,
     int? proxyPort,
     int samples = 1,
-    Duration timeout = const Duration(seconds: 8)}) async {
+    Duration? timeout}) async {
+  timeout ??= NetPace.scale(const Duration(seconds: 8));
   final uri = Uri.parse(delayTestUrl);
   // Through the tunnel the app looks the name up itself, and the first lookup of a session goes
   // through a cold encrypted DNS connection: that is no part of the delay. (With a local proxy or
@@ -330,7 +370,7 @@ Future<void> testReal(
         continue;
       }
       final c = queue.removeFirst();
-      final ms = await realDelay(c, timeout: const Duration(seconds: 5));
+      final ms = await realDelay(c, timeout: NetPace.scale(const Duration(seconds: 5)));
       // -2: skipped, so the old value stays
       if (ms != -2) c.latencyMs = ms;
       if (c.isAlive) alive++;
@@ -348,8 +388,8 @@ final _realWorkers = Platform.isAndroid ? 4 : 6;
 /// TCP connect time to the server in ms, or -1 if it can't be reached. The lookup of the server's
 /// name comes first and is not counted: with it, every server with a name showed the time of a
 /// DNS query on top of its own ping.
-Future<int> tcpLatency(ProxyConfig c,
-    {Duration timeout = const Duration(seconds: 3)}) async {
+Future<int> tcpLatency(ProxyConfig c, {Duration? timeout}) async {
+  timeout ??= NetPace.scale(const Duration(seconds: 3));
   // An OpenVPN server on UDP is asked with the first packet of the protocol instead of a TCP connect.
   if (c.isOpenVpn) return ovpnPing(c.ovpn!, timeout: timeout);
   try {
@@ -358,6 +398,7 @@ Future<int> tcpLatency(ProxyConfig c,
     final sw = Stopwatch()..start();
     final s = await Socket.connect(address, c.port, timeout: timeout);
     s.destroy();
+    NetPace.note(sw.elapsedMilliseconds);
     return sw.elapsedMilliseconds;
   } catch (_) {
     return -1;
@@ -371,7 +412,7 @@ Future<void> testLatencies(
   List<ProxyConfig> candidates, {
   int concurrency = 60,
   int? stopAfterAlive,
-  Duration timeout = const Duration(seconds: 3),
+  Duration? timeout,
   bool Function()? isCancelled,
   void Function(ProxyConfig c)? onResult,
   Map<ProxyConfig, int>? into,
@@ -399,5 +440,7 @@ Future<void> testLatencies(
     }
   }
 
-  await Future.wait(List.generate(concurrency, (_) => worker()));
+  // On a slow network fewer at once: sixty connects together fill the line, and then they all time out.
+  final workers = (concurrency / NetPace.factor).round().clamp(1, concurrency);
+  await Future.wait(List.generate(workers, (_) => worker()));
 }

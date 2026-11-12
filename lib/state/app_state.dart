@@ -2885,7 +2885,9 @@ class AppState extends ChangeNotifier {
         socksPort: _xrayPort,
         socksAuth: _xrayAuth,
         proxyPort: net.tun ? null : net.proxyPort,
-        timeout: const Duration(seconds: 5));
+        // Longer on a slow network, and never shorter than a few times what this connection measured:
+        // a server that only needs longer must not be given up.
+        timeout: healthTimeout(liveDelay));
     if (!connected) return;
     if (ms >= 0) {
       _misses = 0;

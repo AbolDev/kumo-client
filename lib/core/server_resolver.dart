@@ -9,7 +9,8 @@ import 'proxy_config.dart';
 /// wrongly for the names of servers that are blocked):
 /// 1. over encrypted DNS (DNS over HTTPS to 1.1.1.1 and 8.8.8.8 at once), which a network cannot read
 ///    or change;
-/// 2. when that does not answer (it is blocked on some networks), the system's own resolver;
+/// 2. when that has not answered after a moment (it is blocked on some networks), the system's own
+///    resolver beside it, and the first of the two to answer;
 /// 3. when neither answers, the name is left in the configuration for the core to look up.
 /// The address that is found takes the place of the name in the server's settings; the name stays
 /// where a server needs it (the TLS server name, the Host header).
@@ -91,8 +92,9 @@ class NameResolver {
     NameLookup? system,
     DateTime Function()? now,
     this.cacheFor = const Duration(minutes: 10),
-    this.dohPause = const Duration(minutes: 5),
+    this.dohPause = const Duration(minutes: 30),
     this.dohWait = const Duration(milliseconds: 2500),
+    this.dohHeadStart = const Duration(milliseconds: 400),
   })  : _doh = doh ?? _defaultDoh,
         _system = system ?? systemLookup,
         _now = now ?? DateTime.now;
@@ -110,8 +112,11 @@ class NameResolver {
   final Duration cacheFor;
   final Duration dohPause;
 
-  /// How long the encrypted resolvers are waited for before the system's resolver is asked.
+  /// How long the encrypted resolvers get before they count as not answering (blocked).
   final Duration dohWait;
+
+  /// How long the encrypted resolvers are asked alone, before the system's resolver is asked beside them.
+  final Duration dohHeadStart;
 
   final _cache = <String, ({String ip, DateTime at})>{};
   DateTime? _dohBlockedUntil;
@@ -123,14 +128,28 @@ class NameResolver {
     if (cached != null && _now().difference(cached.at) < cacheFor) return cached.ip;
     String? ip;
     final paused = _dohBlockedUntil != null && _now().isBefore(_dohBlockedUntil!);
-    if (!paused) {
+    if (paused) {
+      ip = await _system(host);
+    } else {
       // Made a Future<String?> first: a lookup typed Future<String> could not take the null of the timeout.
-      ip = await _doh(host)
+      final doh = _doh(host)
           .then<String?>((v) => v, onError: (Object _) => null)
           .timeout(dohWait, onTimeout: () => null);
-      if (ip == null) _dohBlockedUntil = _now().add(dohPause);
+      // Whenever it ends without an answer (now, or after the connection has gone on without it), the
+      // encrypted resolvers are left alone for a while.
+      unawaited(doh.then((v) {
+        if (v == null) _dohBlockedUntil = _now().add(dohPause);
+      }));
+      // The connection does not wait for resolvers that are blocked: after a short head start the system's
+      // resolver is asked as well, and the first of the two to answer is taken. One that answers within
+      // the head start is still the only one asked.
+      var answered = true;
+      ip = await doh.timeout(dohHeadStart, onTimeout: () {
+        answered = false;
+        return null;
+      });
+      ip ??= answered ? await _system(host) : await firstAnswer([doh, _system(host)]);
     }
-    ip ??= await _system(host);
     if (ip != null) _cache[key] = (ip: ip, at: _now());
     return ip;
   }
