@@ -112,6 +112,17 @@ void main() {
     accepted('rules', buildSingBoxConfig(servers, options: o));
   }, skip: skip);
 
+  test('rules about apps and services, on the phone and on a computer', () {
+    final o = NetOptions()
+      ..tun = true
+      ..directRules = ['app:com.bank.app', 'app:chrome.exe', 'service:telegram']
+      ..proxyRules = ['app:org.browser', 'service:youtube']
+      ..blockRules = ['app:com.annoying', 'service:tiktok'];
+    for (final windows in [false, true]) {
+      accepted('apps-$windows', buildSingBoxConfig(servers, options: o, windows: windows));
+    }
+  }, skip: skip);
+
   test('a pattern RE2 cannot read is turned away before it reaches the core', () {
     final o = NetOptions()
       ..directRules = [r'regex:(?=x)y', r'regex:(a)\1', r'regex:a++'].map(normalizeRouteRule).whereType<String>().toList();

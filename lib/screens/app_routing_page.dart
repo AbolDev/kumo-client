@@ -1,7 +1,5 @@
 import 'dart:io' show Platform;
 
-import 'dart:typed_data';
-
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +8,7 @@ import '../core/net_options.dart';
 import '../core/platform.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
+import '../widgets/app_icon.dart';
 import '../state/app_state.dart';
 
 /// Chooses which apps use the VPN: all, only the chosen ones, or all but the chosen ones.
@@ -159,7 +158,7 @@ class _AppRoutingPageState extends State<AppRoutingPage> {
                           CheckboxListTile(
                             secondary: isDesktop
                                 ? const Icon(Icons.apps)
-                                : _AppIcon(id: a.id),
+                                : AppIcon(id: a.id),
                             value: selected.contains(a.id),
                             onChanged: (v) => _toggle(a.id, v ?? false),
                             title: Text(a.label),
@@ -177,29 +176,6 @@ class _AppRoutingPageState extends State<AppRoutingPage> {
     return DropTarget(
       onDragDone: (d) => _addFiles(d.files.map((f) => f.path)),
       child: page,
-    );
-  }
-}
-
-/// The launcher icon of an installed app, fetched once per app.
-class _AppIcon extends StatelessWidget {
-  const _AppIcon({required this.id});
-
-  final String id;
-
-  static final _cache = <String, Future<Uint8List?>>{};
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 40,
-      height: 40,
-      child: FutureBuilder<Uint8List?>(
-        future: _cache.putIfAbsent(id, () => VpnChannel.appIcon(id)),
-        builder: (context, snap) => snap.data == null
-            ? const Icon(Icons.android)
-            : Image.memory(snap.data!, gaplessPlayback: true),
-      ),
     );
   }
 }
