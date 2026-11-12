@@ -83,10 +83,15 @@ void main() {
       // It went to the right.
       expect(first!.rect.center.dx, greaterThan(power.rect.right), reason: '${first.debugLabel} ${first.rect}');
       // And back with the left arrow.
+      String nodes() => scope.traversalDescendants
+          .where((n) => n.canRequestFocus)
+          .map((n) => '${n.debugLabel} ${n.rect} ${n.context?.widget.runtimeType}')
+          .join('\n');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pump();
       expect(FocusManager.instance.primaryFocus, isNotNull);
-      expect(FocusManager.instance.primaryFocus!.rect.center.dx, lessThan(first.rect.center.dx));
+      expect(FocusManager.instance.primaryFocus!.rect.center.dx, lessThan(first.rect.center.dx),
+          reason: 'on ${first.debugLabel} ${first.rect} ${first.context?.widget.runtimeType}; nodes:\n${nodes()}');
     });
 
     testWidgets('the add menu offers a phone, not the camera or a file', (tester) async {
