@@ -49,19 +49,34 @@ const serviceProbes = <ServiceProbe>[
   ServiceProbe('Wikipedia', 'https://www.wikipedia.org/', check: _notBlocked),
 ];
 
-const netflixFull = 'https://www.netflix.com/title/70143836';
+/// The colour each service is known by, for the round mark in front of its name.
+const serviceColors = <String, int>{
+  'ChatGPT': 0xFF10A37F,
+  'Netflix': 0xFFE50914,
+  'YouTube': 0xFFFF0000,
+  'Telegram': 0xFF229ED9,
+  'Instagram': 0xFFD62976,
+  'Google': 0xFF4285F4,
+  'GitHub': 0xFF57606A,
+  'Spotify': 0xFF1DB954,
+  'Wikipedia': 0xFF6B6B6B,
+};
+
+const netflixFull ='https://www.netflix.com/title/70143836';
 const netflixOriginals = 'https://www.netflix.com/title/81280792';
 
-/// A GET through the local proxy of the running connection. Returns the status (-1 on failure),
+/// A GET through the local proxy of the running connection, or straight out when [proxyPort] is null
+/// (the VPN is off: what the network itself lets through). Returns the status (-1 on failure),
 /// the start of the body and the time it took in ms.
 Future<({int status, String body, int ms})> fetchThrough(
   String url, {
-  required int proxyPort,
+  required int? proxyPort,
   Duration timeout = const Duration(seconds: 12),
 }) async {
   final sw = Stopwatch()..start();
   final client = HttpClient()..connectionTimeout = timeout;
-  client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
+  // "DIRECT" on purpose: with no VPN the test must not follow a proxy the system happens to name.
+  client.findProxy = (_) => proxyPort == null ? 'DIRECT' : 'PROXY 127.0.0.1:$proxyPort';
   client.badCertificateCallback = (_, __, ___) => false;
   try {
     final req = await client.getUrl(Uri.parse(url)).timeout(timeout);
@@ -88,7 +103,7 @@ Future<({int status, String body, int ms})> fetchThrough(
 }
 
 /// Tries [probe] and returns how it answered with the time taken.
-Future<({ServiceResult result, int ms})> runProbe(ServiceProbe probe, int proxyPort) async {
+Future<({ServiceResult result, int ms})> runProbe(ServiceProbe probe, int? proxyPort) async {
   final r = await fetchThrough(probe.url, proxyPort: proxyPort);
   final check = probe.check ?? _reachable;
   return (result: check(r.status, r.body), ms: r.ms);
@@ -96,7 +111,7 @@ Future<({ServiceResult result, int ms})> runProbe(ServiceProbe probe, int proxyP
 
 /// Netflix shows a different catalogue to each country: the full title says everything is
 /// available, the original says only Netflix's own productions are.
-Future<({ServiceResult result, int ms})> runNetflix(int proxyPort) async {
+Future<({ServiceResult result, int ms})> runNetflix(int? proxyPort) async {
   final full = await fetchThrough(netflixFull, proxyPort: proxyPort);
   if (full.status == 200) return (result: ServiceResult.works, ms: full.ms);
   final originals = await fetchThrough(netflixOriginals, proxyPort: proxyPort);

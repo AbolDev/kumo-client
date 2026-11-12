@@ -35,7 +35,7 @@ void main() {
   });
 
   testWidgets('the page of the checks is only the checks', (tester) async {
-    await tester.pumpWidget(_app(TroubleshootPage(state: AppState())));
+    await tester.pumpWidget(_app(TroubleshootPage(state: AppState(), autoRun: false)));
     await tester.pumpAndSettle();
     expect(find.text('Find the best settings'), findsNothing);
     expect(find.text('Find the best settings for my network'), findsNothing);
