@@ -413,9 +413,8 @@ class AppState extends ChangeNotifier {
   /// A short vibration when a connection is made or ended (the phone only).
   bool haptics = true;
 
-  /// Whether the real delay test asks what to do with the servers that do not answer. When the user ticked
-  /// "Remember my choice" it does not, and [removeDeadChoice] is what it does.
-  bool askRealDelay = true;
+  /// What the question before a real delay test starts as ("Remove the configs that do not respond"): what the user
+  /// ticked "Remember my choice" with. It is still asked every time.
   bool removeDeadChoice = false;
 
   /// What the home page is to do as soon as it is there ('paste' or 'free'): the last page of the guide
@@ -1002,7 +1001,6 @@ class AppState extends ChangeNotifier {
       showName = flag('showName', true);
       idleNotification = flag('idleNotification', true);
       haptics = flag('haptics', true);
-      askRealDelay = flag('askRealDelay', true);
       removeDeadChoice = flag('removeDeadChoice', false);
       vpnGateUpdated = (j['vpnGateUpdated'] as num?)?.toInt() ?? 0;
       themeColor = j['themeColor'] == 'system' ? 'system' : 'teal';
@@ -1075,7 +1073,6 @@ class AppState extends ChangeNotifier {
           'showName': showName,
           'idleNotification': idleNotification,
           'haptics': haptics,
-          'askRealDelay': askRealDelay,
           'removeDeadChoice': removeDeadChoice,
           'vpnGateUpdated': vpnGateUpdated,
           'themeColor': themeColor,
@@ -1093,10 +1090,11 @@ class AppState extends ChangeNotifier {
   }
 
   /// Changes one of the switches in Settings.
-  /// "Remember my choice" in the question before a real delay test: it is not asked again (Settings can turn it back on).
+  /// "Remember my choice" in the question before a real delay test: the next one starts with the same answer.
   void rememberRealDelay(bool removeDead) {
     removeDeadChoice = removeDead;
-    setFlag('askRealDelay', false);
+    _saveSettings();
+    notifyListeners();
   }
 
   void setFlag(String key, bool value) {
@@ -1130,8 +1128,6 @@ class AppState extends ChangeNotifier {
       case 'haptics':
         haptics = value;
         if (value) buzz();
-      case 'askRealDelay':
-        askRealDelay = value;
       case 'blackTheme':
         blackTheme = value;
       case 'measurePing':

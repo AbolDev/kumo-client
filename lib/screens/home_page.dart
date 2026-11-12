@@ -1579,10 +1579,9 @@ class _TestProgress extends StatelessWidget {
 }
 
 /// Real delay can drop the configs that do not answer; null = cancelled. Asked in a sheet at the bottom, where the
-/// thumb is, with a choice to remember the answer (then it is not asked, and Settings can bring the question back).
+/// thumb is. It is asked every time; with "Remember my choice" the next one starts with the answer given now.
 Future<bool?> _askRemoveDead(BuildContext context, AppState state) async {
-  if (!state.askRealDelay) return state.removeDeadChoice;
-  var remove = false, remember = false;
+  var remove = state.removeDeadChoice, remember = false;
   final answer = await showModalBottomSheet<bool>(
     context: context,
     showDragHandle: true,

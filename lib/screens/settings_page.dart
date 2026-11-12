@@ -420,7 +420,6 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         _switch('measurePing', state.measurePing, tr(context, 'measurePing'),
             tr(context, 'measurePingDesc')),
-        _switch('askRealDelay', state.askRealDelay, tr(context, 'askRealDelay'), tr(context, 'askRealDelayDesc')),
         _switch('usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
             tr(context, 'usageAlertsDesc')),
         _switch('allowInsecure', state.allowInsecure, t.allowInsecure, t.allowInsecureDesc),
