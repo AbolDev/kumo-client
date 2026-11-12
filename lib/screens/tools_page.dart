@@ -8,6 +8,7 @@ import 'my_ip_page.dart';
 import 'service_test_page.dart';
 import 'speed_test_page.dart';
 import 'troubleshoot_page.dart';
+import 'tune_page.dart';
 
 /// The tools of the app, each with a line about what it does: what the internet sees of the user, a check
 /// for leaks, the services, the best settings for the network and clean addresses.
@@ -52,6 +53,8 @@ class ToolsPage extends StatelessWidget {
                 '/ServiceTestPage', () => ServiceTestPage(state: state)),
             _card(context, Icons.speed, tr(context, 'speedTitle'), tr(context, 'toolsSpeedDesc'), '/SpeedTestPage',
                 () => SpeedTestPage(state: state)),
+            _card(context, Icons.tune, tr(context, 'tuneTitle'), tr(context, 'toolsTuneDesc'), '/TunePage',
+                () => TunePage(state: state)),
             _card(context, Icons.help_outline, tr(context, 'menuTroubleshoot'), tr(context, 'toolsTroubleshootDesc'),
                 '/TroubleshootPage', () => TroubleshootPage(state: state)),
             _card(context, Icons.travel_explore, tr(context, 'cleanIpButton'), tr(context, 'toolsCleanIpDesc'),
