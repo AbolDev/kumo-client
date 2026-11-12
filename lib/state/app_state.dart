@@ -2354,7 +2354,8 @@ class AppState extends ChangeNotifier {
   /// need their own Xray process, so they are used when picked by hand (or when nothing else is
   /// available).
   List<ProxyConfig> _chosenServers() {
-    final plain = all.where((c) => c.canSingBox).toList();
+    // A server whose Reality key the core would refuse is left out: one of them stops the whole core.
+    final plain = all.where((c) => c.canSingBox && !c.badRealityKey).toList();
     final alive = plain.where((c) => c.isAlive).toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
     final auto = (alive.isNotEmpty ? alive : plain).take(_autoGroupSize).toList();

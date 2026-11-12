@@ -26,6 +26,7 @@ class SubUpdateJob : JobService() {
     companion object {
         private const val JOB_ID = 4711
         private const val PERIOD_MS = 60 * 60 * 1000L
+        private const val MAX_BODY = 16 * 1024 * 1024
 
         fun schedule(context: Context) {
             val scheduler = context.getSystemService(JobScheduler::class.java)
@@ -120,6 +121,22 @@ class SubUpdateJob : JobService() {
         }
     }
 
+    /** The answer as text, [MAX_BODY] bytes at most: an address that answers with a huge file (or one that
+     *  never ends) must not fill the memory of the app, which ended it with an OutOfMemoryError. */
+    private fun readCapped(stream: java.io.InputStream): String {
+        val out = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(64 * 1024)
+        stream.use { s ->
+            while (true) {
+                val n = s.read(buffer)
+                if (n < 0) break
+                require(out.size() + n <= MAX_BODY) { "The subscription is too large" }
+                out.write(buffer, 0, n)
+            }
+        }
+        return out.toString("UTF-8")
+    }
+
     private fun download(url: String, insecure: Boolean, agent: String, extra: Map<String, String>): JSONObject {
         var target = URL(url)
         var conn = target.openConnection() as HttpURLConnection
@@ -149,7 +166,7 @@ class SubUpdateJob : JobService() {
                 conn = target.openConnection() as HttpURLConnection
             }
             require(conn.responseCode == 200) { "HTTP ${conn.responseCode}" }
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val body = readCapped(conn.inputStream)
             return JSONObject()
                 .put("time", System.currentTimeMillis())
                 .put("body", body)
