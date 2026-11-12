@@ -48,7 +48,33 @@ void main() {
       expect(await r.lookup('a.example.com'), '203.0.113.2');
     });
 
-    test('when encrypted DNS did not answer it is not asked again for a few minutes', () async {
+    test('slow encrypted DNS holds the lookup back only for its head start, then the system resolver is asked too',
+        () async {
+      var systemCalls = 0;
+      final r = NameResolver(
+        doh: (h) => Future<String?>.delayed(const Duration(seconds: 2), () => '203.0.113.1'),
+        system: (h) async {
+          systemCalls++;
+          return '198.51.100.7';
+        },
+        dohHeadStart: const Duration(milliseconds: 50),
+      );
+      final sw = Stopwatch()..start();
+      expect(await r.lookup('a.example.com'), '198.51.100.7');
+      expect(sw.elapsed, lessThan(const Duration(seconds: 1)));
+      expect(systemCalls, 1);
+      // It answered in the end, so it is not counted as blocked: the next name asks it again.
+      await Future<void>.delayed(const Duration(milliseconds: 2100));
+      final fast = NameResolver(
+        doh: (h) => Future<String?>.delayed(const Duration(milliseconds: 150), () => '203.0.113.2'),
+        system: (h) => Future<String?>.delayed(const Duration(seconds: 2), () => '198.51.100.8'),
+        dohHeadStart: const Duration(milliseconds: 50),
+      );
+      // Asked beside each other, the first to answer wins: here the encrypted one.
+      expect(await fast.lookup('b.example.com'), '203.0.113.2');
+    });
+
+    test('when encrypted DNS did not answer it is not asked again for half an hour', () async {
       var now = DateTime(2026, 11, 8, 10);
       var dohCalls = 0;
       final r = NameResolver(
@@ -64,6 +90,9 @@ void main() {
       expect(dohCalls, 1);
       now = now.add(const Duration(minutes: 6));
       await r.lookup('d.example.com');
+      expect(dohCalls, 1);
+      now = now.add(const Duration(minutes: 30));
+      await r.lookup('e.example.com');
       expect(dohCalls, 2);
     });
 
