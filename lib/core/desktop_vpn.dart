@@ -319,6 +319,9 @@ set -C
 P=$!
 while kill -0 "$P" 2>/dev/null && [ ! -e "$3" ] && kill -0 "$4" 2>/dev/null; do sleep 0.2 2>/dev/null || sleep 1; done
 kill "$P" 2>/dev/null
+N=0
+while kill -0 "$P" 2>/dev/null && [ "$N" -lt 15 ]; do sleep 0.2 2>/dev/null || sleep 1; N=$((N+1)); done
+kill -9 "$P" 2>/dev/null
 wait "$P" 2>/dev/null
 rm -rf "$T"
 ''';
@@ -433,7 +436,8 @@ rm -rf "$T"
         }
       }
 
-      final api = apiPort;
+      final api = _coreApi = apiPort;
+      _coreTun = (cfg['inbounds'] as List).any((i) => i is Map && i['type'] == 'tun');
       if (xrayConfig != null) {
         // Xray talks to its server directly: its own traffic must not loop into the tunnel.
         final route = cfg['route'] as Map<String, dynamic>;
@@ -746,12 +750,7 @@ rm -rf "$T"
     _sbCore = null;
     _sbXray = null;
     standby.value = false;
-    for (final p in procs) {
-      p.kill();
-    }
-    await Future.wait([
-      for (final p in procs) p.exitCode.timeout(const Duration(seconds: 4), onTimeout: () => -1),
-    ]);
+    await Future.wait([for (final p in procs) _end(p)]);
   }
 
   /// Takes this app's system proxy away. It is tried again when the check afterwards shows the
@@ -817,6 +816,31 @@ rm -rf "$T"
     }
   }
 
+  /// The API port of the core of the connection (see [_waitClosed]).
+  int _coreApi = 0;
+  bool _coreTun = false;
+
+  /// Ends a core. It is asked to close first; one that has not after a second (open connections, lookups)
+  /// is killed, so that its ports are free for the next connection. (On Windows the first is a kill already.)
+  /// A core with a tunnel gets three seconds: it takes its routes away as it closes.
+  Future<void> _end(Process p, {bool tunnel = false}) async {
+    p.kill();
+    final closed =
+        await p.exitCode.then((_) => true).timeout(Duration(seconds: tunnel ? 3 : 1), onTimeout: () => false);
+    if (closed) return;
+    p.kill(ProcessSignal.sigkill);
+    await p.exitCode.timeout(const Duration(seconds: 3), onTimeout: () => -1);
+  }
+
+  /// Waits until nothing listens on [port] any more, [limit] at most.
+  Future<void> _waitClosed(int port, Duration limit) async {
+    if (port <= 0) return;
+    final end = DateTime.now().add(limit);
+    while (DateTime.now().isBefore(end) && await _portOpen(port)) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
   /// With [keepBlocked] the system proxy is left pointing at a dead port, so programs that follow
   /// it cannot reach the internet until the user disconnects or reconnects.
   Future<void> _killAll({bool keepBlocked = false}) async {
@@ -830,6 +854,7 @@ rm -rf "$T"
     // The pkexec wrapper ends by itself when the script sees the stop file: killing it would
     // leave the root core running.
     final wrapper = wasElevated ? _core : null;
+    final core = _core;
     final procs = [_core, _xray].whereType<Process>().toList();
     _core = null;
     _xray = null;
@@ -840,16 +865,19 @@ rm -rf "$T"
         await File(_stopFile).writeAsString('stop');
       } catch (_) {}
     }
-    for (final p in procs) {
-      if (!identical(p, wrapper)) p.kill();
-    }
     await Future.wait([
       proxy,
       for (final p in procs)
-        p.exitCode.timeout(Duration(seconds: identical(p, wrapper) ? 8 : 4), onTimeout: () {
-          if (identical(p, wrapper)) p.kill();
-          return -1;
-        }),
+        if (identical(p, wrapper))
+          p.exitCode.timeout(const Duration(seconds: 8), onTimeout: () {
+            p.kill();
+            return -1;
+          })
+        else
+          _end(p, tunnel: _coreTun && identical(p, core)),
+      // macOS: the root core has no handle here. It is gone when its API no longer answers; the stop file
+      // must stay until then (the script looks for it every 0.2 s), and the next core needs its ports.
+      if (wasElevated && wrapper == null) _waitClosed(_coreApi, const Duration(seconds: 5)),
     ]);
     if (wasElevated) {
       _elevated = false;
