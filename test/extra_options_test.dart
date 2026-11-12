@@ -114,7 +114,7 @@ void main() {
       String? got;
       await tester.pumpWidget(host('{"tcp_keep_alive":"5m"}', singboxExtraOptions, (v) => got = v));
       await open(tester);
-      expect(find.text('5m'), findsOneWidget);
+      expect(tester.widget<TextFormField>(find.byKey(const ValueKey('xo:tcp_keep_alive:0'))).initialValue, '5m');
       await tester.enterText(find.byKey(const ValueKey('xo:tcp_keep_alive:0')), '');
       await tester.pump();
       await tester.tap(find.text('Save'));
