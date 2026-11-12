@@ -345,6 +345,16 @@ class VpnChannel {
     }
   }
 
+  /// Android: whether this is a television, used with a remote control.
+  static Future<bool> isTelevision() async {
+    if (_win) return false;
+    try {
+      return (await _control.invokeMethod<bool>('isTv')) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Android: whether Kumo is allowed to install apps.
   static Future<bool> canInstallApk() async {
     try {

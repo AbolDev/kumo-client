@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/qr_decode.dart';
+import '../core/tv.dart';
 import '../core/sources.dart' show SubInfo, cleanUserAgent, headerLines, parseHeaderLines;
 import '../core/config_decryptor.dart';
 import '../core/error_hint.dart';
@@ -37,6 +38,7 @@ import 'settings_page.dart';
 import 'region_picker.dart';
 import 'share_sheet.dart';
 import 'tools_page.dart';
+import 'tv_pair_page.dart';
 import 'collector_info_page.dart';
 import 'subscription_info_page.dart';
 
@@ -82,7 +84,7 @@ class HomePage extends StatelessWidget {
       listenable: state,
       builder: (context, _) => Scaffold(
         // The tint of the connection card reaches up behind the title bar, with no seam.
-        extendBodyBehindAppBar: Platform.isAndroid,
+        extendBodyBehindAppBar: Platform.isAndroid && !isTv,
         appBar: AppBar(
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
@@ -102,11 +104,18 @@ class HomePage extends StatelessWidget {
                   value: () => _addFromClipboard(context),
                   child: _MenuRow(Icons.content_paste, t.addFromClipboard),
                 ),
-                PopupMenuItem(
-                  value: () => _addFromFile(context),
-                  child: _MenuRow(Icons.file_open, t.addFromFile),
-                ),
-                if (Platform.isAndroid)
+                // A television has no camera and no files to pick: a phone sends the link instead.
+                if (isTv)
+                  PopupMenuItem(
+                    value: () => _openPair(context),
+                    child: _MenuRow(Icons.phone_android, tr(context, 'tvPairTitle')),
+                  )
+                else
+                  PopupMenuItem(
+                    value: () => _addFromFile(context),
+                    child: _MenuRow(Icons.file_open, t.addFromFile),
+                  ),
+                if (Platform.isAndroid && !isTv)
                   PopupMenuItem(
                     value: () => _scan(context),
                     child: _MenuRow(Icons.qr_code_scanner, t.scanQr),
@@ -186,7 +195,7 @@ class HomePage extends StatelessWidget {
         ),
         body: _withDrop(context, LayoutBuilder(builder: (context, box) {
           // A wide desktop window puts the controls beside the server list.
-          if (isDesktop && box.maxWidth >= 760) {
+          if ((isDesktop || isTv) && box.maxWidth >= 760) {
             final scheme = Theme.of(context).colorScheme;
             final count = state.groups.fold<int>(0, (n, g) => n + g.configs.length);
             return Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -232,7 +241,7 @@ class HomePage extends StatelessWidget {
                               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
                         ]),
                       ),
-                      Expanded(child: _ServerList(state: state, onPaste: () => _addFromClipboard(context), onScan: Platform.isAndroid ? () => _scan(context) : null, onFree: () => _openFree(context))),
+                      Expanded(child: _ServerList(state: state, onPaste: () => _addFromClipboard(context), onScan: Platform.isAndroid && !isTv ? () => _scan(context) : null, onPhone: isTv ? () => _openPair(context) : null, onFree: () => _openFree(context))),
                     ]),
                   ),
                 ),
@@ -241,12 +250,20 @@ class HomePage extends StatelessWidget {
           }
           return Column(children: [
             _ConnectCard(state: state),
-            Expanded(child: _ServerList(state: state, onPaste: () => _addFromClipboard(context), onScan: Platform.isAndroid ? () => _scan(context) : null, onFree: () => _openFree(context))),
+            Expanded(child: _ServerList(state: state, onPaste: () => _addFromClipboard(context), onScan: Platform.isAndroid && !isTv ? () => _scan(context) : null, onPhone: isTv ? () => _openPair(context) : null, onFree: () => _openFree(context))),
           ]);
         })),
       ),
     );
   }
+
+  /// Television: the page that takes a link from a phone.
+  void _openPair(BuildContext context) => Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            settings: const RouteSettings(name: '/TvPairPage'),
+            builder: (_) => TvPairPage(onText: (c, text) => importTextAndAsk(c, state, text))),
+      );
 
   void _openFree(BuildContext context) => Navigator.push(
         context,
@@ -577,7 +594,7 @@ class _ConnectCard extends StatelessWidget {
       ),
       child: Padding(
       padding: EdgeInsets.fromLTRB(16,
-          isDesktop ? 100 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8, 16, 12),
+          isDesktop ? 100 : (isTv ? 24 : MediaQuery.paddingOf(context).top + kToolbarHeight + 8), 16, 12),
       child: Column(
         children: [
           _PowerButton(
@@ -585,7 +602,7 @@ class _ConnectCard extends StatelessWidget {
               busy: state.transitioning,
               on: status == VpnStatus.started,
               onTap: status == VpnStatus.stopping ? null : state.toggle),
-          SizedBox(height: isDesktop ? 10 : 22),
+          SizedBox(height: isDesktop || isTv ? 10 : 22),
           // The status sits on a frosted-glass pill: what is behind it (the rings) is blurred.
           ClipRRect(
             borderRadius: BorderRadius.circular(20),
@@ -841,6 +858,8 @@ class _PowerButtonState extends State<_PowerButton> with SingleTickerProviderSta
     final color = widget.color;
     // A remote control (Android TV) or the keyboard moves focus here and presses with OK / Enter.
     return Focus(
+      // On a television the remote starts here: OK connects, and the arrows go on to the list.
+      autofocus: isTv,
       onFocusChange: (v) => setState(() => _focused = v),
       onKeyEvent: (_, event) {
         final key = event.logicalKey;
@@ -1139,13 +1158,16 @@ class _Row {
 }
 
 class _ServerList extends StatefulWidget {
-  const _ServerList({required this.state, required this.onPaste, required this.onScan, required this.onFree});
+  const _ServerList({required this.state, required this.onPaste, required this.onScan, this.onPhone, required this.onFree});
 
   final AppState state;
 
   /// The ways to add a first server, offered when there is none: paste, scan a code (the phone), free ones.
   final VoidCallback onPaste;
   final VoidCallback? onScan;
+
+  /// Television: add from a phone (there is no camera to scan with).
+  final VoidCallback? onPhone;
   final VoidCallback onFree;
 
   @override
@@ -1266,7 +1288,7 @@ class _ServerListState extends State<_ServerList> {
         state.vpn.status != VpnStatus.error;
     // No server at all (and none being fetched): the ways to add one, not an empty list.
     if (state.noServers) {
-      return _EmptyServers(onPaste: widget.onPaste, onScan: widget.onScan, onFree: widget.onFree);
+      return _EmptyServers(onPaste: widget.onPaste, onScan: widget.onScan, onPhone: widget.onPhone, onFree: widget.onFree);
     }
     // What was picked and is gone (deleted, or the list was updated) is not picked any more.
     if (_picked.isNotEmpty) {
@@ -1424,10 +1446,11 @@ void _removeWithUndo(BuildContext context, AppState state, List<({ServerGroup gr
 
 /// What to do when there is no server: three ways to get one.
 class _EmptyServers extends StatelessWidget {
-  const _EmptyServers({required this.onPaste, required this.onScan, required this.onFree});
+  const _EmptyServers({required this.onPaste, required this.onScan, this.onPhone, required this.onFree});
 
   final VoidCallback onPaste;
   final VoidCallback? onScan;
+  final VoidCallback? onPhone;
   final VoidCallback onFree;
 
   @override
@@ -1446,6 +1469,16 @@ class _EmptyServers extends StatelessWidget {
             const SizedBox(height: 8),
             Text(tr(context, 'emptyBody'), textAlign: TextAlign.center),
             const SizedBox(height: 24),
+            // A television: a phone sends the link, which is the way that works there, so it comes first.
+            if (onPhone != null) ...[
+              FilledButton.icon(
+                  autofocus: true,
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+                  onPressed: onPhone,
+                  icon: const Icon(Icons.phone_android),
+                  label: Text(tr(context, 'tvPairTitle'))),
+              const SizedBox(height: 12),
+            ],
             FilledButton.icon(
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
                 onPressed: onPaste,
