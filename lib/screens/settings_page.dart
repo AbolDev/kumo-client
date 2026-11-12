@@ -8,6 +8,8 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../core/app_icon.dart';
 import '../core/build_flavor.dart';
+import '../core/extra_options.dart';
+import 'extra_options_sheet.dart';
 import '../core/backup.dart';
 import '../core/win_autostart.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -687,22 +689,30 @@ class _SettingsPageState extends State<SettingsPage> {
         ListTile(
           leading: const Icon(Icons.data_object),
           title: taggedTitle(tr(context, 'extraSingbox')),
-          subtitle: Text(tr(context, 'extraSingboxDesc')),
+          subtitle: Text(tr(context, 'extraSingboxForm')),
           trailing: state.net.extraSingbox.isEmpty ? null : const Icon(Icons.check),
           onTap: () async {
-            final v = await editJson(context, tr(context, 'extraSingbox'),
-                tr(context, 'extraSingboxDesc'), state.net.extraSingbox);
+            final v = await editExtraOptions(context,
+                title: tr(context, 'extraSingbox'),
+                description: tr(context, 'extraSingboxForm'),
+                jsonDescription: tr(context, 'extraSingboxDesc'),
+                initial: state.net.extraSingbox,
+                options: singboxExtraOptions);
             if (v != null) await state.updateNet((o) => o.extraSingbox = v);
           },
         ),
         ListTile(
           leading: const Icon(Icons.data_object),
           title: taggedTitle(tr(context, 'extraXray')),
-          subtitle: Text(tr(context, 'extraXrayDesc')),
+          subtitle: Text(tr(context, 'extraXrayForm')),
           trailing: state.net.extraXray.isEmpty ? null : const Icon(Icons.check),
           onTap: () async {
-            final v = await editJson(context, tr(context, 'extraXray'),
-                tr(context, 'extraXrayDesc'), state.net.extraXray);
+            final v = await editExtraOptions(context,
+                title: tr(context, 'extraXray'),
+                description: tr(context, 'extraXrayForm'),
+                jsonDescription: tr(context, 'extraXrayDesc'),
+                initial: state.net.extraXray,
+                options: xrayExtraOptions);
             if (v != null) await state.updateNet((o) => o.extraXray = v);
           },
         ),
