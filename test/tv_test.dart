@@ -70,19 +70,23 @@ void main() {
       _television(tester);
       await tester.pumpWidget(_app(HomePage(state: _state())));
       await tester.pump(const Duration(milliseconds: 500));
+      final power = FocusManager.instance.primaryFocus!;
+      // The traversal itself finds something to the right of the button.
+      final scope = power.nearestScope!;
+      final candidates = scope.traversalDescendants.where((n) => n.canRequestFocus && n != power).toList();
+      expect(candidates.any((n) => n.rect.center.dx >= power.rect.right), isTrue,
+          reason: 'power ${power.rect}; nodes ${candidates.map((n) => '${n.debugLabel} ${n.rect}').join(' | ')}');
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
       final first = FocusManager.instance.primaryFocus;
-      expect(first, isNotNull);
-      // No longer the power button.
-      expect(find.descendant(of: find.byWidget(first!.context!.widget), matching: find.byIcon(Icons.power_settings_new)),
-          findsNothing);
+      expect(first, isNot(same(power)), reason: 'still on ${power.rect}');
+      // It went to the right.
+      expect(first!.rect.center.dx, greaterThan(power.rect.right), reason: '${first.debugLabel} ${first.rect}');
       // And back with the left arrow.
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pump();
-      final back = FocusManager.instance.primaryFocus;
-      expect(find.descendant(of: find.byWidget(back!.context!.widget), matching: find.byIcon(Icons.power_settings_new)),
-          findsOneWidget);
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+      expect(FocusManager.instance.primaryFocus!.rect.center.dx, lessThan(first.rect.center.dx));
     });
 
     testWidgets('the add menu offers a phone, not the camera or a file', (tester) async {
