@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/share_text.dart';
 import 'package:kumo/screens/share_app_page.dart';
 import 'package:kumo/screens/update_dialog.dart' show notesLanguages, releaseNotesFor;
-import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
   group('the message that shares Kumo', () {
@@ -34,14 +33,14 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(const MaterialApp(home: ShareAppPage()));
       expect(find.textContaining('free, open-source VPN client'), findsOneWidget);
-      expect(tester.widget<QrImageView>(find.byKey(const ValueKey('share-qr'))).data, 'https://kumo-client.ir');
+      expect(find.byKey(const ValueKey('share-qr:https://kumo-client.ir')), findsOneWidget);
       await tester.tap(find.text('فارسی'));
       await tester.pump();
       expect(find.textContaining('رایگان و متن‌باز'), findsOneWidget);
-      expect(tester.widget<QrImageView>(find.byKey(const ValueKey('share-qr'))).data, 'https://kumo-client.ir/fa/');
+      expect(find.byKey(const ValueKey('share-qr:https://kumo-client.ir/fa/')), findsOneWidget);
       await tester.tap(find.text('繁體中文'));
       await tester.pump();
-      expect(tester.widget<QrImageView>(find.byKey(const ValueKey('share-qr'))).data, 'https://kumo-client.ir/zh-hant/');
+      expect(find.byKey(const ValueKey('share-qr:https://kumo-client.ir/zh-hant/')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

@@ -117,7 +117,8 @@ class _ShareAppPageState extends State<ShareAppPage> {
                 child: Container(
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
                   child: QrImageView(
-                    key: const ValueKey('share-qr'),
+                    // The key holds what the code says, so a test can tell which one is drawn.
+                    key: ValueKey('share-qr:${l.site}'),
                     data: l.site,
                     size: 240,
                     padding: const EdgeInsets.all(16),
