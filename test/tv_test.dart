@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/proxy_config.dart';
-import 'package:kumo/core/sources.dart';
 import 'package:kumo/core/tv.dart';
 import 'package:kumo/core/tv_pair.dart';
 import 'package:kumo/l10n/strings.dart';
