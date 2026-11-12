@@ -1578,32 +1578,63 @@ class _TestProgress extends StatelessWidget {
   }
 }
 
-/// Real delay can drop the configs that do not answer; null = cancelled.
-Future<bool?> _askRemoveDead(BuildContext context) {
-  var remove = false;
-  return showDialog<bool>(
+/// Real delay can drop the configs that do not answer; null = cancelled. Asked in a sheet at the bottom, where the
+/// thumb is. It is asked every time; with "Remember my choice" the next one starts with the answer given now.
+Future<bool?> _askRemoveDead(BuildContext context, AppState state) async {
+  var remove = state.removeDeadChoice, remember = false;
+  final answer = await showModalBottomSheet<bool>(
     context: context,
-    builder: (dialog) => StatefulBuilder(builder: (dialog, setState) {
-      final t = S.of(dialog);
-      return AlertDialog(
-        title: Text(t.removeDeadTitle),
-        content: CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          controlAffinity: ListTileControlAffinity.leading,
-          value: remove,
-          onChanged: (v) => setState(() => remove = v ?? false),
-          title: Text(t.removeDeadOption),
+    showDragHandle: true,
+    isScrollControlled: true,
+    constraints: const BoxConstraints(maxWidth: 560),
+    builder: (sheet) => StatefulBuilder(builder: (sheet, setState) {
+      final t = S.of(sheet);
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(t.removeDeadTitle, style: Theme.of(sheet).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: remove,
+              onChanged: (v) => setState(() => remove = v ?? false),
+              title: Text(t.removeDeadOption),
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: remember,
+              onChanged: (v) => setState(() => remember = v ?? false),
+              title: Text(tr(sheet, 'rememberChoice')),
+              subtitle: Text(tr(sheet, 'rememberChoiceDesc')),
+            ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                    onPressed: () => Navigator.pop(sheet),
+                    child: Text(t.cancel)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: FilledButton(
+                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                    onPressed: () => Navigator.pop(sheet, remove),
+                    child: Text(t.start)),
+              ),
+            ]),
+          ]),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialog), child: Text(t.cancel)),
-          FilledButton(
-              onPressed: () => Navigator.pop(dialog, remove),
-              child: Text(t.start)),
-        ],
       );
     }),
   );
+  if (answer == null) return null;
+  if (remember) state.rememberRealDelay(answer);
+  return answer;
 }
 
 /// Asks what to do with the servers that were not tested yet when the test is stopped:
@@ -1720,7 +1751,7 @@ class _GroupHeader extends StatelessWidget {
           if (remove != null) state.cancelPing(group, removeUntested: remove);
         });
       case _GroupAction.realDelay:
-        _askRemoveDead(context).then((remove) {
+        _askRemoveDead(context, state).then((remove) {
           if (remove != null) state.ping(group, real: true, removeDead: remove);
         });
       case _GroupAction.refresh:

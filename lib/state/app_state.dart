@@ -413,6 +413,10 @@ class AppState extends ChangeNotifier {
   /// A short vibration when a connection is made or ended (the phone only).
   bool haptics = true;
 
+  /// What the question before a real delay test starts as ("Remove the configs that do not respond"): what the user
+  /// ticked "Remember my choice" with. It is still asked every time.
+  bool removeDeadChoice = false;
+
   /// What the home page is to do as soon as it is there ('paste' or 'free'): the last page of the guide
   /// sets it.
   String? pendingHomeAction;
@@ -997,6 +1001,7 @@ class AppState extends ChangeNotifier {
       showName = flag('showName', true);
       idleNotification = flag('idleNotification', true);
       haptics = flag('haptics', true);
+      removeDeadChoice = flag('removeDeadChoice', false);
       vpnGateUpdated = (j['vpnGateUpdated'] as num?)?.toInt() ?? 0;
       themeColor = j['themeColor'] == 'system' ? 'system' : 'teal';
       blackTheme = flag('blackTheme', false);
@@ -1068,6 +1073,7 @@ class AppState extends ChangeNotifier {
           'showName': showName,
           'idleNotification': idleNotification,
           'haptics': haptics,
+          'removeDeadChoice': removeDeadChoice,
           'vpnGateUpdated': vpnGateUpdated,
           'themeColor': themeColor,
           'blackTheme': blackTheme,
@@ -1084,6 +1090,13 @@ class AppState extends ChangeNotifier {
   }
 
   /// Changes one of the switches in Settings.
+  /// "Remember my choice" in the question before a real delay test: the next one starts with the same answer.
+  void rememberRealDelay(bool removeDead) {
+    removeDeadChoice = removeDead;
+    _saveSettings();
+    notifyListeners();
+  }
+
   void setFlag(String key, bool value) {
     switch (key) {
       case 'autoUpdateSubs':

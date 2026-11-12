@@ -138,12 +138,44 @@ Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async 
 
 /// The release text without the download table and the checksums, in the app's language when
 /// the release has both English and Persian parts (separated by a line of dashes).
-String _notesFor(BuildContext context, String raw) {
-  var text = raw.replaceAll('\r', '');
+String _notesFor(BuildContext context, String raw, {String? lang}) => releaseNotesFor(raw, lang ?? appNotesCode(context));
+
+/// The language code the release notes use for the app's language (`zh-TW` for Traditional Chinese).
+String appNotesCode(BuildContext context) {
   final locale = Localizations.localeOf(context);
-  final code = locale.languageCode == 'zh' && locale.scriptCode == 'Hant'
-      ? 'zh-TW'
-      : locale.languageCode;
+  return locale.languageCode == 'zh' && locale.scriptCode == 'Hant' ? 'zh-TW' : locale.languageCode;
+}
+
+/// The names of the languages a release's notes can be read in.
+const noteLanguageNames = <String, String>{
+  'en': 'English',
+  'fa': 'فارسی',
+  'ar': 'العربية',
+  'ru': 'Русский',
+  'vi': 'Tiếng Việt',
+  'zh': '简体中文',
+  'zh-TW': '繁體中文',
+};
+
+/// The languages the notes [raw] of a release have, English first (it is the text outside the hidden blocks).
+List<String> notesLanguages(String raw) {
+  final text = raw.replaceAll('\r', '');
+  final hidden = RegExp(r'<!--\s*lang:([\w-]+)[ \t]*\n([\s\S]*?)-->').allMatches(text).toList();
+  final marks = RegExp(r'<!--\s*lang:([\w-]+)\s*-->').allMatches(text).toList();
+  final out = <String>['en'];
+  if (hidden.isNotEmpty) {
+    out.addAll(hidden.map((m) => m[1]!));
+  } else if (marks.isNotEmpty) {
+    out.addAll(marks.map((m) => m[1]!));
+  } else if (RegExp(r'\n-{3,}\n').hasMatch(text)) {
+    out.add('fa');
+  }
+  return out.toSet().toList();
+}
+
+/// The release notes [raw] in the language [code] (English when it has none), without the download table.
+String releaseNotesFor(String raw, String code) {
+  var text = raw.replaceAll('\r', '');
   // The release page shows English only. The other languages sit in hidden comments of the form
   // <!-- lang:xx ... --> that GitHub does not display; the text outside them is English. A
   // language without a block falls back to English. (Older releases marked each language with
@@ -189,16 +221,24 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
   final asset = await pickAsset(info);
   if (!context.mounted) return;
   final size = asset == null ? null : info.sizes[asset.name];
+  // The language the notes are read in: the app's own until the user picks another (chips above the notes).
+  String? lang;
   final choice = await showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
     constraints: const BoxConstraints(maxWidth: 560),
-    builder: (sheet) {
+    builder: (sheet0) => StatefulBuilder(builder: (sheet, setSheet) {
       final scheme = Theme.of(sheet).colorScheme;
       // One release: its text. Several skipped ones: a short block per version, newest first.
       final many = info.history.length > 1;
-      final notes = many ? '' : _notesFor(sheet, info.notes);
+      final notes = many ? '' : _notesFor(sheet, info.notes, lang: lang);
+      final langs = <String>{
+        for (final raw in many ? info.history.map((r) => r.notes) : [info.notes]) ...notesLanguages(raw),
+      }.toList();
+      final app = appNotesCode(sheet);
+      final shown = lang ?? (langs.contains(app) ? app : 'en');
+      final rtl = shown == 'fa' || shown == 'ar';
       return SafeArea(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.of(sheet).size.height * 0.85),
@@ -240,6 +280,31 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                       ),
                   ],
                 ),
+                if (langs.length > 1) ...[
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Icon(Icons.translate, size: 18, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SizedBox(
+                        height: 48,
+                        child: ListView(scrollDirection: Axis.horizontal, children: [
+                          for (final c in langs)
+                            Padding(
+                              padding: const EdgeInsetsDirectional.only(end: 8),
+                              child: Center(
+                                child: ChoiceChip(
+                                  label: Text(noteLanguageNames[c] ?? c),
+                                  selected: c == shown,
+                                  onSelected: (_) => setSheet(() => lang = c),
+                                ),
+                              ),
+                            ),
+                        ]),
+                      ),
+                    ),
+                  ]),
+                ],
                 if (many) ...[
                   const SizedBox(height: 12),
                   Text(tr(sheet, 'updWhatsNewSince', {'v': current}),
@@ -264,7 +329,12 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                                 childrenPadding:
                                     const EdgeInsets.fromLTRB(16, 0, 16, 12),
                                 expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                                children: [MiniMarkdown(_notesFor(sheet, r.notes), onLink: openLink)],
+                                children: [
+                                  Directionality(
+                                    textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+                                    child: MiniMarkdown(_notesFor(sheet, r.notes, lang: shown), onLink: openLink),
+                                  ),
+                                ],
                               ),
                           ],
                         ),
@@ -284,7 +354,12 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
                         color: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      child: SingleChildScrollView(child: MiniMarkdown(notes, onLink: openLink)),
+                      child: SingleChildScrollView(
+                        child: Directionality(
+                          textDirection: rtl ? TextDirection.rtl : TextDirection.ltr,
+                          child: MiniMarkdown(notes, onLink: openLink),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -316,7 +391,7 @@ Future<void> _offer(BuildContext context, UpdateInfo info, String current) async
           ),
         ),
       );
-    },
+    }),
   );
   if (choice == 'page') {
     await openLink(info.url);
