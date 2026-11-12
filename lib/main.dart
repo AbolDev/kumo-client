@@ -476,7 +476,7 @@ class _KumoAppState extends State<KumoApp>
                             child: child)),
                   ),
                 ]))
-            : child!,
+            : (isTv ? TvKeys(child: child!) : child!),
         debugShowCheckedModeBanner: false,
         // null follows the phone's language; Settings can force a language.
         locale: _state.languageCode == null

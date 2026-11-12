@@ -18,6 +18,8 @@ class _RealHttp extends HttpOverrides {}
 
 Widget _app(Widget home) => MaterialApp(
       theme: tvTheme(ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF0E9F8E))),
+      // As the app does on a television: the arrows of the remote move the focus.
+      builder: (context, child) => TvKeys(child: child!),
       supportedLocales: S.supportedLocales,
       localizationsDelegates: const [
         S.delegate,
@@ -28,7 +30,7 @@ Widget _app(Widget home) => MaterialApp(
     );
 
 AppState _state({bool servers = true}) {
-  final s = AppState();
+  final s = AppState()..serversLoaded = true;
   if (servers) {
     s.collector.configs.addAll(parseLinks([
       'vless://11111111-1111-1111-1111-111111111111@v.example.com:443?security=tls&sni=v.example.com&type=ws&path=%2F#Germany%20CDN',
@@ -183,12 +185,15 @@ void main() {
         server: server,
         onText: (context, text) async => got.add(text),
       )));
+      // One pump for the page to ask the server, one for it to draw the answer.
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Add from your phone'), findsWidgets);
       expect(find.byKey(const ValueKey('pair-url')), findsOneWidget);
       expect(find.byKey(const ValueKey('pair-qr:http://192.168.1.50:5000/secret')), findsOneWidget);
       expect(find.text('Waiting for your phone…'), findsOneWidget);
       server.push('vless://hello');
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(got, ['vless://hello']);
       expect(find.text('Received from your phone: 1'), findsOneWidget);
@@ -200,6 +205,7 @@ void main() {
     testWidgets('with no local network the page says so', (tester) async {
       _television(tester);
       await tester.pumpWidget(_app(TvPairPage(server: _FakeServer(url: null), onText: (c, t) async {})));
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.textContaining('not on a local network'), findsOneWidget);
     });

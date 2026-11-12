@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
 import 'vpn_channel.dart';
 
@@ -13,6 +14,28 @@ bool isTv = const bool.fromEnvironment('KUMO_TV');
 Future<void> initTv() async {
   if (isTv || !Platform.isAndroid) return;
   isTv = await VpnChannel.isTelevision();
+}
+
+/// What the remote's keys do wherever the focus is: the arrows (the D-pad) move the focus in their direction and OK
+/// presses what has it. The platform's own shortcuts on Android do not move the focus with the arrows, which a
+/// remote has nothing else to do with. A text field keeps the arrows for its cursor (its own shortcuts come first).
+class TvKeys extends StatelessWidget {
+  const TvKeys({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Shortcuts(
+        shortcuts: const {
+          SingleActivator(LogicalKeyboardKey.arrowUp): DirectionalFocusIntent(TraversalDirection.up),
+          SingleActivator(LogicalKeyboardKey.arrowDown): DirectionalFocusIntent(TraversalDirection.down),
+          SingleActivator(LogicalKeyboardKey.arrowLeft): DirectionalFocusIntent(TraversalDirection.left),
+          SingleActivator(LogicalKeyboardKey.arrowRight): DirectionalFocusIntent(TraversalDirection.right),
+          SingleActivator(LogicalKeyboardKey.select): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.gameButtonA): ActivateIntent(),
+        },
+        child: child,
+      );
 }
 
 /// [base] made easy to use with a remote: the thing that has the focus is drawn with a clear ring or a strong
