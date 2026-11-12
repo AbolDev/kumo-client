@@ -22,6 +22,7 @@ import '../l10n/extra.dart';
 import '../widgets/prompt_dialog.dart';
 import 'connections_page.dart';
 import 'logs_page.dart';
+import 'share_app_page.dart';
 import '../widgets/option_tile.dart';
 import 'network_settings.dart';
 import 'share_sheet.dart';
@@ -419,6 +420,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         _switch('measurePing', state.measurePing, tr(context, 'measurePing'),
             tr(context, 'measurePingDesc')),
+        _switch('askRealDelay', state.askRealDelay, tr(context, 'askRealDelay'), tr(context, 'askRealDelayDesc')),
         _switch('usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
             tr(context, 'usageAlertsDesc')),
         _switch('allowInsecure', state.allowInsecure, t.allowInsecure, t.allowInsecureDesc),
@@ -620,6 +622,15 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: Text(tr(context, 'currentVersion', {'v': snap.data?.version ?? ''})),
             // The F-Droid build only shows its version: the store updates it.
             onTap: fdroidBuild ? null : _checkUpdate,
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.share_outlined),
+          title: Text(tr(context, 'shareTitle')),
+          subtitle: Text(tr(context, 'shareDesc')),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(settings: const RouteSettings(name: '/ShareAppPage'), builder: (_) => const ShareAppPage()),
           ),
         ),
         ListTile(

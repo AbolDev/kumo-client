@@ -413,6 +413,11 @@ class AppState extends ChangeNotifier {
   /// A short vibration when a connection is made or ended (the phone only).
   bool haptics = true;
 
+  /// Whether the real delay test asks what to do with the servers that do not answer. When the user ticked
+  /// "Remember my choice" it does not, and [removeDeadChoice] is what it does.
+  bool askRealDelay = true;
+  bool removeDeadChoice = false;
+
   /// What the home page is to do as soon as it is there ('paste' or 'free'): the last page of the guide
   /// sets it.
   String? pendingHomeAction;
@@ -997,6 +1002,8 @@ class AppState extends ChangeNotifier {
       showName = flag('showName', true);
       idleNotification = flag('idleNotification', true);
       haptics = flag('haptics', true);
+      askRealDelay = flag('askRealDelay', true);
+      removeDeadChoice = flag('removeDeadChoice', false);
       vpnGateUpdated = (j['vpnGateUpdated'] as num?)?.toInt() ?? 0;
       themeColor = j['themeColor'] == 'system' ? 'system' : 'teal';
       blackTheme = flag('blackTheme', false);
@@ -1068,6 +1075,8 @@ class AppState extends ChangeNotifier {
           'showName': showName,
           'idleNotification': idleNotification,
           'haptics': haptics,
+          'askRealDelay': askRealDelay,
+          'removeDeadChoice': removeDeadChoice,
           'vpnGateUpdated': vpnGateUpdated,
           'themeColor': themeColor,
           'blackTheme': blackTheme,
@@ -1084,6 +1093,12 @@ class AppState extends ChangeNotifier {
   }
 
   /// Changes one of the switches in Settings.
+  /// "Remember my choice" in the question before a real delay test: it is not asked again (Settings can turn it back on).
+  void rememberRealDelay(bool removeDead) {
+    removeDeadChoice = removeDead;
+    setFlag('askRealDelay', false);
+  }
+
   void setFlag(String key, bool value) {
     switch (key) {
       case 'autoUpdateSubs':
@@ -1115,6 +1130,8 @@ class AppState extends ChangeNotifier {
       case 'haptics':
         haptics = value;
         if (value) buzz();
+      case 'askRealDelay':
+        askRealDelay = value;
       case 'blackTheme':
         blackTheme = value;
       case 'measurePing':
