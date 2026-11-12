@@ -13,6 +13,9 @@ import 'win_dpapi.dart';
 import 'win_job.dart';
 import 'win_tools.dart';
 
+/// The text without the colour codes a core writes for a terminal (the "FATAL" of sing-box is red).
+String stripAnsi(String text) => text.replaceAll(RegExp(r'\x1B\[[0-9;]*[A-Za-z]'), '');
+
 /// The VPN on the desktop: the same sing-box core as on Android, run as a child process
 /// (kumo-core, with its TUN device made by wintun.dll on Windows). Xray (kumo-xray) is started
 /// next to it for the servers it carries. The tunnel needs administrator rights on Windows (the
@@ -180,7 +183,7 @@ class DesktopVpn {
   }
 
   void _emit(VpnStatus s, [String? error]) {
-    _state = VpnState(s, error);
+    _state = VpnState(s, error == null ? null : stripAnsi(error));
     _states.add(_state);
   }
 

@@ -1326,7 +1326,10 @@ class _ServerListState extends State<_ServerList> {
     }
 
     const radius = Radius.circular(18);
-    final list = ReorderableListView.builder(
+    // No hover hints in the rows (a screen reader still gets their text): a hint that opens while its row
+    // is being taken out of the list (the list changes under the pointer after a test or an update) makes
+    // the framework fail with a null check in the tooltip's overlay.
+    final list = TooltipVisibility(visible: false, child: ReorderableListView.builder(
       scrollController: _scroll,
       padding: const EdgeInsets.only(top: 4, bottom: 24),
       buildDefaultDragHandles: false,
@@ -1395,7 +1398,7 @@ class _ServerListState extends State<_ServerList> {
                 key: key, index: i, child: item)
             : item;
       },
-    );
+    ));
     // Above the list only while servers are picked: what can be done with them.
     return Column(children: [
       if (_selecting)

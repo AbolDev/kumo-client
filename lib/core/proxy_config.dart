@@ -67,6 +67,17 @@ class ProxyConfig {
   /// True when sing-box can carry this server.
   bool get canSingBox => outbound.isNotEmpty;
 
+  /// True when sing-box would refuse this server's Reality key or short id ("invalid public_key"). One such
+  /// server in a configuration stops the whole core from starting, so it is left out of the automatic group.
+  bool get badRealityKey => [outbound, ...inner].any((o) {
+        final tls = o['tls'];
+        final r = tls is Map ? tls['reality'] : null;
+        if (r is! Map || r['enabled'] != true) return false;
+        // The key is 32 bytes in base64 for addresses, without padding; the short id up to 8 bytes in hex.
+        return !RegExp(r'^[A-Za-z0-9_-]{43}$').hasMatch('${r['public_key'] ?? ''}') ||
+            !RegExp(r'^([0-9a-fA-F]{2}){0,8}$').hasMatch('${r['short_id'] ?? ''}');
+      });
+
   /// True when Xray can carry this server.
   bool get canXray => xrayOutbound != null;
 

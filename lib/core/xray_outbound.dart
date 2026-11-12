@@ -184,7 +184,8 @@ Map<String, dynamic>? _xrayStream(
           _truthy(q['allow_insecure']) ||
           pins.isNotEmpty)
         'allowInsecure': true,
-      if (pins.isNotEmpty) 'pinnedPeerCertSha256': pins,
+      // One text, the hashes joined by commas: Xray refuses a list here and does not start.
+      if (pins.isNotEmpty) 'pinnedPeerCertSha256': pins.join(','),
       if (s('ech') != null) 'echConfigList': s('ech'),
     };
   } else if (security == 'reality') {
@@ -287,7 +288,7 @@ Map<String, dynamic>? _xrayHysteria2(String host, int port, String password,
             (q['pinSHA256'] ?? '').isNotEmpty)
           'allowInsecure': true,
         if ((q['pinSHA256'] ?? '').isNotEmpty)
-          'pinnedPeerCertSha256': [q['pinSHA256']!.replaceAll(':', '').toLowerCase()],
+          'pinnedPeerCertSha256': q['pinSHA256']!.replaceAll(':', '').toLowerCase(),
       },
       if (fm.isNotEmpty) 'finalmask': fm,
     },

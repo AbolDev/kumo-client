@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -438,6 +439,18 @@ at app.kumo.vpn.BoxVpnService.start(BoxVpnService.kt:12)''';
     test('CrashHub without a reporter does nothing', () {
       CrashHub.sink = null;
       CrashHub.report(StateError('x'), StackTrace.current);
+    });
+
+    test('CrashHub leaves the errors of the network out and names the others', () async {
+      final r = CrashRig(os: 'linux')..answer = (_, __) async => null;
+      CrashHub.sink = r.reporter;
+      addTearDown(() => CrashHub.sink = null);
+      CrashHub.report(const SocketException('Connection reset by peer', port: 55724), null);
+      CrashHub.report(TimeoutException('late'), StackTrace.current);
+      CrashHub.report(const SocketException('reset'), null, kind: 'FlutterError');
+      CrashHub.report(const FormatException('bad'), StackTrace.current);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(r.reporter.queued.map((b) => b['kind']), ['FormatException']);
     });
   });
 }
