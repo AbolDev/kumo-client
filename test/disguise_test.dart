@@ -41,6 +41,8 @@ void main() {
       final half = tester.getSize(find.byKey(const ValueKey('hold-fill'))).width;
       expect(half, greaterThan(100));
       await g.up();
+      // A frame to start the return of the bar, then the time it takes.
+      await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(confirmed, 0);
       expect(tester.getSize(find.byKey(const ValueKey('hold-fill'))).width, 0);
