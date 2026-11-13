@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket;
+import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket, exit;
 import 'dart:isolate' show Isolate;
 import 'dart:math';
 import 'dart:typed_data';

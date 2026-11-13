@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/app_icon.dart';
 import 'package:kumo/core/desktop_vpn.dart';
@@ -57,7 +58,7 @@ void main() {
       var confirmed = 0;
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(_app(Scaffold(body: HoldToConfirm(label: 'Hold', onConfirmed: () => confirmed++))));
-      tester.semantics.performAction(find.bySemanticsLabel('Hold'), SemanticsAction.longPress);
+      tester.semantics.performAction(find.semantics.byLabel('Hold'), SemanticsAction.longPress);
       await tester.pump();
       expect(confirmed, 1);
       handle.dispose();

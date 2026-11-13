@@ -295,14 +295,16 @@ class _CustomLookState extends State<_CustomLook> {
 
   Future<void> _pin() async {
     final ok = await VpnChannel.pinShortcut(_name.text.trim(), _icon);
+    if (!mounted) return;
     widget.say(tr(context, ok ? 'disguisePinned' : 'disguisePinFail'));
-    if (ok && mounted) Navigator.pop(context);
+    if (ok) Navigator.pop(context);
   }
 
   Future<void> _card() async {
     await widget.state.setDisguise(widget.state.appIcon, name: _name.text.trim(), icon: _icon);
+    if (!mounted) return;
     widget.say(tr(context, 'disguiseCardDone'));
-    if (mounted) Navigator.pop(context);
+    Navigator.pop(context);
   }
 
   @override
