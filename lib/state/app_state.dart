@@ -1885,7 +1885,10 @@ class AppState extends ChangeNotifier {
     testing.add(c);
     notifyListeners();
     try {
-      final ms = real ? await realDelay(c) : await tcpLatency(c);
+      // A server that runs over UDP (WireGuard, Hysteria, TUIC) has no TCP port to connect to: a TCP ping of it
+      // always timed out. It is asked the only way it can be, through the core, when that is possible now.
+      final overUdp = !c.isOpenVpn && udpProtocols.contains(c.protocol);
+      final ms = real || (overUdp && _real) ? await realDelay(c) : await tcpLatency(c);
       if (ms != -2) c.latencyMs = ms;
     } finally {
       testing.remove(c);

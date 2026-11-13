@@ -29,6 +29,7 @@ import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
 import 'free_connections_page.dart';
 import 'safety_sheet.dart';
+import '../widgets/core_crash_notice.dart';
 import '../widgets/ovpn_login.dart';
 import '../widgets/prompt_dialog.dart';
 import 'warp_page.dart';
@@ -68,7 +69,8 @@ class HomePage extends StatelessWidget {
 
   // The login of an OpenVPN server is asked for here when a connection needs it.
   @override
-  Widget build(BuildContext context) => OvpnLoginHost(state: state, child: _page(context));
+  Widget build(BuildContext context) =>
+      CoreCrashNotice(child: OvpnLoginHost(state: state, child: _page(context)));
 
   Widget _page(BuildContext context) {
     final t = S.of(context);

@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -26,7 +27,16 @@ import (
 // is valid for the name under the roots of the system and who issued it. A bad certificate does not stop the
 // request (nothing private is sent, and the page is what is looked at); it is reported. Whether it comes from the
 // server or from the network is decided by the app, which asks the same of the network without the server.
-func Inspect(configContent string, requestsJSON string, timeoutMs int32) (string, error) {
+func Inspect(configContent string, requestsJSON string, timeoutMs int32) (result string, err error) {
+	kumoGuard(&err, func() error {
+		var workErr error
+		result, workErr = inspect(configContent, requestsJSON, timeoutMs)
+		return workErr
+	})
+	return
+}
+
+func inspect(configContent string, requestsJSON string, timeoutMs int32) (string, error) {
 	var requests []struct {
 		URL string `json:"url"`
 	}
@@ -64,7 +74,12 @@ func Inspect(configContent string, requestsJSON string, timeoutMs int32) (string
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			results[i] = inspectOne(ctx, dial, roots, requests[i].URL)
+			defer func() {
+				if r := recover(); r != nil {
+					results[i] = inspectResult{URL: requests[i].URL, Err: fmt.Sprint("panic: ", r)}
+				}
+			}()
+			results[i] =inspectOne(ctx, dial, roots, requests[i].URL)
 		}(i)
 	}
 	wg.Wait()

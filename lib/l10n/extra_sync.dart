@@ -48,6 +48,11 @@ const extraSyncEn = <String, String>{
   'syncApplied': 'Done: {servers} servers and {subs} subscriptions added.',
   'syncAppliedReplace': 'Done: your lists are now those of the other device.',
   'syncApplyFail': 'It could not be applied. Nothing was changed.',
+  'coreCrashTitle': 'The core stopped unexpectedly',
+  'coreCrashBody': 'The last time, the part of Kumo that carries the connection ended with an error and the app closed. The report below says where. It is the place in the code, not your servers or keys; please send it to the developers so it can be fixed.',
+  'coreCrashCopy': 'Copy the report',
+  'coreCrashCopied': 'Report copied.',
+  'coreCrashClose': 'Close',
 };
 
 const extraSyncFa = <String, String>{
@@ -99,4 +104,9 @@ const extraSyncFa = <String, String>{
   'syncApplied': 'انجام شد: {servers} سرور و {subs} اشتراک اضافه شد.',
   'syncAppliedReplace': 'انجام شد: فهرست‌های شما حالا همان دستگاه دیگر است.',
   'syncApplyFail': 'اعمال نشد. چیزی عوض نشد.',
+  'coreCrashTitle': 'هسته ناگهان متوقف شد',
+  'coreCrashBody': 'دفعهٔ قبل، بخشی از Kumo که اتصال را می‌برد با خطا تمام شد و برنامه بسته شد. گزارش زیر می‌گوید کجا. این گزارش جای خطا در کد است، نه سرورها یا کلیدهای شما؛ لطفاً آن را برای سازندگان بفرستید تا درست شود.',
+  'coreCrashCopy': 'کپی گزارش',
+  'coreCrashCopied': 'گزارش کپی شد.',
+  'coreCrashClose': 'بستن',
 };

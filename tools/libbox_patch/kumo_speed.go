@@ -21,7 +21,16 @@ import (
 // from the first byte sent until the server has answered. timeoutMs is for the whole, set-up included; when it
 // runs out in the middle of an upload, the speed is that of what was sent until then (a slow line still gets
 // its number instead of nothing).
-func MeasureSpeed(configContent string, testURL string, upload bool, size int32, timeoutMs int32) (float64, error) {
+func MeasureSpeed(configContent string, testURL string, upload bool, size int32, timeoutMs int32) (result float64, err error) {
+	kumoGuard(&err, func() error {
+		var workErr error
+		result, workErr = measureSpeed(configContent, testURL, upload, size, timeoutMs)
+		return workErr
+	})
+	return
+}
+
+func measureSpeed(configContent string, testURL string, upload bool, size int32, timeoutMs int32) (float64, error) {
 	ctx := baseContext(nil)
 	options, err := parseConfig(ctx, configContent)
 	if err != nil {

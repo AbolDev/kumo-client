@@ -294,6 +294,25 @@ class VpnChannel {
       ? DesktopVpn.instance.readFile(name)
       : _control.invokeMethod<String>('readFile', {'name': name});
 
+  /// What the core wrote when it ended the app the last time (Android, where the core runs inside the app), or
+  /// null. See [clearCoreCrash].
+  static Future<String?> coreCrash() async {
+    if (_win) return null;
+    try {
+      return await _control.invokeMethod<String>('coreCrash');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Forgets what [coreCrash] gave, once it has been shown.
+  static Future<void> clearCoreCrash() async {
+    if (_win) return;
+    try {
+      await _control.invokeMethod('clearCoreCrash');
+    } catch (_) {}
+  }
+
   static Future<void> writeFile(String name, String content) => _win
       ? DesktopVpn.instance.writeFile(name, content)
       : _control.invokeMethod('writeFile', {'name': name, 'content': content});
