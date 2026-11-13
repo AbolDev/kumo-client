@@ -22,12 +22,22 @@ class AppIcon {
 
   static final ids = [for (final g in groups) ...g];
 
+  /// Android: the looks of Settings > Disguise: the icon and name of an everyday app instead of Kumo's.
+  static const disguises = ['d_calc', 'd_notes', 'd_clock', 'd_weather', 'd_calendar', 'd_files'];
+
+  /// Android: no launcher entry at all (Kumo is not in the list of apps).
+  static const hidden = 'hidden';
+
   static bool get supported => Platform.isAndroid || Platform.isWindows;
 
   /// The picture shown in the picker.
   static String preview(String id) => 'assets/app_icons/$id.png';
 
-  static String normalize(String? id) => ids.contains(id) ? id! : defaultId;
+  /// Whether [id] is one of the icons of the picker (it has a picture), as the disguises and "hidden" have none.
+  static bool isPicture(String id) => ids.contains(id);
+
+  static String normalize(String? id) =>
+      ids.contains(id) || (Platform.isAndroid && (disguises.contains(id) || id == hidden)) ? id! : defaultId;
 
   static const _control = MethodChannel('kumo/control');
 

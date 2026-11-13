@@ -1,7 +1,14 @@
 package app.kumo.vpn
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import android.net.Uri
 import android.net.VpnService
 import android.os.PowerManager
@@ -42,6 +49,39 @@ class KumoActivity : FlutterActivity() {
 
     // Each delay test starts its own core, so only a few run at once.
     private val delayPool = Executors.newFixedThreadPool(12)
+
+    override fun onResume() {
+        super.onResume()
+        applyTaskLook()
+    }
+
+    /**
+     * The name and icon of the app's card in the list of recent apps: those of the disguise when one is on
+     * (`disguise_name.txt`, written by the "taskLook" call), Kumo's own otherwise.
+     */
+    private fun applyTaskLook() {
+        try {
+            val named = File(filesDir, "disguise_name.txt")
+            val name = if (named.exists()) named.readText().trim() else ""
+            if (name.isEmpty()) {
+                setTaskDescription(ActivityManager.TaskDescription())
+                return
+            }
+            val file = File(filesDir, "disguise_icon.png")
+            var bitmap: Bitmap? = if (file.exists()) BitmapFactory.decodeFile(file.path) else null
+            if (bitmap == null) {
+                val shown = AppIcons.currentComponent(this)?.let { packageManager.getActivityIcon(it) }
+                if (shown != null) {
+                    bitmap = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
+                    shown.setBounds(0, 0, 96, 96)
+                    shown.draw(Canvas(bitmap))
+                }
+            }
+            @Suppress("DEPRECATION")
+            setTaskDescription(ActivityManager.TaskDescription(name, bitmap))
+        } catch (_: Exception) {
+        }
+    }
 
     override fun onDestroy() {
         // Without this the 12 test threads outlive the screen and pile up each time it is rebuilt.
@@ -256,10 +296,60 @@ class KumoActivity : FlutterActivity() {
                     if (call.argument<Boolean>("enabled") == true) SubUpdateJob.schedule(this) else SubUpdateJob.cancel(this)
                     result.success(null)
                 }
-                "appIcon" -> result.success(AppIcons.current(this))
                 "setAppIcon" -> {
                     AppIcons.apply(this, call.argument<String>("id") ?: AppIcons.DEFAULT)
                     result.success(null)
+                }
+                // What the card of the app in the list of recent apps shows: the name and icon of the disguise
+                // (the name is in the settings file; the icon is kept here, or taken from the entry that shows).
+                "taskLook" -> {
+                    val icon = call.argument<ByteArray>("icon")
+                    val name = call.argument<String>("name") ?: ""
+                    try {
+                        val file = File(filesDir, "disguise_icon.png")
+                        if (icon != null && icon.isNotEmpty()) file.writeBytes(icon) else file.delete()
+                        val named = File(filesDir, "disguise_name.txt")
+                        if (name.isNotEmpty()) named.writeText(name) else named.delete()
+                    } catch (_: Exception) {
+                    }
+                    applyTaskLook()
+                    result.success(null)
+                }
+                // A shortcut on the home screen with a name and an icon the user chose (the system asks to place it).
+                "pinShortcut" -> {
+                    val label = call.argument<String>("label") ?: ""
+                    val png = call.argument<ByteArray>("icon")
+                    val ok = try {
+                        if (!ShortcutManagerCompat.isRequestPinShortcutSupported(this)) {
+                            false
+                        } else {
+                            val target = Intent(this, KumoActivity::class.java).setAction(Intent.ACTION_MAIN)
+                            val builder = ShortcutInfoCompat.Builder(this, "kumo-look-${System.currentTimeMillis()}")
+                                .setShortLabel(label.ifBlank { "Kumo" })
+                                .setIntent(target)
+                            val bitmap = png?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+                            if (bitmap != null) builder.setIcon(IconCompat.createWithBitmap(bitmap))
+                            ShortcutManagerCompat.requestPinShortcut(this, builder.build(), null)
+                        }
+                    } catch (_: Exception) {
+                        false
+                    }
+                    result.success(ok)
+                }
+                // Erases everything the app keeps (see Wipe.kt) and ends the app; [keep] is the settings that stay.
+                "wipe" -> {
+                    val keep = try {
+                        JSONObject(call.argument<String>("keep") ?: "{}")
+                    } catch (_: Exception) {
+                        JSONObject()
+                    }
+                    Thread {
+                        Wipe.run(this, keep)
+                        runOnUiThread {
+                            result.success(true)
+                            Wipe.end(this)
+                        }
+                    }.start()
                 }
                 "batteryUnrestricted" ->
                     result.success(getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName))

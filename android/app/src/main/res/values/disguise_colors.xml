@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="d_calc_bg">#3B4252</color>
+    <color name="d_notes_bg">#F6C945</color>
+    <color name="d_clock_bg">#3A7BD5</color>
+    <color name="d_weather_bg">#4FA8E8</color>
+    <color name="d_calendar_bg">#DCE6F5</color>
+    <color name="d_files_bg">#1E88E5</color>
+</resources>

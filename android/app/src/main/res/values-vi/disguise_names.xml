@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="disguise_calc">Máy tính</string>
+    <string name="disguise_notes">Ghi chú</string>
+    <string name="disguise_clock">Đồng hồ</string>
+    <string name="disguise_weather">Thời tiết</string>
+    <string name="disguise_calendar">Lịch</string>
+    <string name="disguise_files">Tệp</string>
+</resources>

@@ -10,6 +10,7 @@ import 'proxy_holder.dart';
 import 'socks_get.dart' show socksSpeed;
 import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
+import 'win_autostart.dart';
 import 'win_dpapi.dart';
 import 'win_job.dart';
 import 'win_tools.dart';
@@ -1045,6 +1046,30 @@ rm -rf "$T"
       return jsonEncode([for (final r in results) r.toJson()]);
     }, inbound: 'mixed');
     return answer ?? '';
+  }
+
+  /// Erases everything in the data folder (servers, settings, logs, caches, saved logins) and writes [keepSettings]
+  /// as the settings, after the connection and the proxy are stopped and the start with the system is turned off
+  /// (see AppState.eraseEverything). The program files are not in that folder.
+  Future<void> wipeData(String keepSettings) async {
+    try {
+      await stop();
+    } catch (_) {}
+    try {
+      await stopStandby();
+    } catch (_) {}
+    try {
+      await WinAutostart.set(false);
+    } catch (_) {}
+    final dir = Directory(dataDir);
+    if (await dir.exists()) {
+      await for (final entry in dir.list()) {
+        try {
+          await entry.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+    await writeFile('settings.json', keepSettings);
   }
 
   /// How fast data goes through [configJson]'s server, in Mbit/s (see [socksSpeed]); -1 when it cannot be had.

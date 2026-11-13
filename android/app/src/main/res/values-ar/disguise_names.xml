@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="disguise_calc">الآلة الحاسبة</string>
+    <string name="disguise_notes">الملاحظات</string>
+    <string name="disguise_clock">الساعة</string>
+    <string name="disguise_weather">الطقس</string>
+    <string name="disguise_calendar">التقويم</string>
+    <string name="disguise_files">الملفات</string>
+</resources>
