@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/extra.dart';
+import '../l10n/strings.dart';
 import '../state/app_state.dart';
+import 'logs_page.dart';
 import 'clean_ip_page.dart';
 import 'dns_leak_page.dart';
 import 'my_ip_page.dart';
@@ -59,6 +61,8 @@ class ToolsPage extends StatelessWidget {
                 '/TroubleshootPage', () => TroubleshootPage(state: state)),
             _card(context, Icons.travel_explore, tr(context, 'cleanIpButton'), tr(context, 'toolsCleanIpDesc'),
                 '/CleanIpPage', () => CleanIpPage(state: state)),
+            _card(context, Icons.receipt_long, S.of(context).logs, tr(context, 'toolsLogsDesc'), '/LogsPage',
+                () => LogsPage(state: state)),
           ],
         ),
       );

@@ -39,6 +39,7 @@ import '../core/usage/usage_transport.dart' show defaultFragment;
 import '../core/server_resolver.dart';
 import '../core/usage/crash_hub.dart';
 import '../core/usage_alert.dart';
+import '../core/app_log.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart' show trFor;
 import '../l10n/strings.dart';
@@ -108,14 +109,10 @@ class GroupTest {
   int get percent => total == 0 ? 100 : (done * 100 ~/ total);
 }
 
-class LogEntry {
-  LogEntry(this.time, this.text);
-  final DateTime time;
-  final String text;
-}
-
 const _logFile = 'app.log';
-const _maxLogs = 300;
+
+/// How many lines the log keeps: enough for a day of use with the reports of failed tests in it.
+const _maxLogs = 2000;
 
 class AppState extends ChangeNotifier {
   // What the Android widgets were last told (the server and the delay), so they are told only of a change.
@@ -208,18 +205,19 @@ class AppState extends ChangeNotifier {
   final logs = <LogEntry>[];
   Timer? _logTimer;
 
+  /// When the connection that is being made was asked for, for the time it took in the log.
+  DateTime? _connectAsked;
+
   /// Changes with every new line of the log, so the log page redraws without the whole app doing it.
   final logRevision = ValueNotifier<int>(0);
 
-  void log(String text) {
-    logs.add(LogEntry(DateTime.now(), text));
+  /// Adds a line to the log. Without a [level] or a [tag] they are told from what the line says.
+  void log(String text, {LogLevel? level, LogTag? tag}) {
+    logs.add(LogEntry(DateTime.now(), text, level: level, tag: tag));
     if (logs.length > _maxLogs) logs.removeRange(0, logs.length - _maxLogs);
     _logTimer ??= Timer(const Duration(seconds: 2), () {
       _logTimer = null;
-      final data = logs
-          .map((e) =>
-              '${e.time.millisecondsSinceEpoch}|${e.text.replaceAll('\n', ' ')}')
-          .join('\n');
+      final data = logs.map((e) => e.encode()).join('\n');
       VpnChannel.writeFile(_logFile, data).catchError((_) {});
     });
     logRevision.value++;
@@ -235,16 +233,16 @@ class AppState extends ChangeNotifier {
     try {
       final raw = await VpnChannel.readFile(_logFile);
       for (final line in (raw ?? '').split('\n')) {
-        final i = line.indexOf('|');
-        final ms = i > 0 ? int.tryParse(line.substring(0, i)) : null;
-        if (ms != null) {
-          logs.add(LogEntry(
-              DateTime.fromMillisecondsSinceEpoch(ms), line.substring(i + 1)));
-        }
+        final entry = LogEntry.decode(line);
+        if (entry != null) logs.add(entry);
       }
     } catch (_) {
       // no log yet
     }
+    // Where a run of the app begins and what it runs on: the lines after it belong to this run.
+    // (Added as it is, with no write of the file for it alone: the next line takes it along.)
+    logs.add(LogEntry(DateTime.now(), 'Kumo opened on ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+        level: LogLevel.info, tag: LogTag.app));
   }
 
   /// Why the connection last ended (a text key of the extra strings and its arguments), shown on
@@ -705,9 +703,12 @@ class AppState extends ChangeNotifier {
       } else if (changed) {
         switch (s.status) {
           case VpnStatus.started:
-            log('Connected');
+            final asked = _connectAsked;
+            _connectAsked = null;
+            log('Connected${asked == null ? '' : ' in ${DateTime.now().difference(asked).inMilliseconds} ms'}',
+                level: LogLevel.info, tag: LogTag.connection);
           case VpnStatus.stopped:
-            log('Disconnected');
+            log('Disconnected', level: LogLevel.info, tag: LogTag.connection);
           default:
         }
       }
@@ -1902,15 +1903,23 @@ class AppState extends ChangeNotifier {
       final overUdp = !c.isOpenVpn && udpProtocols.contains(c.protocol);
       final ms = real || (overUdp && _real) ? await realDelayOrDomestic(c) : await tcpLatency(c);
       if (ms != -2) c.latencyMs = ms;
+      final how = real || (overUdp && _real) ? 'Real delay' : 'TCP ping';
+      final result = ms == -2
+          ? 'skipped, the connection is changing'
+          : ms < 0
+              ? 'timeout'
+              : '$ms ms${c.domesticOnly ? ', domestic sites only' : ''}';
+      log('$how of ${c.name} (${c.label}): $result', level: ms == -1 ? LogLevel.warn : LogLevel.info, tag: LogTag.test);
       // A WireGuard server that fails here and works elsewhere: one more try with the core's own words
       // written to the log of the app, so that the reason can be read (and sent to the developers).
       if (ms == -1 && c.protocol == 'wireguard' && _real) {
         for (final url in [null, domesticDelayUrl]) {
           final report = await probeLog(c, url: url);
           if (report == null) break;
-          log('WireGuard test of ${c.name} (${url ?? delayTestUrl}):');
+          log('What the core said in a test of ${c.name} with ${url ?? delayTestUrl}:',
+              level: LogLevel.warn, tag: LogTag.core);
           for (final line in report.split('\n')) {
-            log('  $line');
+            log('  $line', level: LogLevel.debug, tag: LogTag.core);
           }
         }
       }
@@ -2845,7 +2854,13 @@ class AppState extends ChangeNotifier {
       _show(VpnStatus.stopped);
       return;
     }
-    log('Connecting to ${selected?.name ?? 'the fastest servers'}');
+    _connectAsked = DateTime.now();
+    final target = selected;
+    log(
+        'Connecting to ${target == null ? 'the fastest servers (${chosen.length}: ${chosen.take(6).map((c) => c.name).join(', ')})' : '${target.name} (${target.label})'}'
+        ' · ${net.tun ? 'whole device' : 'proxy only'}',
+        level: LogLevel.info,
+        tag: LogTag.connection);
     // The names let the notification show which server is in use.
     final names = chosen.map((c) => c.name).toList();
     _preparing = false;
@@ -2984,7 +2999,7 @@ class AppState extends ChangeNotifier {
             proxyPort: net.proxyPort);
       }
     } catch (e) {
-      log('Could not start the connection: $e');
+      log('Could not start the connection: $e', level: LogLevel.error, tag: LogTag.connection);
       _show(VpnStatus.stopped);
     }
   }

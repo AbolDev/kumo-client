@@ -757,7 +757,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// Groups the flat list of sections into the menu: the app, UI and core settings, the backup
   /// and the Windows options sit under App settings; DNS and the advanced options under Network;
-  /// the logs under Live connections.
+  /// the live connections and the logs each have their own entry.
   List<_Section> _arrange(List<_Section> flat) {
     _Section? by(IconData icon) => flat.where((s) => s.icon == icon).firstOrNull;
     _Section with_(_Section? s, List<_Section?> subs) =>
@@ -774,7 +774,9 @@ class _SettingsPageState extends State<SettingsPage> {
         by(Icons.backup_outlined),
       ]),
       with_(by(Icons.lan), [by(Icons.alt_route), by(Icons.dns), by(Icons.shield_moon_outlined), by(Icons.tune)]),
-      with_(by(Icons.monitor_heart_outlined), [by(Icons.receipt_long)]),
+      by(Icons.monitor_heart_outlined)!,
+      // The log has a place of its own: under Live connections nobody looked for it.
+      by(Icons.receipt_long)!,
       by(Icons.info_outline)!,
     ];
   }
