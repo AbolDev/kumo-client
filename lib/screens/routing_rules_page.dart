@@ -110,9 +110,10 @@ class _RoutingRulesPageState extends State<RoutingRulesPage> {
 
   void _move(_Entry e, RuleAction to) {
     final l = _lists..of(e.action).remove(e.text);
+    final moved = withRules(l.of(to), [e.text]);
     l.of(to)
       ..clear()
-      ..addAll(withRules(l.of(to), [e.text]));
+      ..addAll(moved);
     _change(l, tr(context, 'rlMoved', {'list': tr(context, to.titleKey)}));
   }
 

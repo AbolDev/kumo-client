@@ -8,9 +8,12 @@ import 'package:kumo/state/app_state.dart';
 
 const _open = '“', _close = '”';
 
-Widget _host(AppState state, {Locale? locale, Brightness brightness = Brightness.light}) => MaterialApp(
+/// [rtl] shows the page right-to-left by hand: the material delegates have no Persian, so the language is
+/// forced (see usage_page_test).
+Widget _host(AppState state, {bool rtl = false, Brightness brightness = Brightness.light}) => MaterialApp(
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF0E9F8E), brightness: brightness),
-      locale: locale,
+      builder: (context, child) =>
+          Directionality(textDirection: rtl ? TextDirection.rtl : TextDirection.ltr, child: child!),
       supportedLocales: S.supportedLocales,
       localizationsDelegates: const [
         S.delegate,
@@ -311,15 +314,17 @@ void main() {
     expect(state.net.directRules, ['10.0.0.0/8', 'service:telegram']);
   });
 
-  for (final locale in [const Locale('en'), const Locale('fa')]) {
+  for (final lang in ['en', 'fa']) {
     for (final brightness in Brightness.values) {
-      testWidgets('it fits a narrow screen in ${locale.languageCode}, ${brightness.name}', (tester) async {
+      testWidgets('it fits a narrow screen in $lang, ${brightness.name}', (tester) async {
+        S.forcedLanguage = lang;
+        addTearDown(() => S.forcedLanguage = null);
         _size(tester, const Size(320, 640));
         final state = _seeded();
         state.net.blockRules = ['keyword:ads', 'app:com.annoying', 'ads.example.com'];
         state.net.proxyRules = ['service:telegram', 'service:youtube'];
         state.net.directRules = ['10.0.0.0/8', 'service:telegram', 'bank.ir'];
-        await tester.pumpWidget(_host(state, locale: locale, brightness: brightness));
+        await tester.pumpWidget(_host(state, rtl: lang == 'fa', brightness: brightness));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         await tester.tap(find.byType(FloatingActionButton));
@@ -327,7 +332,7 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip(locale.languageCode == 'fa' ? 'آزمایش: چه می‌شود؟' : 'Test what happens'));
+        await tester.tap(find.byTooltip(lang == 'fa' ? 'آزمایش: چه می‌شود؟' : 'Test what happens'));
         await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const ValueKey('rl-test-text')), 'web.telegram.org');
         await tester.pump();
