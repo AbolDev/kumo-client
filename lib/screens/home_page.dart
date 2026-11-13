@@ -28,6 +28,7 @@ import '../l10n/strings.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
 import 'free_connections_page.dart';
+import 'safety_sheet.dart';
 import '../widgets/ovpn_login.dart';
 import '../widgets/prompt_dialog.dart';
 import 'warp_page.dart';
@@ -2236,7 +2237,7 @@ class _FractionClipper extends CustomClipper<Rect> {
   bool shouldReclip(_FractionClipper old) => old.fraction != fraction;
 }
 
-enum _ConfigAction { edit, share, tcping, realDelay, delete, ovpnLogin }
+enum _ConfigAction { edit, share, tcping, realDelay, safety, delete, ovpnLogin }
 
 class _ConfigTile extends StatelessWidget {
   const _ConfigTile(
@@ -2287,6 +2288,8 @@ class _ConfigTile extends StatelessWidget {
         } else {
           state.testOne(config, real: true);
         }
+      case _ConfigAction.safety:
+        await showSafetySheet(context, state, config);
     }
   }
 
@@ -2311,7 +2314,21 @@ class _ConfigTile extends StatelessWidget {
           onLongPress: onPick,
           selected: selected,
           selectedColor: flash ? scheme.onTertiaryContainer : scheme.onPrimaryContainer,
-          title: FlagName(config.name),
+          title: Row(children: [
+            Flexible(child: FlagName(config.name)),
+            // A server the safety check did not like (nothing is shown for one it found nothing on).
+            if (safetyIcon(state.safetyOf(config)?.verdict) != null)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(start: 6),
+                child: Tooltip(
+                  message: tr(context, state.isDangerous(config) ? 'safetyDanger' : 'safetySuspicious'),
+                  child: Icon(safetyIcon(state.safetyOf(config)?.verdict),
+                      key: ValueKey('safety-mark-${state.safetyOf(config)!.verdict.name}'),
+                      size: 18,
+                      color: safetyColor(state.safetyOf(config)?.verdict, scheme)),
+                ),
+              ),
+          ]),
           subtitle: Text.rich(
             TextSpan(children: [
               if (ms != null)
@@ -2334,7 +2351,11 @@ class _ConfigTile extends StatelessWidget {
           onTap: selecting
               ? onPick
               : state.canSelect
-                  ? () => state.select(config)
+                  ? () async {
+                      // A server the check found dangerous is not picked by a tap alone.
+                      if (!identical(state.selected, config) && state.isDangerous(config) && !await confirmDangerous(context)) return;
+                      await state.select(config);
+                    }
                   : (state.connected && !state.restartOnChange
                       ? () => toast(context, tr(context, 'selectBlocked'))
                       : null),
@@ -2377,6 +2398,10 @@ class _ConfigTile extends StatelessWidget {
                         enabled: state.canTestReal,
                         value: _ConfigAction.realDelay,
                         child: _MenuRow(Icons.speed, t.realDelay)),
+                    PopupMenuItem(
+                        key: const ValueKey('menu-safety'),
+                        value: _ConfigAction.safety,
+                        child: _MenuRow(Icons.shield_outlined, tr(context, 'safetyCheck'))),
                   ],
                   PopupMenuItem(
                       enabled: !(locked && selected),

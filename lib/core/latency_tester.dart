@@ -140,6 +140,14 @@ Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options}) a
   return VpnChannel.delay(_delayConfig(layers), delayTestUrl, timeoutMs: timeout.inMilliseconds);
 }
 
+/// The throw-away configuration that holds [c] (its name looked up by the system's resolver, as in the real
+/// delay) as the outbound `proxy`, for the tests that need to fetch something through it. Null for the servers
+/// the sing-box of the throw-away core cannot carry (OpenVPN, the ones only Xray carries).
+Future<String?> serverProbeConfig(ProxyConfig c) async {
+  if (c.isOpenVpn || !c.canSingBox || (c.preferXray && c.canXray)) return null;
+  return _delayConfig(await _resolvedLayers(c));
+}
+
 /// Cloudflare's speed test: a download of the size asked for, and a page that takes an upload.
 String speedDownloadUrl(int bytes) => 'https://speed.cloudflare.com/__down?bytes=$bytes';
 const speedUploadUrl = 'https://speed.cloudflare.com/__up';
