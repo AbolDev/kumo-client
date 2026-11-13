@@ -133,10 +133,15 @@ class _PrivacyPageState extends State<PrivacyPage> {
           children: [
             Text(tr(d, 'eraseAskBody')),
             const SizedBox(height: 20),
-            HoldToConfirm(
-              key: const ValueKey('hold-erase'),
-              label: tr(d, 'eraseHold'),
-              onConfirmed: () => Navigator.pop(d, true),
+            // A fixed width: the dialog asks its content how wide it would like to be, and a bar that fills
+            // by a fraction of its width cannot say.
+            SizedBox(
+              width: 280,
+              child: HoldToConfirm(
+                key: const ValueKey('hold-erase'),
+                label: tr(d, 'eraseHold'),
+                onConfirmed: () => Navigator.pop(d, true),
+              ),
             ),
           ],
         ),

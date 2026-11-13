@@ -35,6 +35,8 @@ void main() {
       expect(confirmed, 0);
       // Held for two seconds of three, then let go: the bar empties and nothing happens.
       final g = await tester.startGesture(tester.getCenter(find.text('Hold')));
+      // A frame first: an animation counts its time from its first frame.
+      await tester.pump();
       await tester.pump(const Duration(seconds: 2));
       final half = tester.getSize(find.byKey(const ValueKey('hold-fill'))).width;
       expect(half, greaterThan(100));
@@ -44,6 +46,7 @@ void main() {
       expect(tester.getSize(find.byKey(const ValueKey('hold-fill'))).width, 0);
       // Held for the whole time.
       final h = await tester.startGesture(tester.getCenter(find.text('Hold')));
+      await tester.pump();
       await tester.pump(const Duration(seconds: 1));
       await tester.pump(const Duration(seconds: 1));
       expect(confirmed, 0);
@@ -197,6 +200,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('erase-button')));
       await tester.pumpAndSettle();
       final g = await tester.startGesture(tester.getCenter(find.byKey(const ValueKey('hold-erase'))));
+      await tester.pump();
       await tester.pump(const Duration(seconds: 2));
       expect(erased, 0);
       await tester.pump(const Duration(milliseconds: 1200));
