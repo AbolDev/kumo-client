@@ -63,7 +63,7 @@ Duration healthTimeout(int? liveDelayMs) {
 }
 
 /// Protocols that run over UDP: a TCP connect to their port always fails, so they skip that stage.
-const _udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
+const udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
 
 /// Minimal sing-box config holding only [c] (and the layers it is dialled through), used by the
 /// throw-away test core. WireGuard is an endpoint there, everything else an outbound.
@@ -328,10 +328,10 @@ Future<void> testReal(
         onResult: onResult);
   }
   final udp = tcpFirst
-      ? candidates.where((c) => _udpProtocols.contains(c.protocol)).toList()
+      ? candidates.where((c) => udpProtocols.contains(c.protocol)).toList()
       : candidates;
   final tcp = tcpFirst
-      ? candidates.where((c) => !_udpProtocols.contains(c.protocol)).toList()
+      ? candidates.where((c) => !udpProtocols.contains(c.protocol)).toList()
       : <ProxyConfig>[];
 
   // The two stages overlap: a server that passed the TCP check goes straight to the real
