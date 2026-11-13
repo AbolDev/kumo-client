@@ -426,8 +426,9 @@ String buildSingBoxConfig(
       // WireGuard is an endpoint in sing-box, usable like an outbound by its tag. A second WireGuard
       // under it (Warp-in-Warp) is another endpoint that this one is dialled through.
       final two = layers.length > 1 && layers[1]['type'] == 'wireguard';
-      final first = _ipv4Only(layers.first);
-      if (servers.length == 1 && !identical(first, layers.first)) noIpv6 = true;
+      // Only when it is the only server: in a group another server may carry the IPv6 this one cannot.
+      final first = servers.length == 1 ? _ipv4Only(layers.first) : layers.first;
+      if (!identical(first, layers.first)) noIpv6 = true;
       endpoints.add(_tweak({...first, 'tag': tag}, o, detour: two ? '$tag-l1' : detour, first: false));
       if (two) {
         endpoints.add(_tweak({...layers[1], 'tag': '$tag-l1'}, o, detour: detour, first: false));
