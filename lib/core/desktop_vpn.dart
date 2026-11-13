@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 
 import 'latency_tester.dart' show socksWarmDelay;
+import 'probe_fetch.dart' show probeFetch;
 import 'proxy_holder.dart';
 import 'socks_get.dart' show socksSpeed;
 import 'system_proxy.dart';
@@ -987,7 +988,7 @@ rm -rf "$T"
 
   /// Runs a throw-away core that holds only [configJson]'s outbound, with a SOCKS inbound on a port of its
   /// own, gives that port to [use] and ends the core. Null when the core did not come up.
-  Future<T?> _withProbeCore<T>(String configJson, Future<T> Function(int port) use) async {
+  Future<T?> _withProbeCore<T>(String configJson, Future<T> Function(int port) use, {String inbound = 'socks'}) async {
     await _ready;
     final output = StringBuffer();
     Process? core;
@@ -996,7 +997,7 @@ rm -rf "$T"
       final port = await _freePort();
       final cfg = jsonDecode(configJson) as Map<String, dynamic>;
       cfg['inbounds'] = [
-        {'type': 'socks', 'tag': 'in', 'listen': '127.0.0.1', 'listen_port': port},
+        {'type': inbound, 'tag': 'in', 'listen': '127.0.0.1', 'listen_port': port},
       ];
       cfg['route'] = {...?(cfg['route'] as Map<String, dynamic>?), 'final': 'proxy'};
       await Directory('$dataDir${_sep}delay').create(recursive: true);
@@ -1032,6 +1033,19 @@ rm -rf "$T"
 
   Future<int> delay(String configJson, String url, int timeoutMs) async =>
       await _withProbeCore(configJson, (port) => socksWarmDelay(port, Uri.parse(url), Duration(milliseconds: timeoutMs))) ?? -1;
+
+  /// The safety check (see [VpnChannel.inspect]): the addresses are fetched through a throw-away core with an
+  /// inbound that takes HTTP requests, here by the app itself. Empty text when the core did not come up.
+  Future<String?> inspect(String configJson, String requestsJson, int timeoutMs) async {
+    final urls = [for (final r in jsonDecode(requestsJson) as List) '${(r as Map)['url']}'];
+    final answer = await _withProbeCore(configJson, (port) async {
+      final results = await Future.wait([
+        for (final u in urls) probeFetch(Uri.parse(u), proxyPort: port, timeout: const Duration(seconds: 12)),
+      ]);
+      return jsonEncode([for (final r in results) r.toJson()]);
+    }, inbound: 'mixed');
+    return answer ?? '';
+  }
 
   /// How fast data goes through [configJson]'s server, in Mbit/s (see [socksSpeed]); -1 when it cannot be had.
   Future<double> speed(String configJson, String url, {required bool upload, required int bytes, required int timeoutMs}) async =>

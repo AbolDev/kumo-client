@@ -12,6 +12,7 @@ import '../core/ad_lists.dart' show adBaseAsset;
 import '../core/app_icon.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
+import '../core/config_inspector.dart';
 import '../core/latency_tester.dart';
 import '../core/collector_sources.dart';
 import '../core/desktop_vpn.dart';
@@ -533,6 +534,37 @@ class AppState extends ChangeNotifier {
 
   /// Configs being tested one by one from their menu.
   final testing = <ProxyConfig>{};
+
+  /// The servers whose safety check is running.
+  final inspecting = <ProxyConfig>{};
+
+  /// What the safety check found for a server, under [pingKey] of its link (see config_inspector.dart).
+  final safety = <String, SafetyNote>{};
+
+  SafetyNote? safetyOf(ProxyConfig c) => safety[pingKey(c.link)];
+
+  /// The check found a server that changes what passes through it: it is left out of the automatic group, and
+  /// picking it by hand asks first.
+  bool isDangerous(ProxyConfig c) => safetyOf(c)?.verdict == InspectVerdict.danger;
+
+  /// Runs the safety check of [c] (null when it cannot now: a connection is up or being made, or the same
+  /// server is being checked) and keeps what it found, unless nothing came through at all.
+  Future<InspectReport?> checkSafety(ProxyConfig c) async {
+    if (inspecting.contains(c) || !_real) return null;
+    inspecting.add(c);
+    notifyListeners();
+    try {
+      final report = await inspectServer(c, networkIsOpen: !connected);
+      if (report.verdict != InspectVerdict.unknown) {
+        safety[pingKey(c.link)] = SafetyNote(report.verdict, DateTime.now().millisecondsSinceEpoch);
+        _save();
+      }
+      return report;
+    } finally {
+      inspecting.remove(c);
+      notifyListeners();
+    }
+  }
 
   StreamSubscription<VpnState>? _sub;
   StreamSubscription<Traffic>? _trafficSub;
@@ -1307,6 +1339,11 @@ class AppState extends ChangeNotifier {
       for (final g in [collector, manual, cleanGroup, ...subscriptions]) {
         if (g.configs.any((c) => c.latencyMs != null)) _sort(g);
       }
+      final notes = (j['safety'] as Map?) ?? const {};
+      for (final e in notes.entries) {
+        final n = SafetyNote.fromJson(e.value);
+        if (n != null) safety['${e.key}'] = n;
+      }
       final link = j['selected'] as String?;
       final inGroup = j['selectedGroup'] as String?;
       // The same link can be in two groups: the one that was picked is the one that comes back.
@@ -1606,10 +1643,21 @@ class AppState extends ChangeNotifier {
           for (final c in g.configs)
             if (c.latencyMs != null) pingKey(c.link): c.latencyMs!,
         };
+    // The safety notes of the servers that are still in a list.
+    Map<String, dynamic> notes(ServerGroup g) => {
+          for (final c in g.configs)
+            if (safetyOf(c) != null) pingKey(c.link): safetyOf(c)!.toJson(),
+        };
     final data = jsonEncode({
       'collector': links(collector),
       'manual': links(manual),
       'clean': links(cleanGroup),
+      'safety': {
+        ...notes(collector),
+        ...notes(manual),
+        ...notes(cleanGroup),
+        for (final g in subscriptions) ...notes(g),
+      },
       'pings': {
         ...pings(collector),
         ...pings(manual),
@@ -2355,7 +2403,8 @@ class AppState extends ChangeNotifier {
   /// available).
   List<ProxyConfig> _chosenServers() {
     // A server whose Reality key the core would refuse is left out: one of them stops the whole core.
-    final plain = all.where((c) => c.canSingBox && !c.badRealityKey).toList();
+    // A server the safety check found changing what passes through it is left out too.
+    final plain = all.where((c) => c.canSingBox && !c.badRealityKey && !isDangerous(c)).toList();
     final alive = plain.where((c) => c.isAlive).toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
     final auto = (alive.isNotEmpty ? alive : plain).take(_autoGroupSize).toList();

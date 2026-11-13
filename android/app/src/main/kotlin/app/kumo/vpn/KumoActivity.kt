@@ -153,6 +153,27 @@ class KumoActivity : FlutterActivity() {
                         runOnUiThread { result.success(ms) }
                     }
                 }
+                // What comes back through a server from some well-known addresses (Kumo's Inspect in libbox): the
+                // safety check of a server. Null when skipped because the tunnel is being started or stopped.
+                "inspect" -> {
+                    val config = call.argument<String>("config") ?: ""
+                    val requests = call.argument<String>("requests") ?: "[]"
+                    val timeout = call.argument<Int>("timeout") ?: 25000
+                    delayPool.execute {
+                        var answer: String? = null
+                        if (VpnBridge.enterDelay()) {
+                            answer = try {
+                                App.ensureLibbox()
+                                Libbox.inspect(config, requests, timeout)
+                            } catch (_: Throwable) {
+                                ""
+                            } finally {
+                                VpnBridge.exitDelay()
+                            }
+                        }
+                        runOnUiThread { result.success(answer) }
+                    }
+                }
                 // How fast data goes through a server (Kumo's MeasureSpeed in libbox): a download or an upload.
                 "speed" -> {
                     val config = call.argument<String>("config") ?: ""

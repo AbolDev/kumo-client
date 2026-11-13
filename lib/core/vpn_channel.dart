@@ -155,6 +155,17 @@ class VpnChannel {
                   'speed', {'config': configJson, 'url': url, 'upload': upload, 'size': bytes, 'timeout': timeoutMs})) ??
               -1;
 
+  /// The safety check of a server: fetches the addresses of [requestsJson] (a JSON list of `{"url": ...}`)
+  /// through a temporary core built from [configJson] and answers a JSON list of what came, one for each (see
+  /// config_inspector.dart). Null when it was skipped (the tunnel is being started or stopped), and an empty
+  /// text when it failed.
+  static Future<String?> inspect(String configJson, String requestsJson, {int timeoutMs = 25000}) async =>
+      _win
+          ? DesktopVpn.instance.inspect(configJson, requestsJson, timeoutMs)
+          : _control
+              .invokeMethod<String>('inspect', {'config': configJson, 'requests': requestsJson, 'timeout': timeoutMs})
+              .timeout(Duration(milliseconds: timeoutMs + 15000), onTimeout: () => '');
+
   /// Real delay of a server only Xray can carry, -1 on failure (see [runXrayDelay]).
   static Future<int> xrayDelay(String Function(int port) config, String url,
       {int timeoutMs = 8000}) async {
