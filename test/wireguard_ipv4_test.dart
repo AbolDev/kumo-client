@@ -1,0 +1,74 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/proxy_config.dart';
+import 'package:kumo/core/singbox_config.dart';
+
+// Made-up keys with the characters a real one has (+, / and = at the end), in the form the links of providers carry
+// them (percent-encoded).
+const _priv = 'aB3+cD4/eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5a6=';
+const _pub = 'Zz9+Yy8/Xx7WwVvUuTtSsRrQqPpOoNnMmLlKkJjIiHh0=';
+
+String _link({String address = '10.0.0.2%2F32', String extra = ''}) =>
+    'wireguard://${Uri.encodeComponent(_priv)}@203.0.113.7:43618?address=$address&dns=1.1.1.1%2C+8.8.8.8&keepalive=25&mtu=1280'
+    '&publickey=${Uri.encodeComponent(_pub)}$extra#WG%7C%F0%9F%93%8A4.99GB';
+
+Map<String, dynamic> _config(List<ProxyConfig> servers) => jsonDecode(buildSingBoxConfig(servers)) as Map<String, dynamic>;
+
+bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as List? ?? const [])
+    .any((r) => r is Map && (r['query_type'] as List?)?.contains('AAAA') == true && r['action'] == 'predefined');
+
+void main() {
+  test('the link of a provider is read: the key and the address are decoded, and the name keeps its text', () {
+    final c = parseLink(_link())!;
+    expect(c.outbound['type'], 'wireguard');
+    expect(c.outbound['private_key'], _priv);
+    expect(c.outbound['address'], ['10.0.0.2/32']);
+    expect(c.outbound['mtu'], 1280);
+    final peer = (c.outbound['peers'] as List).single as Map;
+    expect(peer['public_key'], _pub);
+    expect(peer['address'], '203.0.113.7');
+    expect(peer['port'], 43618);
+    expect(peer['persistent_keepalive_interval'], 25);
+    expect(c.name, startsWith('WG|'));
+  });
+
+  test('a WireGuard server with no IPv6 address is not given IPv6: its allowed networks are IPv4, and no name has an IPv6 answer', () {
+    final c = parseLink(_link())!;
+    final cfg = _config([c]);
+    final peer = (((cfg['endpoints'] as List).single as Map)['peers'] as List).single as Map;
+    expect(peer['allowed_ips'], ['0.0.0.0/0']);
+    expect(_hasAaaaRule(cfg), isTrue);
+    // What the parsed server holds is not changed (it is shown, tested and saved as it was).
+    expect(((c.outbound['peers'] as List).single as Map)['allowed_ips'], ['0.0.0.0/0', '::/0']);
+  });
+
+  test('a server that has an IPv6 address keeps its IPv6 and its names keep their IPv6 answers', () {
+    final c = parseLink(_link(address: '10.0.0.2%2F32%2Cfd00%3A%3A2%2F128'))!;
+    final cfg = _config([c]);
+    final peer = (((cfg['endpoints'] as List).single as Map)['peers'] as List).single as Map;
+    expect(peer['allowed_ips'], ['0.0.0.0/0', '::/0']);
+    expect(_hasAaaaRule(cfg), isFalse);
+  });
+
+  test('a server that asked for IPv6 networks only is left as it is', () {
+    final c = parseLink(_link(extra: '&allowedips=%3A%3A%2F0'))!;
+    final cfg = _config([c]);
+    final peer = (((cfg['endpoints'] as List).single as Map)['peers'] as List).single as Map;
+    expect(peer['allowed_ips'], ['::/0']);
+  });
+
+  test('a group of servers is not changed: another of them may carry IPv6', () {
+    final a = parseLink(_link())!;
+    final b = parseLink('trojan://secret@t.example.com:443?sni=t.example.com#T')!;
+    final cfg = _config([a, b]);
+    final peer = (((cfg['endpoints'] as List).single as Map)['peers'] as List).single as Map;
+    expect(peer['allowed_ips'], ['0.0.0.0/0', '::/0']);
+    expect(_hasAaaaRule(cfg), isFalse);
+  });
+
+  test('the other servers are not touched', () {
+    final c = parseLink('trojan://secret@t.example.com:443?sni=t.example.com#T')!;
+    expect(_hasAaaaRule(_config([c])), isFalse);
+  });
+}
