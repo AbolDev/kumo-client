@@ -117,7 +117,15 @@ String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hos
         {...layers.first, 'tag': 'proxy', if (two) 'detour': 'proxy-l1'},
         if (two) {...layers[1], 'tag': 'proxy-l1'},
       ],
-    'route': {'default_domain_resolver': 'dns'},
+    'route': {
+      'default_domain_resolver': 'dns',
+      // A WireGuard server is an endpoint, so the configuration has no outbound at all, and the core then makes a
+      // direct one of its own to be the default. On Android, in a test core (which has no platform interface),
+      // that direct outbound ends the test at its start with a nil pointer (it asks an interface monitor that is
+      // not there): every test of a WireGuard server "timed out" at once, and before the tests were guarded the
+      // whole app closed. With the endpoint named as the default, no direct outbound is made.
+      if (wireguard) 'final': 'proxy',
+    },
   });
 }
 

@@ -21,6 +21,18 @@ bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as 
     .any((r) => r is Map && (r['query_type'] as List?)?.contains('AAAA') == true && r['action'] == 'predefined');
 
 void main() {
+  test('the test core of a WireGuard server names the endpoint as its default, so no direct outbound is made', () {
+    final c = parseLink(_link())!;
+    final cfg = jsonDecode(delayConfigForTest([c.outbound])) as Map<String, dynamic>;
+    expect(cfg.containsKey('outbounds'), isFalse);
+    expect(((cfg['endpoints'] as List).first as Map)['tag'], 'proxy');
+    expect((cfg['route'] as Map)['final'], 'proxy');
+    final other = jsonDecode(delayConfigForTest([
+      {'type': 'socks', 'server': '203.0.113.7', 'server_port': 1080},
+    ])) as Map<String, dynamic>;
+    expect((other['route'] as Map).containsKey('final'), isFalse);
+  });
+
   test('the DNS servers a WireGuard link names are read, and the first one is the DNS of the connection', () {
     final c = parseLink(_link())!;
     expect(wireguardLinkDns(c.link), ['1.1.1.1', '8.8.8.8']);
