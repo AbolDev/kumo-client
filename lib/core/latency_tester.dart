@@ -24,6 +24,11 @@ const oldDefaultDelayUrl = 'https://www.google.com/generate_204';
 /// The address used for the real delay; changed in Settings.
 String delayTestUrl = defaultDelayUrl;
 
+/// The second page, tried when the usual one cannot be fetched through a server: a server inside Iran often has
+/// no way to the sites outside it, and then every test of it timed out although it works. A page that is
+/// hosted in Iran and answers at once (a redirect is enough: only the answer is timed).
+const domesticDelayUrl = 'http://arvancloud.ir/';
+
 /// How slow the network of this device is, learnt from the TCP connect times the tests saw last. On a slow
 /// one (H+, a weak signal) the usual time limits call working servers dead and move a connection off a
 /// server that only needed longer, so the limits grow with it: up to three times as long.
@@ -67,17 +72,36 @@ const udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
 
 /// Minimal sing-box config holding only [c] (and the layers it is dialled through), used by the
 /// throw-away test core. WireGuard is an endpoint there, everything else an outbound.
-String _delayConfig(List<Map<String, dynamic>> layers) {
+String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hosts, String? logFile, String? dns}) {
   final wireguard = layers.first['type'] == 'wireguard';
   // Two WireGuard tunnels (Warp-in-Warp): the first is dialled through the second.
   final two = wireguard && layers.length > 1 && layers[1]['type'] == 'wireguard';
   return jsonEncode({
-    'log': {'level': 'error'},
+    // [logFile]: everything the core says is written there (see [probeLog]).
+    'log': logFile == null ? {'level': 'error'} : {'level': 'debug', 'output': logFile, 'timestamp': true},
     'dns': {
       'servers': [
-        {'type': 'udp', 'tag': 'dns', 'server': '1.1.1.1'},
+        // Names whose addresses are known already (see [realDelay]): nothing is asked for them.
+        if (hosts != null && hosts.isNotEmpty)
+          {
+            'type': 'hosts',
+            'tag': 'dns',
+            'predefined': {
+              for (final e in hosts.entries) e.key: [e.value],
+            },
+          }
+        else
+        // A WireGuard tunnel carries addresses, not names: the core looks the name of the test page up itself
+        // before it dials. Asked from the phone's own network that lookup is lost where the filter drops or
+        // answers DNS to 1.1.1.1 itself, and every test of a working server timed out; so it is asked through
+        // the tunnel, as the traffic of a connection is. (Other servers are given the name and look it up.)
+        // The DNS server the WireGuard configuration names is the one asked, when it names one.
+        {'type': 'udp', 'tag': 'dns', 'server': wireguard ? (dns ?? '1.1.1.1') : '1.1.1.1', if (wireguard) 'detour': 'proxy'},
       ],
       'final': 'dns',
+      // A tunnel with no IPv6 address of its own cannot dial an IPv6 address: only IPv4 ones are asked for.
+      if (wireguard && !((layers.first['address'] as List?) ?? const []).any((a) => '$a'.contains(':')))
+        'strategy': 'ipv4_only',
     },
     if (!wireguard)
       'outbounds': [
@@ -93,13 +117,22 @@ String _delayConfig(List<Map<String, dynamic>> layers) {
         {...layers.first, 'tag': 'proxy', if (two) 'detour': 'proxy-l1'},
         if (two) {...layers[1], 'tag': 'proxy-l1'},
       ],
-    'route': {'default_domain_resolver': 'dns'},
+    'route': {
+      'default_domain_resolver': 'dns',
+      // A WireGuard server is an endpoint, so the configuration has no outbound at all, and the core then makes a
+      // direct one of its own to be the default. On Android, in a test core (which has no platform interface),
+      // that direct outbound ends the test at its start with a nil pointer (it asks an interface monitor that is
+      // not there): every test of a WireGuard server "timed out" at once, and before the tests were guarded the
+      // whole app closed. With the endpoint named as the default, no direct outbound is made.
+      if (wireguard) 'final': 'proxy',
+    },
   });
 }
 
 /// [_delayConfig] for the tests.
 @visibleForTesting
-String delayConfigForTest(List<Map<String, dynamic>> layers) => _delayConfig(layers);
+String delayConfigForTest(List<Map<String, dynamic>> layers, {Map<String, String>? hosts, String? dns}) =>
+    _delayConfig(layers, hosts: hosts, dns: dns);
 
 /// The server and the layers under it with their names already resolved by the system resolver.
 /// Resolving them inside the throw-away core went through a fixed public DNS server, which is slow
@@ -112,6 +145,9 @@ Future<List<Map<String, dynamic>>> _resolvedLayers(ProxyConfig c) async => [
 
 Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) => resolveOutbound(outbound, systemLookup);
 
+/// The first DNS server the link of a WireGuard server names, or null.
+String? _linkDns(ProxyConfig c) => wireguardLinkDns(c.link).firstOrNull;
+
 /// Real delay: time to fetch a page through the server (handshake included), -1 on failure and -2
 /// when the test was skipped (the tunnel is being started or stopped). Servers only Xray can carry
 /// (XHTTP ...) are measured with a throw-away Xray the same way. A TCP connect is never put in its
@@ -119,7 +155,10 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) => resolve
 ///
 /// With [options] the server is tried with those advanced options (fragmenting, a fingerprint, mux)
 /// instead of a plain outbound; this is for servers sing-box carries.
-Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options}) async {
+///
+/// [url] is the page to fetch when it is not [delayTestUrl] (the domestic page, see [realDelayOrDomestic]).
+Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options, String? url}) async {
+  final page = url ?? delayTestUrl;
   // The usual limit grows on a slow network; one the caller gives is kept as it is.
   timeout ??= NetPace.scale(const Duration(seconds: 8));
   // An OpenVPN server is measured by the OpenVPN program itself: the time until the handshake is done.
@@ -132,12 +171,35 @@ Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options}) a
   // A server whose link carries a final mask is measured the way it is used: through Xray.
   if (!c.canSingBox || (c.preferXray && c.canXray)) {
     if (!c.canXray) return -1;
-    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
+    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), page,
         timeoutMs: timeout.inMilliseconds);
   }
   var layers = await _resolvedLayers(c);
   if (options != null) layers = tweakLayers(layers, options);
-  return VpnChannel.delay(_delayConfig(layers), delayTestUrl, timeoutMs: timeout.inMilliseconds);
+  // A WireGuard tunnel is given addresses, so the core looks the name of the page up itself, through the tunnel.
+  // A server inside Iran may not reach that DNS server either; the name of the domestic page is looked up by the
+  // system's resolver instead (it is not a filtered name) and handed to the core.
+  Map<String, String>? hosts;
+  if (url != null && layers.first['type'] == 'wireguard') {
+    final host = Uri.parse(url).host;
+    final address = InternetAddress.tryParse(host) == null ? await systemLookup(host) : null;
+    if (address != null) hosts = {host: address};
+  }
+  return VpnChannel.delay(_delayConfig(layers, hosts: hosts, dns: _linkDns(c)), page, timeoutMs: timeout.inMilliseconds);
+}
+
+/// [realDelay], and when the usual page cannot be fetched, the domestic one ([domesticDelayUrl]): a server that
+/// gets only that one works, for the sites of its own country. [ProxyConfig.domesticOnly] is set to what was
+/// found. The second try costs a dead server its time limit twice, so a list is not tested this way (see
+/// [testReal]).
+Future<int> realDelayOrDomestic(ProxyConfig c, {Duration? timeout}) async {
+  final ms = await realDelay(c, timeout: timeout);
+  if (ms >= 0) c.domesticOnly = false;
+  if (ms != -1 || c.isOpenVpn) return ms;
+  final second = await realDelay(c, timeout: timeout, url: domesticDelayUrl);
+  if (second == -2) return ms;
+  c.domesticOnly = second >= 0;
+  return second >= 0 ? second : -1;
 }
 
 /// The throw-away configuration that holds [c] (its name looked up by the system's resolver, as in the real
@@ -145,7 +207,47 @@ Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options}) a
 /// the sing-box of the throw-away core cannot carry (OpenVPN, the ones only Xray carries).
 Future<String?> serverProbeConfig(ProxyConfig c) async {
   if (c.isOpenVpn || !c.canSingBox || (c.preferXray && c.canXray)) return null;
-  return _delayConfig(await _resolvedLayers(c));
+  return _delayConfig(await _resolvedLayers(c), dns: _linkDns(c));
+}
+
+/// One real delay test of [c] with everything the core says written down: the text of the core's log and the
+/// error the test ended with, for finding out why a server that works elsewhere fails here. Only on Android
+/// (where the core runs inside the app and says nothing otherwise) and for servers sing-box carries; null
+/// elsewhere. The lines that could hold a key are left out.
+Future<String?> probeLog(ProxyConfig c, {String? url}) async {
+  if (!Platform.isAndroid || c.isOpenVpn || !c.canSingBox || (c.preferXray && c.canXray)) return null;
+  const file = 'kumo-probe.log';
+  try {
+    await VpnChannel.deleteFile('core/$file');
+    final layers = await _resolvedLayers(c);
+    Map<String, String>? hosts;
+    if (url != null && layers.first['type'] == 'wireguard') {
+      final host = Uri.parse(url).host;
+      final address = await systemLookup(host);
+      if (address != null) hosts = {host: address};
+    }
+    final ms = await VpnChannel.delay(_delayConfig(layers, hosts: hosts, logFile: file, dns: _linkDns(c)), url ?? delayTestUrl,
+        timeoutMs: 12000);
+    final error = await VpnChannel.lastDelayError();
+    final text = await VpnChannel.readFile('core/$file') ?? '';
+    await VpnChannel.deleteFile('core/$file');
+    final lines = text
+        .split('\n')
+        // Not the lines that could hold a key, nor the two dozen that only say a worker started or stopped.
+        .where((l) =>
+            l.trim().isNotEmpty &&
+            !RegExp('private_key|preshared_key|public_key').hasMatch(l) &&
+            !RegExp(r'routine: (encryption|decryption|handshake) worker \d+ - (started|stopped)').hasMatch(l))
+        .toList();
+    final kept = lines.length > 60 ? [...lines.take(40), '…', ...lines.skip(lines.length - 20)] : lines;
+    // The error first, with the place of a panic under it (its lines, without the tabs of a Go trace).
+    final said = ms < 0 && error != null
+        ? error.split('\n').map((l) => l.replaceAll('\t', '  ')).where((l) => l.trim().isNotEmpty).take(70).toList()
+        : const <String>[];
+    return ['result: $ms${said.isEmpty ? '' : ' (${said.first})'}', ...said.skip(1), ...kept].join('\n');
+  } catch (e) {
+    return 'probe failed: $e';
+  }
 }
 
 /// Cloudflare's speed test: a download of the size asked for, and a page that takes an upload.
@@ -158,7 +260,7 @@ const speedUploadUrl = 'https://speed.cloudflare.com/__up';
 Future<double> realSpeed(ProxyConfig c, {required bool upload, int bytes = 8000000, Duration timeout = const Duration(seconds: 30)}) async {
   if (c.isOpenVpn || !c.canSingBox || (c.preferXray && c.canXray)) return -1;
   final layers = await _resolvedLayers(c);
-  return VpnChannel.speed(_delayConfig(layers), upload ? speedUploadUrl : speedDownloadUrl(bytes),
+  return VpnChannel.speed(_delayConfig(layers, dns: _linkDns(c)), upload ? speedUploadUrl : speedDownloadUrl(bytes),
       upload: upload, bytes: bytes, timeoutMs: timeout.inMilliseconds);
 }
 
@@ -173,9 +275,10 @@ Future<int> tunnelDelay(
     XrayAuth? socksAuth,
     int? proxyPort,
     int samples = 1,
-    Duration? timeout}) async {
+    Duration? timeout,
+    String? url}) async {
   timeout ??= NetPace.scale(const Duration(seconds: 8));
-  final uri = Uri.parse(delayTestUrl);
+  final uri = Uri.parse(url ?? delayTestUrl);
   // Through the tunnel the app looks the name up itself, and the first lookup of a session goes
   // through a cold encrypted DNS connection: that is no part of the delay. (With a local proxy or
   // Xray the name is given to them and their own cache takes care of it.)
@@ -328,12 +431,31 @@ Future<void> testReal(
   int? stopAfterAlive,
   bool Function()? isCancelled,
   void Function(ProxyConfig c)? onResult,
+  bool udpDelay = false,
 }) async {
   if (!real) {
-    return testLatencies(candidates,
-        stopAfterAlive: stopAfterAlive,
-        isCancelled: isCancelled,
-        onResult: onResult);
+    // A server that runs over UDP (WireGuard, Hysteria, TUIC) has no TCP port: a TCP connect to it only times out,
+    // and the list showed every such server as dead. With [udpDelay] (no connection is up, so a test core can
+    // run) they are measured through the core; otherwise they are left as they were, and still counted as done.
+    final udpOnes = [for (final c in candidates) if (!c.isOpenVpn && udpProtocols.contains(c.protocol)) c];
+    final tcpOnes = [for (final c in candidates) if (c.isOpenVpn || !udpProtocols.contains(c.protocol)) c];
+    final queue = Queue<ProxyConfig>.of(udpOnes);
+    Future<void> udpWorker() async {
+      while (queue.isNotEmpty && !(isCancelled?.call() ?? false)) {
+        final c = queue.removeFirst();
+        if (udpDelay) {
+          final ms = await realDelayOrDomestic(c, timeout: NetPace.scale(const Duration(seconds: 5)));
+          if (ms != -2) c.latencyMs = ms;
+        }
+        onResult?.call(c);
+      }
+    }
+
+    await Future.wait([
+      testLatencies(tcpOnes, stopAfterAlive: stopAfterAlive, isCancelled: isCancelled, onResult: onResult),
+      for (var i = 0; i < 3; i++) udpWorker(),
+    ]);
+    return;
   }
   final udp = tcpFirst
       ? candidates.where((c) => udpProtocols.contains(c.protocol)).toList()
@@ -378,7 +500,10 @@ Future<void> testReal(
         continue;
       }
       final c = queue.removeFirst();
-      final ms = await realDelay(c, timeout: NetPace.scale(const Duration(seconds: 5)));
+      // A server known to reach domestic sites only keeps being tested with the domestic page too; the others
+      // are not, so that a list of dead servers does not take twice as long.
+      final limit = NetPace.scale(const Duration(seconds: 5));
+      final ms = c.domesticOnly ? await realDelayOrDomestic(c, timeout: limit) : await realDelay(c, timeout: limit);
       // -2: skipped, so the old value stays
       if (ms != -2) c.latencyMs = ms;
       if (c.isAlive) alive++;

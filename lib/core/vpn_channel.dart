@@ -294,6 +294,46 @@ class VpnChannel {
       ? DesktopVpn.instance.readFile(name)
       : _control.invokeMethod<String>('readFile', {'name': name});
 
+  /// What the core wrote when it ended the app the last time (Android, where the core runs inside the app), or
+  /// null. See [clearCoreCrash].
+  static Future<String?> coreCrash() async {
+    if (_win) return null;
+    try {
+      return await _control.invokeMethod<String>('coreCrash');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// What the core of the connection said since the last call: lines of `time in ms|level|text`, the oldest first
+  /// (the level as sing-box counts it: 2 error, 3 warning, 4 info, 5 debug). They are forgotten once taken.
+  static Future<List<String>> takeCoreLog() async {
+    if (_win) return DesktopVpn.instance.takeCoreLog();
+    try {
+      return await _control.invokeListMethod<String>('takeCoreLog') ?? const [];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// The error the last test core ended with (Android), or null.
+  static Future<String?> lastDelayError() async {
+    if (_win) return null;
+    try {
+      return await _control.invokeMethod<String>('lastDelayError');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Forgets what [coreCrash] gave, once it has been shown.
+  static Future<void> clearCoreCrash() async {
+    if (_win) return;
+    try {
+      await _control.invokeMethod('clearCoreCrash');
+    } catch (_) {}
+  }
+
   static Future<void> writeFile(String name, String content) => _win
       ? DesktopVpn.instance.writeFile(name, content)
       : _control.invokeMethod('writeFile', {'name': name, 'content': content});

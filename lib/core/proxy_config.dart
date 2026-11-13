@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show File, InternetAddress, Platform;
 import 'dart:isolate';
 
 import 'ovpn/ovpn_profile.dart';
@@ -61,6 +61,11 @@ class ProxyConfig {
 
   bool get isAlive => (latencyMs ?? -1) >= 0;
 
+  /// The last test could not get the usual test page through this server but did get the domestic one: the
+  /// server works and reaches the sites of its own country only (a server inside Iran). Its [latencyMs] is the
+  /// delay of the domestic page.
+  bool domesticOnly = false;
+
   /// True when sing-box cannot carry this server (it needs Xray).
   bool get needsXray => outbound.isEmpty && xrayOutbound != null;
 
@@ -94,7 +99,9 @@ class ProxyConfig {
         xrayNote: xrayNote,
         ovpn: ovpn,
         preferXray: preferXray,
-      )..latencyMs = latencyMs;
+      )
+        ..latencyMs = latencyMs
+        ..domesticOnly = domesticOnly;
 
   /// Short text for lists, e.g. "vless" or "vless + xhttp".
   String get label => needsXray ? '$protocol + $xrayNote' : protocol;

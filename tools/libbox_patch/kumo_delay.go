@@ -20,7 +20,16 @@ import (
 // server to the page); the time of the second one is returned in milliseconds: the round trip that
 // traffic through the server then sees, which other clients (v2rayN) call the real delay. Timing the
 // first request counts all of the set-up and came out about three times as high.
-func MeasureDelay(configContent string, testURL string, timeoutMs int32) (int32, error) {
+func MeasureDelay(configContent string, testURL string, timeoutMs int32) (result int32, err error) {
+	kumoGuard(&err, func() error {
+		var workErr error
+		result, workErr = measureDelay(configContent, testURL, timeoutMs)
+		return workErr
+	})
+	return
+}
+
+func measureDelay(configContent string, testURL string, timeoutMs int32) (int32, error) {
 	ctx := baseContext(nil)
 	options, err := parseConfig(ctx, configContent)
 	if err != nil {

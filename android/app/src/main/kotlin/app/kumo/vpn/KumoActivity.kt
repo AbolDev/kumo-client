@@ -50,6 +50,10 @@ class KumoActivity : FlutterActivity() {
     // Each delay test starts its own core, so only a few run at once.
     private val delayPool = Executors.newFixedThreadPool(12)
 
+    /** The error the last delay test ended with (what the core said), for the diagnosis of a failing server. */
+    @Volatile
+    private var lastDelayError: String? = null
+
     override fun onResume() {
         super.onResume()
         applyTaskLook()
@@ -192,7 +196,8 @@ class KumoActivity : FlutterActivity() {
                             ms = try {
                                 App.ensureLibbox()
                                 Libbox.measureDelay(config, url, timeout)
-                            } catch (_: Throwable) {
+                            } catch (e: Throwable) {
+                                lastDelayError = e.message
                                 -1
                             } finally {
                                 VpnBridge.exitDelay()
@@ -546,6 +551,32 @@ class KumoActivity : FlutterActivity() {
                 }
                 "moveAside" -> {
                     Store.moveAside(filesDir, call.argument<String>("name")!!)
+                    result.success(null)
+                }
+                // What the core wrote when it ended the app the last time (a Go panic or a fatal error): the end of
+                // its error output, or null when there is none. The output of the run before this one is kept by
+                // libbox as stderr.log.old; before libbox is set up in this run it is still stderr.log.
+                "coreCrash" -> {
+                    val text = runCatching {
+                        val core = File(filesDir, "core")
+                        listOf(File(core, "stderr.log.old"), File(core, "stderr.log"))
+                            .filter { it.exists() && it.length() > 0 }
+                            .map { it.readText() }
+                            .firstOrNull { "goroutine " in it && ("panic" in it || "fatal error" in it || "signal " in it) }
+                            ?.take(12000)
+                    }.getOrNull()
+                    result.success(text)
+                }
+                "lastDelayError" -> result.success(lastDelayError)
+                "takeCoreLog" -> result.success(VpnBridge.takeCoreLog())
+                "clearCoreCrash" -> {
+                    runCatching {
+                        val core = File(filesDir, "core")
+                        File(core, "stderr.log.old").delete()
+                        // The file of this run stays open by the core: it is emptied, not deleted, and only when
+                        // it is the one that holds a trace.
+                        File(core, "stderr.log").takeIf { it.exists() && "goroutine " in it.readText() }?.writeText("")
+                    }
                     result.success(null)
                 }
                 "deleteFile" -> {

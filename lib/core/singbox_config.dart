@@ -662,6 +662,13 @@ String buildSingBoxConfig(
     if (fakeIp) {'query_type': ['A', 'AAAA'], 'server': 'dns-fakeip'},
   ];
 
+  // The DNS server of the only server's WireGuard configuration (see where it is used).
+  final String? tunnelDns = () {
+    if (servers.length != 1 || useXray || ovpnInterface != null || o.dns == 'custom') return null;
+    if (servers.first.outbound['type'] != 'wireguard') return null;
+    return wireguardLinkDns(servers.first.link).firstOrNull;
+  }();
+
   final config = {
     'log': {'level': logLevels.contains(o.logLevel) ? o.logLevel : defaultLogLevel},
     if (o.certStore != 'system') 'certificate': {'store': o.certStore},
@@ -675,7 +682,11 @@ String buildSingBoxConfig(
       },
     'dns': {
       'servers': [
-        _dnsServer(o.dnsAddress, resolver: strict ? 'dns-boot' : 'dns-local'),
+        // A WireGuard configuration names the DNS servers that are to be asked through its tunnel (`DNS = `).
+        // Whoever runs the server chose them because they answer from there; the encrypted DNS the app asks
+        // otherwise is often out of reach from such a server (one inside Iran), and then the connection is up
+        // and no name is found. So they are used, unless the user typed a DNS server of their own.
+        _dnsServer(tunnelDns ?? o.dnsAddress, resolver: strict ? 'dns-boot' : 'dns-local'),
         {'type': 'local', 'tag': 'dns-local'},
         // Looks up server names over encrypted DNS, straight out, so the network's resolver
         // never sees them.

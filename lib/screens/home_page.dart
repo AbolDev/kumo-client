@@ -29,6 +29,7 @@ import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
 import 'free_connections_page.dart';
 import 'safety_sheet.dart';
+import '../widgets/core_crash_notice.dart';
 import '../widgets/ovpn_login.dart';
 import '../widgets/prompt_dialog.dart';
 import 'warp_page.dart';
@@ -68,7 +69,8 @@ class HomePage extends StatelessWidget {
 
   // The login of an OpenVPN server is asked for here when a connection needs it.
   @override
-  Widget build(BuildContext context) => OvpnLoginHost(state: state, child: _page(context));
+  Widget build(BuildContext context) =>
+      CoreCrashNotice(child: OvpnLoginHost(state: state, child: _page(context)));
 
   Widget _page(BuildContext context) {
     final t = S.of(context);
@@ -1419,7 +1421,11 @@ class _ServerListState extends State<_ServerList> {
               top: header ? radius : Radius.zero,
               bottom: (header && !open) || row.last ? radius : Radius.zero,
             ),
-            child: ColoredBox(color: scheme.surfaceContainerLow, child: child),
+            // On the pure black theme the usual tile colour (almost black) cannot be told from the background, so the tiles
+            // take the colour of the speed cards under the connect button, which stands out well.
+            child: ColoredBox(
+                color: scheme.surface == Colors.black ? scheme.surfaceContainerHigh : scheme.surfaceContainerLow,
+                child: child),
           ),
         );
         return header
@@ -1585,7 +1591,8 @@ class _SelectionBar extends StatelessWidget {
   }
 }
 
-/// Under the title of a group while it is being tested: how far, and a way to stop.
+/// Under the title of a group while it is being tested: how far (a bar split by what the tests found: green for the
+/// servers that answered, red for the ones that did not, the rest still to do), the counts, and a way to stop.
 class _TestProgress extends StatelessWidget {
   const _TestProgress({required this.state, required this.group});
 
@@ -1597,38 +1604,69 @@ class _TestProgress extends StatelessWidget {
     final test = state.tests[group.id];
     if (test == null || !test.running) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final ok = dark ? const Color(0xFF7FD38A) : const Color(0xFF1F7A3A);
+    final bad = dark ? const Color(0xFFFFB4AB) : const Color(0xFFBA1A1A);
+    final total = test.total;
+    final answered = test.alive.clamp(0, total);
+    final failed = (test.done - test.alive).clamp(0, total - answered);
+    final left = (total - answered - failed).clamp(0, total);
+    final small = TextStyle(fontSize: 12, color: scheme.onSurfaceVariant);
     // Inside the tile of the group, under its name and what it shows there.
     return Padding(
       padding: const EdgeInsetsDirectional.only(top: 8, end: 4),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-        Expanded(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                  value: test.total > 0 ? test.done / test.total : null,
-                  minHeight: 6,
-                  backgroundColor: scheme.surfaceContainerHighest),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Semantics(
+          label: tr(context, 'listTesting', {'done': test.done, 'total': total}),
+          excludeSemantics: true,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 6,
+              child: total <= 0
+                  ? LinearProgressIndicator(minHeight: 6, backgroundColor: scheme.surfaceContainerHighest)
+                  : ColoredBox(
+                      color: scheme.surfaceContainerHighest,
+                      child: Row(children: [
+                        if (answered > 0) Expanded(flex: answered, child: ColoredBox(key: const ValueKey('test-bar-ok'), color: ok)),
+                        if (failed > 0) Expanded(flex: failed, child: ColoredBox(key: const ValueKey('test-bar-bad'), color: bad)),
+                        if (left > 0) Expanded(flex: left, child: const SizedBox.shrink()),
+                      ]),
+                    ),
             ),
-            const SizedBox(height: 4),
-            Text(tr(context, 'listTesting', {'done': test.done, 'total': test.total}),
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          ]),
+          ),
         ),
-        TextButton(
-          style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 12)),
-          onPressed: () async {
-            final remove = await _askUntested(context);
-            if (remove != null) state.cancelPing(group, removeUntested: remove);
-          },
-          child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
-        ),
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text.rich(
+                TextSpan(style: small, children: [
+                  TextSpan(text: tr(context, 'listTestOk', {'n': answered}), style: TextStyle(color: ok)),
+                  const TextSpan(text: ' · '),
+                  TextSpan(text: tr(context, 'listTestBad', {'n': failed}), style: TextStyle(color: bad)),
+                  const TextSpan(text: ' · '),
+                  TextSpan(text: tr(context, 'listTestLeft', {'n': left})),
+                ]),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: MaterialLocalizations.of(context).cancelButtonLabel,
+            icon: const Icon(Icons.stop_circle_outlined),
+            color: scheme.primary,
+            iconSize: 22,
+            visualDensity: VisualDensity.compact,
+            onPressed: () async {
+              final remove = await _askUntested(context);
+              if (remove != null) state.cancelPing(group, removeUntested: remove);
+            },
+          ),
+        ]),
       ]),
     );
   }
 }
-
 /// Real delay can drop the configs that do not answer; null = cancelled. Asked in a sheet at the bottom, where the
 /// thumb is. It is asked every time; with "Remember my choice" the next one starts with the answer given now.
 Future<bool?> _askRemoveDead(BuildContext context, AppState state) async {
@@ -2281,9 +2319,13 @@ class _ConfigTile extends StatelessWidget {
       case _ConfigAction.delete:
         _removeWithUndo(context, state, [(group: group, config: config)]);
       case _ConfigAction.tcping:
-        state.testOne(config, real: false);
+        if (!state.canTestNow(config, real: false)) {
+          toast(context, t.realDelayNeedsDisconnect);
+        } else {
+          state.testOne(config, real: false);
+        }
       case _ConfigAction.realDelay:
-        if (!state.canTestReal) {
+        if (!state.canTestNow(config, real: true)) {
           toast(context, t.realDelayNeedsDisconnect);
         } else {
           state.testOne(config, real: true);
@@ -2340,7 +2382,8 @@ class _ConfigTile extends StatelessWidget {
                 ),
               TextSpan(
                   text:
-                      '${ms == null ? '' : ' · '}${config.label} · ${config.maskedAddress}'),
+                      '${ms == null ? '' : ' · '}${ms != null && ms >= 0 && config.domesticOnly ? '${tr(context, 'delayDomestic')} · ' : ''}'
+                      '${config.label} · ${config.maskedAddress}'),
             ]),
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.start,

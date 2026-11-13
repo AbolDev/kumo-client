@@ -39,6 +39,7 @@ import '../core/usage/usage_transport.dart' show defaultFragment;
 import '../core/server_resolver.dart';
 import '../core/usage/crash_hub.dart';
 import '../core/usage_alert.dart';
+import '../core/app_log.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart' show trFor;
 import '../l10n/strings.dart';
@@ -108,14 +109,10 @@ class GroupTest {
   int get percent => total == 0 ? 100 : (done * 100 ~/ total);
 }
 
-class LogEntry {
-  LogEntry(this.time, this.text);
-  final DateTime time;
-  final String text;
-}
-
 const _logFile = 'app.log';
-const _maxLogs = 300;
+
+/// How many lines the log keeps: enough for a day of use with the reports of failed tests in it.
+const _maxLogs = 2000;
 
 class AppState extends ChangeNotifier {
   // What the Android widgets were last told (the server and the delay), so they are told only of a change.
@@ -208,18 +205,57 @@ class AppState extends ChangeNotifier {
   final logs = <LogEntry>[];
   Timer? _logTimer;
 
+  /// When the connection that is being made was asked for, for the time it took in the log.
+  DateTime? _connectAsked;
+
   /// Changes with every new line of the log, so the log page redraws without the whole app doing it.
   final logRevision = ValueNotifier<int>(0);
 
-  void log(String text) {
-    logs.add(LogEntry(DateTime.now(), text));
+  var _pullingCore = false;
+
+  /// Takes what the core of the connection said since the last time and writes it to the log, each line at the
+  /// time the core said it. How much the core says is the log level of the network settings. A line said again
+  /// and again is written once, and a burst is cut short, so that the rest of the log is not pushed out.
+  Future<void> pullCoreLog() async {
+    if (_pullingCore) return;
+    _pullingCore = true;
+    try {
+      final lines = await VpnChannel.takeCoreLog();
+      String? last;
+      var written = 0;
+      var left = 0;
+      for (final raw in lines) {
+        final m = RegExp(r'^(\d+)\|(\d+)\|(.*)$').firstMatch(raw);
+        if (m == null) continue;
+        // On Android the text is the core's line as it is; on a computer the prefix is taken off already.
+        final text = (coreLogLine(m[3]!) ?? '').replaceFirst(RegExp(r'^\d+\|'), '');
+        if (text.isEmpty || text == last) continue;
+        last = text;
+        if (written >= 150) {
+          left++;
+          continue;
+        }
+        written++;
+        log('core: $text',
+            level: coreLogLevel(int.parse(m[2]!)),
+            tag: LogTag.core,
+            time: DateTime.fromMillisecondsSinceEpoch(int.parse(m[1]!)));
+      }
+      if (left > 0) log('core: … and $left more lines', level: LogLevel.debug, tag: LogTag.core);
+    } catch (_) {
+      // nothing to take
+    } finally {
+      _pullingCore = false;
+    }
+  }
+
+  /// Adds a line to the log. Without a [level] or a [tag] they are told from what the line says.
+  void log(String text, {LogLevel? level, LogTag? tag, DateTime? time}) {
+    logs.add(LogEntry(time ?? DateTime.now(), text, level: level, tag: tag));
     if (logs.length > _maxLogs) logs.removeRange(0, logs.length - _maxLogs);
     _logTimer ??= Timer(const Duration(seconds: 2), () {
       _logTimer = null;
-      final data = logs
-          .map((e) =>
-              '${e.time.millisecondsSinceEpoch}|${e.text.replaceAll('\n', ' ')}')
-          .join('\n');
+      final data = logs.map((e) => e.encode()).join('\n');
       VpnChannel.writeFile(_logFile, data).catchError((_) {});
     });
     logRevision.value++;
@@ -235,16 +271,16 @@ class AppState extends ChangeNotifier {
     try {
       final raw = await VpnChannel.readFile(_logFile);
       for (final line in (raw ?? '').split('\n')) {
-        final i = line.indexOf('|');
-        final ms = i > 0 ? int.tryParse(line.substring(0, i)) : null;
-        if (ms != null) {
-          logs.add(LogEntry(
-              DateTime.fromMillisecondsSinceEpoch(ms), line.substring(i + 1)));
-        }
+        final entry = LogEntry.decode(line);
+        if (entry != null) logs.add(entry);
       }
     } catch (_) {
       // no log yet
     }
+    // Where a run of the app begins and what it runs on: the lines after it belong to this run.
+    // (Added as it is, with no write of the file for it alone: the next line takes it along.)
+    logs.add(LogEntry(DateTime.now(), 'Kumo opened on ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+        level: LogLevel.info, tag: LogTag.app));
   }
 
   /// Why the connection last ended (a text key of the extra strings and its arguments), shown on
@@ -293,7 +329,9 @@ class AppState extends ChangeNotifier {
           socksPort: _xrayPort,
           socksAuth: _xrayAuth,
           proxyPort: net.tun ? null : net.proxyPort,
-          samples: 2);
+          samples: 2,
+          // A server that reaches domestic sites only is asked for the page it can get.
+          url: selectedNow?.domesticOnly == true ? domesticDelayUrl : null);
       if (!connected) return;
       if (ms >= 0 || attempt == 1) {
         liveDelay = ms;
@@ -688,6 +726,7 @@ class AppState extends ChangeNotifier {
         _watch = Timer.periodic(const Duration(seconds: 20), (_) {
           _refreshActive();
           _healthTick();
+          pullCoreLog();
         });
         Future<void>.delayed(const Duration(seconds: 3), _refreshActive);
         _refreshListsSoon();
@@ -697,15 +736,20 @@ class AppState extends ChangeNotifier {
         _listsTimer?.cancel();
         if (changed && (s.status == VpnStatus.stopped || s.status == VpnStatus.error)) _warmLookup(const Duration(seconds: 3));
       }
+      // What the core said on the way to this state belongs before the line of the state itself.
+      if (changed) unawaited(pullCoreLog());
       if (s.status == VpnStatus.error) {
         final reason = s.error ?? '';
         message = (t) => t.connectFailed(reason);
       } else if (changed) {
         switch (s.status) {
           case VpnStatus.started:
-            log('Connected');
+            final asked = _connectAsked;
+            _connectAsked = null;
+            log('Connected${asked == null ? '' : ' in ${DateTime.now().difference(asked).inMilliseconds} ms'}',
+                level: LogLevel.info, tag: LogTag.connection);
           case VpnStatus.stopped:
-            log('Disconnected');
+            log('Disconnected', level: LogLevel.info, tag: LogTag.connection);
           default:
         }
       }
@@ -1406,6 +1450,12 @@ class AppState extends ChangeNotifier {
         final ms = pings[pingKey(c.link)] ?? pings[c.link];
         if (ms is num) c.latencyMs = ms.toInt();
       }
+      final domestic = {...((j['domestic'] as List?) ?? const [])};
+      if (domestic.isNotEmpty) {
+        for (final c in all) {
+          if (c.isAlive && domestic.contains(pingKey(c.link))) c.domesticOnly = true;
+        }
+      }
       for (final g in [collector, manual, cleanGroup, ...subscriptions]) {
         if (g.configs.any((c) => c.latencyMs != null)) _sort(g);
       }
@@ -1719,6 +1769,10 @@ class AppState extends ChangeNotifier {
             if (safetyOf(c) != null) pingKey(c.link): safetyOf(c)!.toJson(),
         };
     final data = jsonEncode({
+      'domestic': [
+        for (final c in all)
+          if (c.domesticOnly && c.isAlive) pingKey(c.link),
+      ],
       'collector': links(collector),
       'manual': links(manual),
       'clean': links(cleanGroup),
@@ -1837,6 +1891,7 @@ class AppState extends ChangeNotifier {
       await _job(null, () async {
         await testReal(
           real: real,
+          udpDelay: _real,
           tcpFirst: g.kind == GroupKind.collector,
           list,
           isCancelled: () => _stale(key, gen),
@@ -1881,12 +1936,51 @@ class AppState extends ChangeNotifier {
 
   /// Tests one config from its menu.
   Future<void> testOne(ProxyConfig c, {required bool real}) async {
-    if (testing.contains(c) || (real && !_real)) return;
+    // While connected a real delay can only be taken of the server in use, through the connection itself.
+    final live = connected && identical(c, selected);
+    if (testing.contains(c) || (real && !_real && !live)) return;
     testing.add(c);
     notifyListeners();
     try {
-      final ms = real ? await realDelay(c) : await tcpLatency(c);
+      // A server that runs over UDP (WireGuard, Hysteria, TUIC) has no TCP port to connect to: a TCP ping of it
+      // always timed out. It is asked the only way it can be, through the core, when that is possible now.
+      final overUdp = !c.isOpenVpn && udpProtocols.contains(c.protocol);
+      final int ms;
+      var how = real || (overUdp && _real) ? 'Real delay' : 'TCP ping';
+      if ((overUdp || real) && !_real) {
+        // While the connection is up no test core can be run, and a TCP connect to a UDP port only times out.
+        // The server in use is measured through the connection itself; another one cannot be measured now.
+        how = 'Delay through the connection';
+        ms = connected && identical(c, selected)
+            ? await tunnelDelay(
+                socksPort: _xrayPort,
+                socksAuth: _xrayAuth,
+                proxyPort: net.tun ? null : net.proxyPort,
+                url: c.domesticOnly ? domesticDelayUrl : null)
+            : -2;
+      } else {
+        ms = real || (overUdp && _real) ? await realDelayOrDomestic(c) : await tcpLatency(c);
+      }
       if (ms != -2) c.latencyMs = ms;
+      final result = ms == -2
+          ? 'skipped, the connection is changing'
+          : ms < 0
+              ? 'timeout'
+              : '$ms ms${c.domesticOnly ? ', domestic sites only' : ''}';
+      log('$how of ${c.name} (${c.label}): $result', level: ms == -1 ? LogLevel.warn : LogLevel.info, tag: LogTag.test);
+      // A WireGuard server that fails here and works elsewhere: one more try with the core's own words
+      // written to the log of the app, so that the reason can be read (and sent to the developers).
+      if (ms == -1 && c.protocol == 'wireguard' && _real) {
+        for (final url in [null, domesticDelayUrl]) {
+          final report = await probeLog(c, url: url);
+          if (report == null) break;
+          log('What the core said in a test of ${c.name} with ${url ?? delayTestUrl}:',
+              level: LogLevel.warn, tag: LogTag.core);
+          for (final line in report.split('\n')) {
+            log('  $line', level: LogLevel.debug, tag: LogTag.core);
+          }
+        }
+      }
     } finally {
       testing.remove(c);
       _save();
@@ -1896,12 +1990,20 @@ class AppState extends ChangeNotifier {
 
   bool get canTestReal => _real;
 
+  /// Whether [c] can be tested from its menu now. While connected no test core can be run: the server in use is
+  /// measured through the connection, a TCP ping still works for a server with a TCP port, and anything else
+  /// (a real delay of another server, any test of another server that runs over UDP) has to wait.
+  bool canTestNow(ProxyConfig c, {required bool real}) {
+    if (_real || (connected && identical(c, selected))) return true;
+    return !real && (c.isOpenVpn || !udpProtocols.contains(c.protocol));
+  }
+
   /// In automatic mode: the answering server with the lowest ping, which is the one
   /// the automatic group starts with.
   ProxyConfig? get autoPick {
     ProxyConfig? best;
     for (final c in all) {
-      if (!c.canSingBox || !c.isAlive) continue;
+      if (!c.canSingBox || !c.isAlive || c.domesticOnly) continue;
       if (best == null || c.latencyMs! < best.latencyMs!) best = c;
     }
     return best;
@@ -2475,7 +2577,8 @@ class AppState extends ChangeNotifier {
     // A server whose Reality key the core would refuse is left out: one of them stops the whole core.
     // A server the safety check found changing what passes through it is left out too.
     final plain = all.where((c) => c.canSingBox && !c.badRealityKey && !isDangerous(c)).toList();
-    final alive = plain.where((c) => c.isAlive).toList()
+    // A server that reaches domestic sites only is not one to pick for the user.
+    final alive = plain.where((c) => c.isAlive && !c.domesticOnly).toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
     final auto = (alive.isNotEmpty ? alive : plain).take(_autoGroupSize).toList();
     return selected != null ? [selected!] : (auto.isNotEmpty ? auto : [all.first]);
@@ -2817,7 +2920,13 @@ class AppState extends ChangeNotifier {
       _show(VpnStatus.stopped);
       return;
     }
-    log('Connecting to ${selected?.name ?? 'the fastest servers'}');
+    _connectAsked = DateTime.now();
+    final target = selected;
+    log(
+        'Connecting to ${target == null ? 'the fastest servers (${chosen.length}: ${chosen.take(6).map((c) => c.name).join(', ')})' : '${target.name} (${target.label})'}'
+        ' · ${net.tun ? 'whole device' : 'proxy only'}',
+        level: LogLevel.info,
+        tag: LogTag.connection);
     // The names let the notification show which server is in use.
     final names = chosen.map((c) => c.name).toList();
     _preparing = false;
@@ -2956,7 +3065,7 @@ class AppState extends ChangeNotifier {
             proxyPort: net.proxyPort);
       }
     } catch (e) {
-      log('Could not start the connection: $e');
+      log('Could not start the connection: $e', level: LogLevel.error, tag: LogTag.connection);
       _show(VpnStatus.stopped);
     }
   }

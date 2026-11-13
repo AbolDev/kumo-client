@@ -443,7 +443,16 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
         override fun clearLogs() {}
 
-        override fun writeLogs(messageList: LogIterator?) {}
+        // What the core says while the connection runs is kept for the log of the app (it takes it from the bridge).
+        override fun writeLogs(messageList: LogIterator?) {
+            val list = messageList ?: return
+            runCatching {
+                while (list.hasNext()) {
+                    val entry = list.next() ?: continue
+                    VpnBridge.addCoreLog(entry.level, entry.message ?: "")
+                }
+            }
+        }
 
         override fun writeStatus(message: StatusMessage) {
             if (!message.trafficAvailable) return
@@ -494,6 +503,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         val options = CommandClientOptions()
         options.addCommand(Libbox.CommandStatus)
         options.addCommand(Libbox.CommandGroup)
+        options.addCommand(Libbox.CommandLog)
         options.statusInterval = 1_000_000_000L // 1 second, in nanoseconds
         val client = CommandClient(StatsHandler(), options)
         try {
