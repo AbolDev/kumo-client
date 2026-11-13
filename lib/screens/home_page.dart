@@ -1361,7 +1361,6 @@ class _ServerListState extends State<_ServerList> {
                 onMoveDown: at < groups.length - 1
                     ? () => state.moveGroup(g, groups[at + 1], after: true)
                     : null),
-            _TestProgress(state: state, group: g),
           ]);
         } else {
           child = Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1557,19 +1556,27 @@ class _TestProgress extends StatelessWidget {
     final test = state.tests[group.id];
     if (test == null || !test.running) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
+    // Inside the tile of the group, under its name and what it shows there.
     return Padding(
-      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 4, 6),
-      child: Row(children: [
+      padding: const EdgeInsetsDirectional.only(top: 8, end: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            LinearProgressIndicator(
-                value: test.total > 0 ? test.done / test.total : null, minHeight: 4, borderRadius: BorderRadius.circular(2)),
-            const SizedBox(height: 2),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                  value: test.total > 0 ? test.done / test.total : null,
+                  minHeight: 6,
+                  backgroundColor: scheme.surfaceContainerHighest),
+            ),
+            const SizedBox(height: 4),
             Text(tr(context, 'listTesting', {'done': test.done, 'total': test.total}),
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
           ]),
         ),
         TextButton(
+          style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact, padding: const EdgeInsets.symmetric(horizontal: 12)),
           onPressed: () async {
             final remove = await _askUntested(context);
             if (remove != null) state.cancelPing(group, removeUntested: remove);
@@ -1870,6 +1877,27 @@ class _GroupHeader extends StatelessWidget {
     final t = S.of(context);
     final scheme = Theme.of(context).colorScheme;
     final isSub = group.kind == GroupKind.subscription;
+    // What is under the name: the usage of a subscription (nothing when the provider sends none) or the
+    // free list's test result and usage, and the progress of a test running on the list. They are one
+    // block of the tile, so the tile is as tall as they are and the progress lines up with the name.
+    final Widget? info = isSub
+        ? (group.info == null
+            ? null
+            : Padding(
+                padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
+                child: _SubscriptionInfo(info: group.info!),
+              ))
+        : (group.kind == GroupKind.collector || group.kind == GroupKind.warp
+            ? _freeSubtitle(context, t, scheme)
+            : null);
+    final testing = state.tests[group.id]?.running ?? false;
+    final Widget? under = !testing
+        ? info
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [if (info != null) info, _TestProgress(state: state, group: group)],
+          );
     return Semantics(
       expanded: open,
       customSemanticsActions: _moveActions(context),
@@ -1897,17 +1925,7 @@ class _GroupHeader extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600)),
-      // A subscription whose provider sends no usage numbers shows nothing under its name.
-      subtitle: isSub
-          ? (group.info == null
-              ? null
-              : Padding(
-                  padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
-                  child: _SubscriptionInfo(info: group.info!),
-                ))
-          : (group.kind == GroupKind.collector || group.kind == GroupKind.warp
-              ? _freeSubtitle(context, t, scheme)
-              : null),
+      subtitle: under,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
