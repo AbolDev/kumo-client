@@ -9,6 +9,7 @@ import 'proxy_holder.dart';
 import 'socks_get.dart' show socksSpeed;
 import 'system_proxy.dart';
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
+import 'win_autostart.dart';
 import 'win_dpapi.dart';
 import 'win_job.dart';
 import 'win_tools.dart';
@@ -1032,6 +1033,30 @@ rm -rf "$T"
 
   Future<int> delay(String configJson, String url, int timeoutMs) async =>
       await _withProbeCore(configJson, (port) => socksWarmDelay(port, Uri.parse(url), Duration(milliseconds: timeoutMs))) ?? -1;
+
+  /// Erases everything in the data folder (servers, settings, logs, caches, saved logins) and writes [keepSettings]
+  /// as the settings, after the connection and the proxy are stopped and the start with the system is turned off
+  /// (see AppState.eraseEverything). The program files are not in that folder.
+  Future<void> wipeData(String keepSettings) async {
+    try {
+      await stop();
+    } catch (_) {}
+    try {
+      await stopStandby();
+    } catch (_) {}
+    try {
+      await WinAutostart.set(false);
+    } catch (_) {}
+    final dir = Directory(dataDir);
+    if (await dir.exists()) {
+      await for (final entry in dir.list()) {
+        try {
+          await entry.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+    await writeFile('settings.json', keepSettings);
+  }
 
   /// How fast data goes through [configJson]'s server, in Mbit/s (see [socksSpeed]); -1 when it cannot be had.
   Future<double> speed(String configJson, String url, {required bool upload, required int bytes, required int timeoutMs}) async =>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="disguise_calc">Калькулятор</string>
+    <string name="disguise_notes">Заметки</string>
+    <string name="disguise_clock">Часы</string>
+    <string name="disguise_weather">Погода</string>
+    <string name="disguise_calendar">Календарь</string>
+    <string name="disguise_files">Файлы</string>
+</resources>

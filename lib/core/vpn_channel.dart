@@ -381,6 +381,32 @@ class VpnChannel {
     }
   }
 
+  /// Android: the name and icon of the app's card in the list of recent apps (an empty [name] puts Kumo's back).
+  static Future<void> taskLook(String name, Uint8List? icon) async {
+    if (_win) return;
+    try {
+      await _control.invokeMethod('taskLook', {'name': name, 'icon': icon});
+    } catch (_) {}
+  }
+
+  /// Android: asks to put a shortcut named [label] with [icon] (PNG bytes) on the home screen. False when the
+  /// launcher cannot take one.
+  static Future<bool> pinShortcut(String label, Uint8List? icon) async {
+    if (_win) return false;
+    try {
+      return await _control.invokeMethod<bool>('pinShortcut', {'label': label, 'icon': icon}) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Android: erases everything the app keeps, writes [keepSettings] (JSON) as the settings and ends the app.
+  static Future<void> wipeApp(String keepSettings) async {
+    try {
+      await _control.invokeMethod('wipe', {'keep': keepSettings});
+    } catch (_) {}
+  }
+
   /// Android: the launcher icon of an installed app as PNG bytes, or null.
   static Future<Uint8List?> appIcon(String id) async {
     if (_win) return null;

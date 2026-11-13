@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="disguise_calc">计算器</string>
+    <string name="disguise_notes">备忘录</string>
+    <string name="disguise_clock">时钟</string>
+    <string name="disguise_weather">天气</string>
+    <string name="disguise_calendar">日历</string>
+    <string name="disguise_files">文件</string>
+</resources>

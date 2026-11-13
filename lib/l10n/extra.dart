@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'extra_disguise.dart';
 import 'extra_langs.dart';
 import 'extra_more.dart';
 import 'extra_privacy.dart';
@@ -33,6 +34,7 @@ const _extra = <String, Map<String, String>>{
     ...extraMoreEn,
     ...extraPrivacyEn,
     ...extraToolsEn,
+    ...extraDisguiseEn,
     'languageDevice': 'Same as device',
     'notifIdle': 'Notification when not connected',
     'notifIdleDesc': 'Keeps a notification with a Connect button after you disconnect.',
@@ -150,6 +152,7 @@ const _extra = <String, Map<String, String>>{
     ...extraMoreFa,
     ...extraPrivacyFa,
     ...extraToolsFa,
+    ...extraDisguiseFa,
     'languageDevice': 'مطابق دستگاه',
     'notifIdle': 'اعلان در حالت قطع',
     'notifIdleDesc': 'بعد از قطع اتصال، یک اعلان با دکمهٔ اتصال باقی می‌ماند.',

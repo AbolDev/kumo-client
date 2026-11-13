@@ -191,6 +191,69 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- The looks of Settings > Disguise: an everyday app's icon and name instead of Kumo's (see AppIcons.kt). -->
+        <activity-alias android:name=".Icon_d_calc" android:targetActivity=".KumoActivity"
+            android:exported="true" android:enabled="false" android:label="@string/disguise_calc"
+            android:icon="@mipmap/ic_launcher_d_calc" android:roundIcon="@mipmap/ic_launcher_d_calc">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Icon_d_notes" android:targetActivity=".KumoActivity"
+            android:exported="true" android:enabled="false" android:label="@string/disguise_notes"
+            android:icon="@mipmap/ic_launcher_d_notes" android:roundIcon="@mipmap/ic_launcher_d_notes">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Icon_d_clock" android:targetActivity=".KumoActivity"
+            android:exported="true" android:enabled="false" android:label="@string/disguise_clock"
+            android:icon="@mipmap/ic_launcher_d_clock" android:roundIcon="@mipmap/ic_launcher_d_clock">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Icon_d_weather" android:targetActivity=".KumoActivity"
+            android:exported="true" android:enabled="false" android:label="@string/disguise_weather"
+            android:icon="@mipmap/ic_launcher_d_weather" android:roundIcon="@mipmap/ic_launcher_d_weather">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Icon_d_calendar" android:targetActivity=".KumoActivity"
+            android:exported="true" android:enabled="false" android:label="@string/disguise_calendar"
+            android:icon="@mipmap/ic_launcher_d_calendar" android:roundIcon="@mipmap/ic_launcher_d_calendar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".Icon_d_files" android:targetActivity=".KumoActivity"
+            android:exported="true" android:enabled="false" android:label="@string/disguise_files"
+            android:icon="@mipmap/ic_launcher_d_files" android:roundIcon="@mipmap/ic_launcher_d_files">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Dial *#*#5866#*#* to open Kumo when its icon is hidden; *#*#7263#*#* erases its data, when the user
+             turned that on (see SecretCode.kt). -->
+        <receiver android:name=".SecretCodeReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SECRET_CODE"/>
+                <data android:scheme="android_secret_code" android:host="5866"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SECRET_CODE"/>
+                <data android:scheme="android_secret_code" android:host="7263"/>
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".BoxVpnService"
             android:exported="false"

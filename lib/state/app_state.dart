@@ -312,6 +312,18 @@ class AppState extends ChangeNotifier {
   /// The app icon picked in Settings (see [AppIcon]).
   String appIcon = AppIcon.defaultId;
 
+  /// The name of the app's card in the list of recent apps when it is disguised (see [setDisguise]).
+  String disguiseName = '';
+
+  /// Dialling `*#*#7263#*#*` erases the app's data (Android; off until the user turns it on).
+  bool panicCode = false;
+
+  /// Everything was erased: nothing is written back (see [eraseEverything]).
+  bool _erased = false;
+
+  /// Kumo has no launcher entry: it is not in the list of apps (Settings > Disguise).
+  bool get iconHidden => appIcon == AppIcon.hidden;
+
   /// null = follow the phone, otherwise 'fa' or 'en'.
   String? languageCode;
 
@@ -969,6 +981,8 @@ class AppState extends ChangeNotifier {
       themeMode = ThemeMode.values.firstWhere((m) => m.name == j['theme'],
           orElse: () => ThemeMode.system);
       appIcon = AppIcon.normalize(j['appIcon'] as String?);
+      disguiseName = j['disguiseName'] is String ? j['disguiseName'] as String : '';
+      panicCode = j['panicCode'] == true;
       final lang = j['language'] as String?;
       languageCode = S.languageNames.containsKey(lang) ? lang : null;
       bool flag(String k, bool d) => j[k] is bool ? j[k] as bool : d;
@@ -1031,6 +1045,8 @@ class AppState extends ChangeNotifier {
   /// Writes a stored file; a file that could not be read is set aside first (kept as
   /// `<name>.broken`) so that it is not lost.
   Future<void> _store(String name, String data, {required bool locked}) async {
+    // After an erase nothing is written back (a timer of a save that was waiting must not bring the data back).
+    if (_erased) return;
     if (locked) {
       try {
         await VpnChannel.moveAside(name);
@@ -1047,6 +1063,8 @@ class AppState extends ChangeNotifier {
         jsonEncode({
           'theme': themeMode.name,
           'appIcon': appIcon,
+          'disguiseName': disguiseName,
+          'panicCode': panicCode,
           'language': languageCode,
           'autoUpdateSubs': autoUpdateSubs,
           'updateOnStartup': updateOnStartup,
@@ -1219,11 +1237,62 @@ class AppState extends ChangeNotifier {
 
   Future<void> setAppIcon(String id) async {
     appIcon = AppIcon.normalize(id);
+    // An icon of the picker is Kumo's own look again: the name of a disguise goes.
+    if (AppIcon.isPicture(appIcon) && disguiseName.isNotEmpty) {
+      disguiseName = '';
+      unawaited(VpnChannel.taskLook('', null));
+    }
     _saveSettings();
     notifyListeners();
     try {
       await AppIcon.apply(appIcon);
     } catch (_) {}
+  }
+
+  /// Android: shows the app as [id] (one of [AppIcon.disguises], or [AppIcon.hidden] for no icon at all) with the
+  /// name [name] on its card in the list of recent apps and [icon] (PNG bytes) on it when given.
+  Future<void> setDisguise(String id, {String name = '', Uint8List? icon}) async {
+    appIcon = AppIcon.normalize(id);
+    disguiseName = name;
+    _saveSettings();
+    notifyListeners();
+    try {
+      await AppIcon.apply(appIcon);
+    } catch (_) {}
+    await VpnChannel.taskLook(name, icon);
+  }
+
+  /// Turns on or off the erase by the dialled code (Android).
+  void setPanicCode(bool on) {
+    panicCode = on;
+    _saveSettings();
+    notifyListeners();
+  }
+
+  /// Erases everything the app keeps: the servers, subscriptions, settings, usage numbers, logs and saved
+  /// connections, and ends the app. What stays is the look of the app (its icon, its disguise, the language and the
+  /// theme, and whether the dialled code erases), so that an erase does not make a disguised app show itself as Kumo.
+  /// It asks nothing: the screen that calls it does (see privacy_page.dart).
+  Future<void> eraseEverything() async {
+    // From here nothing is written: a save that was waiting must not bring the data back.
+    _erased = true;
+    _saveTimer?.cancel();
+    try {
+      await VpnChannel.stop();
+    } catch (_) {}
+    final keep = jsonEncode({
+      'appIcon': appIcon,
+      'disguiseName': disguiseName,
+      'panicCode': panicCode,
+      'language': languageCode,
+      'theme': themeMode.name,
+    });
+    if (!isDesktop) {
+      await VpnChannel.wipeApp(keep);
+      return;
+    }
+    await DesktopVpn.instance.wipeData(keep);
+    exit(0);
   }
 
   void setSubInterval(int hours) {

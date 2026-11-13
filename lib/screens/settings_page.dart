@@ -25,6 +25,7 @@ import 'logs_page.dart';
 import 'share_app_page.dart';
 import '../widgets/option_tile.dart';
 import 'network_settings.dart';
+import 'privacy_page.dart';
 import 'share_sheet.dart';
 import 'update_dialog.dart';
 import 'usage_page.dart';
@@ -198,11 +199,13 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _checkUpdate() => checkAndPrompt(context, silent: false);
 
-  static Widget _iconImage(String id, double size) => ClipRRect(
-        borderRadius: BorderRadius.circular(size * 0.22),
-        child: Image.asset(AppIcon.preview(id),
-            width: size, height: size, filterQuality: FilterQuality.high),
-      );
+  static Widget _iconImage(String id, double size) => AppIcon.isPicture(id)
+      ? ClipRRect(
+          borderRadius: BorderRadius.circular(size * 0.22),
+          child: Image.asset(AppIcon.preview(id), width: size, height: size, filterQuality: FilterQuality.high),
+        )
+      // A disguise or no icon at all has no picture of its own.
+      : SizedBox(width: size, height: size, child: Icon(Icons.visibility_off_outlined, size: size * 0.8));
 
   /// One icon of the picker; the one in use has a ring and a check mark.
   Widget _iconChoice(BuildContext dialog, String id, double size) {
@@ -532,6 +535,16 @@ class _SettingsPageState extends State<SettingsPage> {
             trailing: const Icon(Icons.arrow_drop_down),
             onTap: _pickAppIcon,
           ),
+        ListTile(
+          leading: const Icon(Icons.shield_moon_outlined),
+          title: Text(tr(context, 'privacyTools')),
+          subtitle: Text(tr(context, 'privacyToolsDesc')),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  settings: const RouteSettings(name: '/PrivacyPage'), builder: (_) => PrivacyPage(state: state))),
+        ),
         ListTile(
           leading: const Icon(Icons.color_lens_outlined),
           title: Text(tr(context, 'themeColor')),
