@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/latency_tester.dart' show delayConfigForTest;
+import 'package:kumo/core/net_options.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
 
@@ -20,6 +21,31 @@ bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as 
     .any((r) => r is Map && (r['query_type'] as List?)?.contains('AAAA') == true && r['action'] == 'predefined');
 
 void main() {
+  test('the DNS servers a WireGuard link names are read, and the first one is the DNS of the connection', () {
+    final c = parseLink(_link())!;
+    expect(wireguardLinkDns(c.link), ['1.1.1.1', '8.8.8.8']);
+    expect(wireguardLinkDns('vless://x@example.com:443'), isEmpty);
+    final cfg = _config([c]);
+    final remote = ((cfg['dns'] as Map)['servers'] as List).firstWhere((s) => (s as Map)['tag'] == 'dns-remote') as Map;
+    expect(remote['type'], 'udp');
+    expect(remote['server'], '1.1.1.1');
+    expect(remote['detour'], 'proxy');
+    // A DNS server the user typed stays.
+    final own = jsonDecode(buildSingBoxConfig([c], options: NetOptions()
+      ..dns = 'custom'
+      ..customDns = 'https://9.9.9.9/dns-query')) as Map<String, dynamic>;
+    final kept = ((own['dns'] as Map)['servers'] as List).firstWhere((s) => (s as Map)['tag'] == 'dns-remote') as Map;
+    expect(kept['server'], '9.9.9.9');
+    // The test core asks the same server.
+    final probe = jsonDecode(delayConfigForTest([c.outbound], dns: '8.8.4.4')) as Map<String, dynamic>;
+    expect((((probe['dns'] as Map)['servers'] as List).single as Map)['server'], '8.8.4.4');
+  });
+
+  test('the DNS of a configuration file is carried into its link', () {
+    final links = wireguardConfToLinks('[Interface]\nPrivateKey = $_priv\nAddress = 10.0.0.2/32\nDNS = 1.1.1.1, 8.8.8.8\n'
+        '[Peer]\nPublicKey = $_pub\nEndpoint = 203.0.113.7:43618\nAllowedIPs = 0.0.0.0/0\n');
+    expect(wireguardLinkDns(links.single), ['1.1.1.1', '8.8.8.8']);
+  });
   test('for the domestic page the test core is handed the address of its name and asks no DNS server', () {
     final c = parseLink(_link())!;
     final cfg = jsonDecode(delayConfigForTest([c.outbound], hosts: {'arvancloud.ir': '198.51.100.4'})) as Map<String, dynamic>;

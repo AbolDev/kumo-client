@@ -72,7 +72,7 @@ const udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
 
 /// Minimal sing-box config holding only [c] (and the layers it is dialled through), used by the
 /// throw-away test core. WireGuard is an endpoint there, everything else an outbound.
-String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hosts, String? logFile}) {
+String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hosts, String? logFile, String? dns}) {
   final wireguard = layers.first['type'] == 'wireguard';
   // Two WireGuard tunnels (Warp-in-Warp): the first is dialled through the second.
   final two = wireguard && layers.length > 1 && layers[1]['type'] == 'wireguard';
@@ -95,7 +95,8 @@ String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hos
         // before it dials. Asked from the phone's own network that lookup is lost where the filter drops or
         // answers DNS to 1.1.1.1 itself, and every test of a working server timed out; so it is asked through
         // the tunnel, as the traffic of a connection is. (Other servers are given the name and look it up.)
-        {'type': 'udp', 'tag': 'dns', 'server': '1.1.1.1', if (wireguard) 'detour': 'proxy'},
+        // The DNS server the WireGuard configuration names is the one asked, when it names one.
+        {'type': 'udp', 'tag': 'dns', 'server': wireguard ? (dns ?? '1.1.1.1') : '1.1.1.1', if (wireguard) 'detour': 'proxy'},
       ],
       'final': 'dns',
       // A tunnel with no IPv6 address of its own cannot dial an IPv6 address: only IPv4 ones are asked for.
@@ -122,8 +123,8 @@ String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hos
 
 /// [_delayConfig] for the tests.
 @visibleForTesting
-String delayConfigForTest(List<Map<String, dynamic>> layers, {Map<String, String>? hosts}) =>
-    _delayConfig(layers, hosts: hosts);
+String delayConfigForTest(List<Map<String, dynamic>> layers, {Map<String, String>? hosts, String? dns}) =>
+    _delayConfig(layers, hosts: hosts, dns: dns);
 
 /// The server and the layers under it with their names already resolved by the system resolver.
 /// Resolving them inside the throw-away core went through a fixed public DNS server, which is slow
@@ -135,6 +136,9 @@ Future<List<Map<String, dynamic>>> _resolvedLayers(ProxyConfig c) async => [
     ];
 
 Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) => resolveOutbound(outbound, systemLookup);
+
+/// The first DNS server the link of a WireGuard server names, or null.
+String? _linkDns(ProxyConfig c) => wireguardLinkDns(c.link).firstOrNull;
 
 /// Real delay: time to fetch a page through the server (handshake included), -1 on failure and -2
 /// when the test was skipped (the tunnel is being started or stopped). Servers only Xray can carry
@@ -173,7 +177,7 @@ Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options, St
     final address = InternetAddress.tryParse(host) == null ? await systemLookup(host) : null;
     if (address != null) hosts = {host: address};
   }
-  return VpnChannel.delay(_delayConfig(layers, hosts: hosts), page, timeoutMs: timeout.inMilliseconds);
+  return VpnChannel.delay(_delayConfig(layers, hosts: hosts, dns: _linkDns(c)), page, timeoutMs: timeout.inMilliseconds);
 }
 
 /// [realDelay], and when the usual page cannot be fetched, the domestic one ([domesticDelayUrl]): a server that
@@ -195,7 +199,7 @@ Future<int> realDelayOrDomestic(ProxyConfig c, {Duration? timeout}) async {
 /// the sing-box of the throw-away core cannot carry (OpenVPN, the ones only Xray carries).
 Future<String?> serverProbeConfig(ProxyConfig c) async {
   if (c.isOpenVpn || !c.canSingBox || (c.preferXray && c.canXray)) return null;
-  return _delayConfig(await _resolvedLayers(c));
+  return _delayConfig(await _resolvedLayers(c), dns: _linkDns(c));
 }
 
 /// One real delay test of [c] with everything the core says written down: the text of the core's log and the
@@ -214,7 +218,7 @@ Future<String?> probeLog(ProxyConfig c, {String? url}) async {
       final address = await systemLookup(host);
       if (address != null) hosts = {host: address};
     }
-    final ms = await VpnChannel.delay(_delayConfig(layers, hosts: hosts, logFile: file), url ?? delayTestUrl,
+    final ms = await VpnChannel.delay(_delayConfig(layers, hosts: hosts, logFile: file, dns: _linkDns(c)), url ?? delayTestUrl,
         timeoutMs: 12000);
     final error = await VpnChannel.lastDelayError();
     final text = await VpnChannel.readFile('core/$file') ?? '';
@@ -240,7 +244,7 @@ const speedUploadUrl = 'https://speed.cloudflare.com/__up';
 Future<double> realSpeed(ProxyConfig c, {required bool upload, int bytes = 8000000, Duration timeout = const Duration(seconds: 30)}) async {
   if (c.isOpenVpn || !c.canSingBox || (c.preferXray && c.canXray)) return -1;
   final layers = await _resolvedLayers(c);
-  return VpnChannel.speed(_delayConfig(layers), upload ? speedUploadUrl : speedDownloadUrl(bytes),
+  return VpnChannel.speed(_delayConfig(layers, dns: _linkDns(c)), upload ? speedUploadUrl : speedDownloadUrl(bytes),
       upload: upload, bytes: bytes, timeoutMs: timeout.inMilliseconds);
 }
 

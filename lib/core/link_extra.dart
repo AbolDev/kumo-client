@@ -286,6 +286,21 @@ ProxyConfig? _wireguard(String link) {
       outbound: out, xray: xray);
 }
 
+/// The DNS servers a WireGuard link names (`dns=1.1.1.1, 8.8.8.8`): the addresses, in their order. Names and
+/// anything that is not an address are left out. Empty for a link with none, or of another kind.
+List<String> wireguardLinkDns(String link) {
+  if (!link.startsWith('wireguard://') && !link.startsWith('wg://')) return const [];
+  try {
+    final q = Uri.parse(link.replaceFirst(RegExp(r'^wg://'), 'wireguard://')).queryParameters;
+    return [
+      for (final part in (q['dns'] ?? '').split(RegExp(r'[,\s]+')))
+        if (InternetAddress.tryParse(part.trim()) != null) part.trim(),
+    ];
+  } catch (_) {
+    return const [];
+  }
+}
+
 /// Turns the text of a WireGuard `.conf` file into `wireguard://` links (one per [Peer]).
 List<String> wireguardConfToLinks(String text) {
   if (!text.contains('[Interface]') || !text.contains('[Peer]')) return const [];
@@ -319,6 +334,7 @@ List<String> wireguardConfToLinks(String text) {
       'address': (iface['address'] ?? '').replaceAll(' ', ''),
       if ((p['allowedips'] ?? '').isNotEmpty) 'allowedips': p['allowedips']!.replaceAll(' ', ''),
       if ((iface['mtu'] ?? '').isNotEmpty) 'mtu': iface['mtu']!,
+      if ((iface['dns'] ?? '').isNotEmpty) 'dns': iface['dns']!.replaceAll(' ', ''),
       if ((p['presharedkey'] ?? '').isNotEmpty) 'presharedkey': p['presharedkey']!,
       if ((p['persistentkeepalive'] ?? '').isNotEmpty) 'keepalive': p['persistentkeepalive']!,
       if ((p['reserved'] ?? iface['reserved'] ?? '').isNotEmpty)

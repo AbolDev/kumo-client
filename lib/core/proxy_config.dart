@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show File, Platform;
+import 'dart:io' show File, InternetAddress, Platform;
 import 'dart:isolate';
 
 import 'ovpn/ovpn_profile.dart';
