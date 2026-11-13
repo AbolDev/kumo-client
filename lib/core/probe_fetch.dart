@@ -81,14 +81,14 @@ Future<ProbeResult> probeFetch(Uri uri, {int? proxyPort, Duration timeout = cons
   final https = uri.scheme == 'https';
   bool? verified = https ? true : null;
   var issuer = '';
-  final client = HttpClient()
-    ..connectionTimeout = timeout
-    ..findProxy = (_) => proxyPort == null ? 'DIRECT' : 'PROXY 127.0.0.1:$proxyPort'
-    ..badCertificateCallback = (cert, host, port) {
-      verified = false;
-      issuer = cert.issuer;
-      return true;
-    };
+  final client = HttpClient()..connectionTimeout = timeout;
+  // Written out, not as part of the cascade: an arrow function would take the lines after it into itself.
+  client.findProxy = (_) => proxyPort == null ? 'DIRECT' : 'PROXY 127.0.0.1:$proxyPort';
+  client.badCertificateCallback = (cert, host, port) {
+    verified = false;
+    issuer = cert.issuer;
+    return true;
+  };
   final sw = Stopwatch()..start();
   try {
     final req = await client.getUrl(uri).timeout(timeout);
