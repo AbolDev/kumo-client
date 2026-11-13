@@ -190,7 +190,7 @@ class _SyncPageState extends State<SyncPage> {
         ],
       ),
     );
-    controller.dispose();
+    // Not disposed here: the field is still on the screen while the dialog closes.
     if (text != null && text.trim().isNotEmpty && mounted) await _handleCode(text);
   }
 

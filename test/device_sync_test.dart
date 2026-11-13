@@ -28,6 +28,15 @@ Map<String, dynamic> _servers({List<String> manual = const [], List<Map<String, 
 
 SyncCode _loop(SyncServer s) => SyncCode.parse(s.code!.text, allowLoopback: true)!;
 
+/// Lets real sockets and files do their work and draws what follows, a few rounds. Not `pumpAndSettle`: a spinner
+/// that is on the screen while something is fetched never lets it settle.
+Future<void> _letIoRun(WidgetTester tester) async {
+  for (var i = 0; i < 8; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 80)));
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -389,25 +398,20 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('sync-code-field')), 'vless://not-a-code');
       await tester.tap(find.byKey(const ValueKey('sync-code-ok')));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(find.textContaining('not a Kumo code'), findsOneWidget);
     });
 
     testWidgets('showing a code lists a QR code and the time left, and cancelling ends the listening', (tester) async {
       await tester.pumpWidget(app(SyncPage(state: AppState(), camera: false, bind: '127.0.0.1', allowLoopback: true)));
-      await tester.runAsync(() async {
-        await tester.tap(find.byKey(const ValueKey('sync-receive')));
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-      });
-      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('sync-receive')));
+      await _letIoRun(tester);
       expect(find.byKey(const ValueKey('sync-qr')), findsOneWidget);
       expect(find.byKey(const ValueKey('sync-left')), findsOneWidget);
       expect(find.textContaining('Valid for'), findsOneWidget);
-      await tester.runAsync(() async {
-        await tester.tap(find.byKey(const ValueKey('sync-cancel')));
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('sync-cancel')));
+      await _letIoRun(tester);
       expect(find.byKey(const ValueKey('sync-code-card')), findsNothing);
     });
 
@@ -426,21 +430,19 @@ void main() {
         await tester.runAsync(() async => code = (await server.start())!);
         await tester.pumpWidget(app(SyncPage(state: state, camera: true, allowLoopback: true, scan: () async => code.text)));
         await tester.tap(find.byKey(const ValueKey('sync-scan')));
-        await tester.pumpAndSettle();
+        await _letIoRun(tester);
         // Nothing is fetched before the question is answered.
         expect(find.text('Get servers from 127.0.0.1?'), findsOneWidget);
         expect(server.phase.value, SyncPhase.waiting);
         await tester.tap(find.byKey(const ValueKey('sync-confirm')));
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600)));
-        await tester.pumpAndSettle();
+        await _letIoRun(tester);
         expect(find.byKey(const ValueKey('sync-preview')), findsOneWidget);
         expect(find.textContaining('2 servers'), findsOneWidget);
         // Nothing is changed before it is applied, and by default it is added.
         expect(state.manual.configs.length, 1);
         expect(tester.widget<RadioListTile<bool>>(find.byKey(const ValueKey('sync-add'))).groupValue, isFalse);
         await tester.tap(find.byKey(const ValueKey('sync-apply')));
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 600)));
-        await tester.pumpAndSettle();
+        await _letIoRun(tester);
         expect(state.manual.configs.length, 2);
         expect(find.textContaining('Done: 1 servers'), findsOneWidget);
       }, _RealHttp());
