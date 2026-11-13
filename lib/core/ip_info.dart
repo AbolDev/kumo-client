@@ -174,9 +174,16 @@ IpInfo chooseIpInfo(IpInfo others, IpInfo? iran) {
 /// answer is read again until it stops changing, so a slow or rotating resolver is still seen.
 /// Without the proxy, `whoami.akamai.net` (which answers with the address of the resolver that
 /// asked) is a second, independent view; its resolver is added when the first test missed it.
-Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
+///
+/// [onResult] gets what the test knows as it learns it (the resolvers seen so far, more with each read, and
+/// the last one with the second view added), so a page can show the servers as they are found.
+/// [onStep] says which part the test is in.
+Future<DnsLeakResult> runDnsLeakTest(
+    {int? proxyPort, void Function(DnsLeakResult partial)? onResult, void Function(DnsLeakStep step)? onStep}) async {
+  onStep?.call(DnsLeakStep.preparing);
   final id = (await _get(Uri.parse('https://bash.ws/id'), proxyPort)).trim();
   if (id.isEmpty || id.length > 64) throw const FormatException('bad id');
+  onStep?.call(DnsLeakStep.asking);
   final random = Random();
   // With the local proxy (VPN without the tunnel) the names are given to the proxy, which looks
   // them up through the VPN: that is the lookup an app using the connection causes. With the
@@ -206,30 +213,35 @@ Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
       ]);
 
   final akamai = proxyPort == null ? lookup('whoami.akamai.net') : Future.value(const <InternetAddress>[]);
-  await wave();
-  await Future<void>.delayed(const Duration(milliseconds: 600));
-  await wave();
+  // The lookups go on in the background while the answer is read, so the servers are shown as they are found
+  // and not when the last lookup is over.
+  var wavesDone = false;
+  unawaited((() async {
+    await wave();
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    await wave();
+  })()
+      .whenComplete(() => wavesDone = true));
 
-  // Read the answer until two reads in a row agree (at most six reads).
+  // Read the answer every moment; once the lookups are over, until two reads in a row agree (at most twenty).
   DnsLeakResult? last;
   var same = 0;
-  for (var i = 0; i < 6; i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+  for (var reads = 1; reads <= 20; reads++) {
+    await Future<void>.delayed(const Duration(milliseconds: 700));
     DnsLeakResult now;
     try {
       now = parseDnsLeak(await _get(Uri.parse('https://bash.ws/dnsleak/test/$id?json'), proxyPort));
     } catch (_) {
-      if (last != null && i >= 2) break;
+      if (wavesDone && last != null && reads >= 6) break;
       continue;
     }
-    if (last != null && now.resolvers.map((e) => e.ip).toSet().length == last.resolvers.map((e) => e.ip).toSet().length &&
-        now.resolvers.isNotEmpty) {
-      same++;
-    } else {
-      same = 0;
-    }
+    final grew = last == null ||
+        now.resolvers.map((e) => e.ip).toSet().length != last.resolvers.map((e) => e.ip).toSet().length;
+    if (grew && now.resolvers.isNotEmpty) onResult?.call(now);
+    if (wavesDone) onStep?.call(DnsLeakStep.settling);
+    same = !grew && now.resolvers.isNotEmpty ? same + 1 : 0;
     last = now;
-    if (same >= 1) break;
+    if (wavesDone && same >= 1) break;
   }
   if (last == null) throw const FormatException('no answer');
 
@@ -250,8 +262,13 @@ Future<DnsLeakResult> runDnsLeakTest({int? proxyPort}) async {
       }
     }
   } catch (_) {}
-  return DnsLeakResult(last.address, resolvers, last.conclusion);
+  final done = DnsLeakResult(last.address, resolvers, last.conclusion);
+  onResult?.call(done);
+  return done;
 }
+
+/// The part of the DNS leak test that is running.
+enum DnsLeakStep { preparing, asking, settling }
 
 /// Reads the answer of bash.ws.
 DnsLeakResult parseDnsLeak(String body) {
