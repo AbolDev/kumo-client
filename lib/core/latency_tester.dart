@@ -27,7 +27,7 @@ String delayTestUrl = defaultDelayUrl;
 /// The second page, tried when the usual one cannot be fetched through a server: a server inside Iran often has
 /// no way to the sites outside it, and then every test of it timed out although it works. A page that is
 /// hosted in Iran and answers at once (a redirect is enough: only the answer is timed).
-const domesticDelayUrl = 'http://www.aparat.com/';
+const domesticDelayUrl = 'http://arvancloud.ir/';
 
 /// How slow the network of this device is, learnt from the TCP connect times the tests saw last. On a slow
 /// one (H+, a weak signal) the usual time limits call working servers dead and move a connection off a

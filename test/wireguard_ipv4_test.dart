@@ -22,12 +22,12 @@ bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as 
 void main() {
   test('for the domestic page the test core is handed the address of its name and asks no DNS server', () {
     final c = parseLink(_link())!;
-    final cfg = jsonDecode(delayConfigForTest([c.outbound], hosts: {'www.aparat.com': '198.51.100.4'})) as Map<String, dynamic>;
+    final cfg = jsonDecode(delayConfigForTest([c.outbound], hosts: {'arvancloud.ir': '198.51.100.4'})) as Map<String, dynamic>;
     final server = ((cfg['dns'] as Map)['servers'] as List).single as Map;
     expect(server['type'], 'hosts');
     expect(server['tag'], 'dns');
     expect(server['predefined'], {
-      'www.aparat.com': ['198.51.100.4'],
+      'arvancloud.ir': ['198.51.100.4'],
     });
     expect(server.containsKey('detour'), isFalse);
   });
