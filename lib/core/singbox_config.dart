@@ -304,6 +304,38 @@ Map<String, dynamic> _dnsServer(String address, {String resolver = 'dns-local'})
   };
 }
 
+/// A WireGuard endpoint with no IPv6 address of its own (`Address = 10.0.0.2/32` and nothing else) has no way to
+/// carry IPv6. The phone's tunnel has an IPv6 address, so apps ask for IPv6 addresses and try them first, and each
+/// try into such a server is lost: pages hang before they fall back to IPv4, and some apps never do. Other
+/// programs do not meet this: with no IPv6 address, their tunnel has no IPv6 route at all. So the IPv6 networks
+/// are taken out of the peers' allowed addresses (the dial fails at once instead of being sent where it cannot
+/// go), and the caller leaves the IPv6 addresses of names out of the DNS answers. Returns [endpoint] itself when
+/// it has an IPv6 address (nothing to change), or another map.
+Map<String, dynamic> _ipv4Only(Map<String, dynamic> endpoint) {
+  final address = endpoint['address'];
+  if (address is! List || address.any((a) => '$a'.contains(':'))) return endpoint;
+  final peers = endpoint['peers'];
+  if (peers is! List) return endpoint;
+  return {
+    ...endpoint,
+    'peers': [
+      for (final p in peers)
+        if (p is Map)
+          {
+            ...p,
+            if (p['allowed_ips'] is List)
+              'allowed_ips': () {
+                final kept = [for (final a in p['allowed_ips'] as List) if (!'$a'.contains(':')) a];
+                // Nothing of IPv4 in the list: it is left as it is.
+                return kept.isEmpty ? p['allowed_ips'] : kept;
+              }(),
+          }
+        else
+          p,
+    ],
+  };
+}
+
 /// Splits stored rule texts into the sing-box rule fields they belong to.
 class _RuleFields {
   final suffix = <String>[];
@@ -397,6 +429,8 @@ String buildSingBoxConfig(
   final detour = useChain ? 'chain-entry' : null;
   final outbounds = <Map<String, dynamic>>[];
   final endpoints = <Map<String, dynamic>>[];
+  // The only server is a WireGuard one with no IPv6 address of its own (see [_ipv4Only]).
+  var noIpv6 = false;
 
   /// Adds one server (and the layers it is dialled through) under [tag].
   void addServer(ProxyConfig s, String tag) {
@@ -405,8 +439,10 @@ String buildSingBoxConfig(
       // WireGuard is an endpoint in sing-box, usable like an outbound by its tag. A second WireGuard
       // under it (Warp-in-Warp) is another endpoint that this one is dialled through.
       final two = layers.length > 1 && layers[1]['type'] == 'wireguard';
-      endpoints.add(_tweak({...layers.first, 'tag': tag}, o,
-          detour: two ? '$tag-l1' : detour, first: false));
+      // Only when it is the only server: in a group another server may carry the IPv6 this one cannot.
+      final first = servers.length == 1 ? _ipv4Only(layers.first) : layers.first;
+      if (!identical(first, layers.first)) noIpv6 = true;
+      endpoints.add(_tweak({...first, 'tag': tag}, o, detour: two ? '$tag-l1' : detour, first: false));
       if (two) {
         endpoints.add(_tweak({...layers[1], 'tag': '$tag-l1'}, o, detour: detour, first: false));
       }
@@ -607,6 +643,8 @@ String buildSingBoxConfig(
   final dnsRules = <Map<String, dynamic>>[
     // blocked names fail at once
     ...block.rules({'action': 'reject'}, domainsOnly: true),
+    // A server that cannot carry IPv6: no names have an IPv6 address, so that apps do not try one (an empty answer).
+    if (noIpv6) {'query_type': ['AAAA'], 'action': 'predefined', 'rcode': 'NOERROR'},
     // The name of an ad server does not exist: the app gives up at once instead of trying again.
     if (builtIn.isNotEmpty) ...[
       adRule({'domain_suffix': builtIn}, {'action': 'predefined', 'rcode': 'NXDOMAIN'}),
