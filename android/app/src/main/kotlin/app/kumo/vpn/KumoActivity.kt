@@ -32,6 +32,14 @@ class KumoActivity : FlutterActivity() {
         if (ExternalInbox.pending != null) control?.invokeMethod("external", null)
     }
 
+    /** The system says it is a television, or it has the TV launcher and no touch screen (a box). */
+    private fun isTelevision(): Boolean {
+        val mode = getSystemService(android.app.UiModeManager::class.java)?.currentModeType
+        if (mode == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION) return true
+        val pm = packageManager
+        return pm.hasSystemFeature("android.software.leanback") && !pm.hasSystemFeature("android.hardware.touchscreen")
+    }
+
     // Each delay test starts its own core, so only a few run at once.
     private val delayPool = Executors.newFixedThreadPool(12)
 
@@ -337,6 +345,8 @@ class KumoActivity : FlutterActivity() {
                 }
                 // CPU types this phone can run, best first (used to pick the matching update).
                 "abis" -> result.success(Build.SUPPORTED_ABIS.toList())
+                // A television (a box or a set with Android TV, Google TV, Fire TV): it is used with a remote.
+                "isTv" -> result.success(isTelevision())
                 // For the anonymous usage ping: the id Android keeps for this phone and app signing
                 // key (it is hashed before it leaves the app), and the Android version.
                 "androidId" -> result.success(

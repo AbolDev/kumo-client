@@ -15,6 +15,7 @@ import 'core/desktop_vpn.dart';
 import 'core/platform.dart';
 import 'core/external_open.dart';
 import 'core/single_instance.dart';
+import 'core/tv.dart';
 import 'core/usage/crash_hub.dart';
 import 'core/vpn_channel.dart';
 import 'core/win_menu_theme.dart';
@@ -82,6 +83,8 @@ Future<void> _start(List<String> args) async {
     // Closing the window is handled by the app (hide to the tray, or stop the VPN and quit).
     await windowManager.setPreventClose(true);
   }
+  // A television is used with a remote: the screens, the focus and the ways to add servers follow it.
+  await initTv();
   runApp(const KumoApp());
 }
 
@@ -445,9 +448,10 @@ class _KumoAppState extends State<KumoApp>
     // The header's icons (add, more, settings, back) share one colour: a button and a popup
     // menu icon otherwise get two different greys.
     final icons = IconThemeData(color: base.colorScheme.onSurface);
-    return base.copyWith(
+    final themed = base.copyWith(
       appBarTheme: base.appBarTheme.copyWith(iconTheme: icons, actionsIconTheme: icons),
     );
+    return isTv ? tvTheme(themed) : themed;
   }
 
   @override
@@ -472,7 +476,7 @@ class _KumoAppState extends State<KumoApp>
                             child: child)),
                   ),
                 ]))
-            : child!,
+            : (isTv ? TvKeys(child: child!) : child!),
         debugShowCheckedModeBanner: false,
         // null follows the phone's language; Settings can force a language.
         locale: _state.languageCode == null
