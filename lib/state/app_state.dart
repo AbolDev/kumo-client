@@ -293,7 +293,9 @@ class AppState extends ChangeNotifier {
           socksPort: _xrayPort,
           socksAuth: _xrayAuth,
           proxyPort: net.tun ? null : net.proxyPort,
-          samples: 2);
+          samples: 2,
+          // A server that reaches domestic sites only is asked for the page it can get.
+          url: selectedNow?.domesticOnly == true ? domesticDelayUrl : null);
       if (!connected) return;
       if (ms >= 0 || attempt == 1) {
         liveDelay = ms;
@@ -1406,6 +1408,12 @@ class AppState extends ChangeNotifier {
         final ms = pings[pingKey(c.link)] ?? pings[c.link];
         if (ms is num) c.latencyMs = ms.toInt();
       }
+      final domestic = {...((j['domestic'] as List?) ?? const [])};
+      if (domestic.isNotEmpty) {
+        for (final c in all) {
+          if (c.isAlive && domestic.contains(pingKey(c.link))) c.domesticOnly = true;
+        }
+      }
       for (final g in [collector, manual, cleanGroup, ...subscriptions]) {
         if (g.configs.any((c) => c.latencyMs != null)) _sort(g);
       }
@@ -1719,6 +1727,10 @@ class AppState extends ChangeNotifier {
             if (safetyOf(c) != null) pingKey(c.link): safetyOf(c)!.toJson(),
         };
     final data = jsonEncode({
+      'domestic': [
+        for (final c in all)
+          if (c.domesticOnly && c.isAlive) pingKey(c.link),
+      ],
       'collector': links(collector),
       'manual': links(manual),
       'clean': links(cleanGroup),
@@ -1888,7 +1900,7 @@ class AppState extends ChangeNotifier {
       // A server that runs over UDP (WireGuard, Hysteria, TUIC) has no TCP port to connect to: a TCP ping of it
       // always timed out. It is asked the only way it can be, through the core, when that is possible now.
       final overUdp = !c.isOpenVpn && udpProtocols.contains(c.protocol);
-      final ms = real || (overUdp && _real) ? await realDelay(c) : await tcpLatency(c);
+      final ms = real || (overUdp && _real) ? await realDelayOrDomestic(c) : await tcpLatency(c);
       if (ms != -2) c.latencyMs = ms;
     } finally {
       testing.remove(c);
@@ -1904,7 +1916,7 @@ class AppState extends ChangeNotifier {
   ProxyConfig? get autoPick {
     ProxyConfig? best;
     for (final c in all) {
-      if (!c.canSingBox || !c.isAlive) continue;
+      if (!c.canSingBox || !c.isAlive || c.domesticOnly) continue;
       if (best == null || c.latencyMs! < best.latencyMs!) best = c;
     }
     return best;
@@ -2478,7 +2490,8 @@ class AppState extends ChangeNotifier {
     // A server whose Reality key the core would refuse is left out: one of them stops the whole core.
     // A server the safety check found changing what passes through it is left out too.
     final plain = all.where((c) => c.canSingBox && !c.badRealityKey && !isDangerous(c)).toList();
-    final alive = plain.where((c) => c.isAlive).toList()
+    // A server that reaches domestic sites only is not one to pick for the user.
+    final alive = plain.where((c) => c.isAlive && !c.domesticOnly).toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
     final auto = (alive.isNotEmpty ? alive : plain).take(_autoGroupSize).toList();
     return selected != null ? [selected!] : (auto.isNotEmpty ? auto : [all.first]);

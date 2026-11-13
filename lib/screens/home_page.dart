@@ -2342,7 +2342,8 @@ class _ConfigTile extends StatelessWidget {
                 ),
               TextSpan(
                   text:
-                      '${ms == null ? '' : ' · '}${config.label} · ${config.maskedAddress}'),
+                      '${ms == null ? '' : ' · '}${ms != null && ms >= 0 && config.domesticOnly ? '${tr(context, 'delayDomestic')} · ' : ''}'
+                      '${config.label} · ${config.maskedAddress}'),
             ]),
             textDirection: TextDirection.ltr,
             textAlign: TextAlign.start,

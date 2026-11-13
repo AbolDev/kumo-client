@@ -24,6 +24,11 @@ const oldDefaultDelayUrl = 'https://www.google.com/generate_204';
 /// The address used for the real delay; changed in Settings.
 String delayTestUrl = defaultDelayUrl;
 
+/// The second page, tried when the usual one cannot be fetched through a server: a server inside Iran often has
+/// no way to the sites outside it, and then every test of it timed out although it works. A page that is
+/// hosted in Iran and answers at once (a redirect is enough: only the answer is timed).
+const domesticDelayUrl = 'http://www.aparat.com/';
+
 /// How slow the network of this device is, learnt from the TCP connect times the tests saw last. On a slow
 /// one (H+, a weak signal) the usual time limits call working servers dead and move a connection off a
 /// server that only needed longer, so the limits grow with it: up to three times as long.
@@ -67,7 +72,7 @@ const udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
 
 /// Minimal sing-box config holding only [c] (and the layers it is dialled through), used by the
 /// throw-away test core. WireGuard is an endpoint there, everything else an outbound.
-String _delayConfig(List<Map<String, dynamic>> layers) {
+String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hosts}) {
   final wireguard = layers.first['type'] == 'wireguard';
   // Two WireGuard tunnels (Warp-in-Warp): the first is dialled through the second.
   final two = wireguard && layers.length > 1 && layers[1]['type'] == 'wireguard';
@@ -75,6 +80,16 @@ String _delayConfig(List<Map<String, dynamic>> layers) {
     'log': {'level': 'error'},
     'dns': {
       'servers': [
+        // Names whose addresses are known already (see [realDelay]): nothing is asked for them.
+        if (hosts != null && hosts.isNotEmpty)
+          {
+            'type': 'hosts',
+            'tag': 'dns',
+            'predefined': {
+              for (final e in hosts.entries) e.key: [e.value],
+            },
+          }
+        else
         // A WireGuard tunnel carries addresses, not names: the core looks the name of the test page up itself
         // before it dials. Asked from the phone's own network that lookup is lost where the filter drops or
         // answers DNS to 1.1.1.1 itself, and every test of a working server timed out; so it is asked through
@@ -106,7 +121,8 @@ String _delayConfig(List<Map<String, dynamic>> layers) {
 
 /// [_delayConfig] for the tests.
 @visibleForTesting
-String delayConfigForTest(List<Map<String, dynamic>> layers) => _delayConfig(layers);
+String delayConfigForTest(List<Map<String, dynamic>> layers, {Map<String, String>? hosts}) =>
+    _delayConfig(layers, hosts: hosts);
 
 /// The server and the layers under it with their names already resolved by the system resolver.
 /// Resolving them inside the throw-away core went through a fixed public DNS server, which is slow
@@ -126,7 +142,10 @@ Future<Map<String, dynamic>> _resolved(Map<String, dynamic> outbound) => resolve
 ///
 /// With [options] the server is tried with those advanced options (fragmenting, a fingerprint, mux)
 /// instead of a plain outbound; this is for servers sing-box carries.
-Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options}) async {
+///
+/// [url] is the page to fetch when it is not [delayTestUrl] (the domestic page, see [realDelayOrDomestic]).
+Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options, String? url}) async {
+  final page = url ?? delayTestUrl;
   // The usual limit grows on a slow network; one the caller gives is kept as it is.
   timeout ??= NetPace.scale(const Duration(seconds: 8));
   // An OpenVPN server is measured by the OpenVPN program itself: the time until the handshake is done.
@@ -139,12 +158,35 @@ Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options}) a
   // A server whose link carries a final mask is measured the way it is used: through Xray.
   if (!c.canSingBox || (c.preferXray && c.canXray)) {
     if (!c.canXray) return -1;
-    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), delayTestUrl,
+    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), page,
         timeoutMs: timeout.inMilliseconds);
   }
   var layers = await _resolvedLayers(c);
   if (options != null) layers = tweakLayers(layers, options);
-  return VpnChannel.delay(_delayConfig(layers), delayTestUrl, timeoutMs: timeout.inMilliseconds);
+  // A WireGuard tunnel is given addresses, so the core looks the name of the page up itself, through the tunnel.
+  // A server inside Iran may not reach that DNS server either; the name of the domestic page is looked up by the
+  // system's resolver instead (it is not a filtered name) and handed to the core.
+  Map<String, String>? hosts;
+  if (url != null && layers.first['type'] == 'wireguard') {
+    final host = Uri.parse(url).host;
+    final address = InternetAddress.tryParse(host) == null ? await systemLookup(host) : null;
+    if (address != null) hosts = {host: address};
+  }
+  return VpnChannel.delay(_delayConfig(layers, hosts: hosts), page, timeoutMs: timeout.inMilliseconds);
+}
+
+/// [realDelay], and when the usual page cannot be fetched, the domestic one ([domesticDelayUrl]): a server that
+/// gets only that one works, for the sites of its own country. [ProxyConfig.domesticOnly] is set to what was
+/// found. The second try costs a dead server its time limit twice, so a list is not tested this way (see
+/// [testReal]).
+Future<int> realDelayOrDomestic(ProxyConfig c, {Duration? timeout}) async {
+  final ms = await realDelay(c, timeout: timeout);
+  if (ms >= 0) c.domesticOnly = false;
+  if (ms != -1 || c.isOpenVpn) return ms;
+  final second = await realDelay(c, timeout: timeout, url: domesticDelayUrl);
+  if (second == -2) return ms;
+  c.domesticOnly = second >= 0;
+  return second >= 0 ? second : -1;
 }
 
 /// The throw-away configuration that holds [c] (its name looked up by the system's resolver, as in the real
@@ -180,9 +222,10 @@ Future<int> tunnelDelay(
     XrayAuth? socksAuth,
     int? proxyPort,
     int samples = 1,
-    Duration? timeout}) async {
+    Duration? timeout,
+    String? url}) async {
   timeout ??= NetPace.scale(const Duration(seconds: 8));
-  final uri = Uri.parse(delayTestUrl);
+  final uri = Uri.parse(url ?? delayTestUrl);
   // Through the tunnel the app looks the name up itself, and the first lookup of a session goes
   // through a cold encrypted DNS connection: that is no part of the delay. (With a local proxy or
   // Xray the name is given to them and their own cache takes care of it.)
@@ -385,7 +428,10 @@ Future<void> testReal(
         continue;
       }
       final c = queue.removeFirst();
-      final ms = await realDelay(c, timeout: NetPace.scale(const Duration(seconds: 5)));
+      // A server known to reach domestic sites only keeps being tested with the domestic page too; the others
+      // are not, so that a list of dead servers does not take twice as long.
+      final limit = NetPace.scale(const Duration(seconds: 5));
+      final ms = c.domesticOnly ? await realDelayOrDomestic(c, timeout: limit) : await realDelay(c, timeout: limit);
       // -2: skipped, so the old value stays
       if (ms != -2) c.latencyMs = ms;
       if (c.isAlive) alive++;

@@ -20,6 +20,27 @@ bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as 
     .any((r) => r is Map && (r['query_type'] as List?)?.contains('AAAA') == true && r['action'] == 'predefined');
 
 void main() {
+  test('for the domestic page the test core is handed the address of its name and asks no DNS server', () {
+    final c = parseLink(_link())!;
+    final cfg = jsonDecode(delayConfigForTest([c.outbound], hosts: {'www.aparat.com': '198.51.100.4'})) as Map<String, dynamic>;
+    final server = ((cfg['dns'] as Map)['servers'] as List).single as Map;
+    expect(server['type'], 'hosts');
+    expect(server['tag'], 'dns');
+    expect(server['predefined'], {
+      'www.aparat.com': ['198.51.100.4'],
+    });
+    expect(server.containsKey('detour'), isFalse);
+  });
+
+  test('the mark of a server that reaches domestic sites only is kept when the server is copied', () {
+    final c = parseLink(_link())!
+      ..latencyMs = 80
+      ..domesticOnly = true;
+    final copy = c.withLink('${c.link} ');
+    expect(copy.domesticOnly, isTrue);
+    expect(copy.latencyMs, 80);
+  });
+
   test('the test core of a WireGuard server looks names up through the tunnel, IPv4 only when it has no IPv6', () {
     final c = parseLink(_link())!;
     final cfg = jsonDecode(delayConfigForTest([c.outbound])) as Map<String, dynamic>;
