@@ -443,7 +443,11 @@ void main() {
         expect(state.manual.configs.length, 1);
         expect(tester.widget<RadioListTile<bool>>(find.byKey(const ValueKey('sync-add'))).groupValue, isFalse);
         await tester.tap(find.byKey(const ValueKey('sync-apply')));
-        await _letIoRun(tester);
+        // Applying reads and writes several files one after the other, each step coming back into the test's
+        // clock only at a frame: rounds until it is done.
+        for (var i = 0; i < 60 && state.manual.configs.length != 2; i++) {
+          await _letIoRun(tester);
+        }
         expect(state.manual.configs.length, 2);
         expect(find.textContaining('Done: 1 servers'), findsOneWidget);
       }, _RealHttp());
