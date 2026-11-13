@@ -21,6 +21,22 @@ bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as 
     .any((r) => r is Map && (r['query_type'] as List?)?.contains('AAAA') == true && r['action'] == 'predefined');
 
 void main() {
+  test('any test configuration that has endpoints and no outbound names its default (Warp-in-Warp too)', () {
+    final one = parseLink(_link())!;
+    final two = parseLink(_link(extra: '&x=2'))!;
+    for (final layers in [
+      [one.outbound],
+      [one.outbound, two.outbound],
+    ]) {
+      final cfg = jsonDecode(delayConfigForTest(layers)) as Map<String, dynamic>;
+      final endpoints = (cfg['endpoints'] as List?) ?? const [];
+      expect(endpoints.length, layers.length);
+      if (!cfg.containsKey('outbounds')) {
+        expect((cfg['route'] as Map)['final'], 'proxy', reason: 'a direct outbound would be made, and it breaks on Android');
+      }
+    }
+  });
+
   test('the test core of a WireGuard server names the endpoint as its default, so no direct outbound is made', () {
     final c = parseLink(_link())!;
     final cfg = jsonDecode(delayConfigForTest([c.outbound])) as Map<String, dynamic>;
