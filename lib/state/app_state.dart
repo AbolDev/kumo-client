@@ -12,6 +12,7 @@ import '../core/ad_lists.dart' show adBaseAsset;
 import '../core/app_icon.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
+import '../core/connect_race.dart';
 import '../core/latency_tester.dart';
 import '../core/collector_sources.dart';
 import '../core/desktop_vpn.dart';
@@ -2675,8 +2676,22 @@ class AppState extends ChangeNotifier {
     }
     // With the proxy kept running, the connection goes on the servers that core already runs.
     final standbyServers = isDesktop && net.keepProxy ? _standbyServers : null;
-    final chosen = standbyServers != null && selected == null ? standbyServers : _chosenServers();
-    final granted = await VpnChannel.prepare();
+    var chosen = standbyServers != null && selected == null ? standbyServers : _chosenServers();
+    // Automatic mode: the group is ordered by pings that may be old, and the core dials the first server of
+    // it until its own test answers. The servers are tried with a TCP connect first (at the same time as the
+    // permission of the system is asked for), and the ones that answer are put first.
+    final prepared = VpnChannel.prepare();
+    List<ProxyConfig>? racedResolved;
+    if (selected == null && standbyServers == null && chosen.length > 1) {
+      final raced = await raceGroup(chosen, await _resolveAhead(chosen));
+      if (cancelled()) return;
+      chosen = raced.group;
+      racedResolved = raced.resolved;
+      if (raced.answered > 0 && raced.group.isNotEmpty) {
+        log('Race: ${raced.answered} of ${raced.total} servers answered; first is ${raced.group.first.name}');
+      }
+    }
+    final granted = await prepared;
     if (cancelled()) return;
     if (!granted) {
       message = (t) => t.vpnPermissionDenied;
@@ -2763,7 +2778,7 @@ class AppState extends ChangeNotifier {
       // Xray's local port asks for a login of its own, so no other program here can use it.
       final xrayAuth = viaXray ? _newXrayAuth() : null;
       // The names of the chosen servers are looked up first (encrypted DNS, then the system's).
-      final resolved = await _resolveAhead(chosen);
+      final resolved = racedResolved ?? await _resolveAhead(chosen);
       if (cancelled()) return;
       String config(int? xray) => buildSingBoxConfig(resolved,
           xrayPort: xray,
