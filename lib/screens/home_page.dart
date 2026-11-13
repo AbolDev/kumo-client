@@ -1421,7 +1421,11 @@ class _ServerListState extends State<_ServerList> {
               top: header ? radius : Radius.zero,
               bottom: (header && !open) || row.last ? radius : Radius.zero,
             ),
-            // On the pure black theme the usual tile colour (almost black) cannot be told from the background, so the tiles\n            // take the colour of the speed cards under the connect button, which stands out well.\n            child: ColoredBox(\n                color: scheme.surface == Colors.black ? scheme.surfaceContainerHigh : scheme.surfaceContainerLow,\n                child: child),
+            // On the pure black theme the usual tile colour (almost black) cannot be told from the background, so the tiles
+            // take the colour of the speed cards under the connect button, which stands out well.
+            child: ColoredBox(
+                color: scheme.surface == Colors.black ? scheme.surfaceContainerHigh : scheme.surfaceContainerLow,
+                child: child),
           ),
         );
         return header
