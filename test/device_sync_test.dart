@@ -417,7 +417,8 @@ void main() {
 
     testWidgets('a code scanned from a sender: first a question, then what came, then it is added', (tester) async {
       await HttpOverrides.runWithHttpOverrides(() async {
-        await DesktopVpn.instance.writeFile('servers.json', jsonEncode(_servers(manual: [_a])));
+        // Real files and sockets only get their turn inside runAsync: awaited outside it, this never ends.
+        await tester.runAsync(() => DesktopVpn.instance.writeFile('servers.json', jsonEncode(_servers(manual: [_a]))));
         final state = AppState();
         await tester.runAsync(state.loadStoredForTest);
         final server = SyncServer(
