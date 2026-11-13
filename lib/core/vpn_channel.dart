@@ -305,6 +305,16 @@ class VpnChannel {
     }
   }
 
+  /// The error the last test core ended with (Android), or null.
+  static Future<String?> lastDelayError() async {
+    if (_win) return null;
+    try {
+      return await _control.invokeMethod<String>('lastDelayError');
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Forgets what [coreCrash] gave, once it has been shown.
   static Future<void> clearCoreCrash() async {
     if (_win) return;

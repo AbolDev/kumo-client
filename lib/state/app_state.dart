@@ -1902,6 +1902,18 @@ class AppState extends ChangeNotifier {
       final overUdp = !c.isOpenVpn && udpProtocols.contains(c.protocol);
       final ms = real || (overUdp && _real) ? await realDelayOrDomestic(c) : await tcpLatency(c);
       if (ms != -2) c.latencyMs = ms;
+      // A WireGuard server that fails here and works elsewhere: one more try with the core's own words
+      // written to the log of the app, so that the reason can be read (and sent to the developers).
+      if (ms == -1 && c.protocol == 'wireguard' && _real) {
+        for (final url in [null, domesticDelayUrl]) {
+          final report = await probeLog(c, url: url);
+          if (report == null) break;
+          log('WireGuard test of ${c.name} (${url ?? delayTestUrl}):');
+          for (final line in report.split('\n')) {
+            log('  $line');
+          }
+        }
+      }
     } finally {
       testing.remove(c);
       _save();

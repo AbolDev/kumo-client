@@ -50,6 +50,10 @@ class KumoActivity : FlutterActivity() {
     // Each delay test starts its own core, so only a few run at once.
     private val delayPool = Executors.newFixedThreadPool(12)
 
+    /** The error the last delay test ended with (what the core said), for the diagnosis of a failing server. */
+    @Volatile
+    private var lastDelayError: String? = null
+
     override fun onResume() {
         super.onResume()
         applyTaskLook()
@@ -192,7 +196,8 @@ class KumoActivity : FlutterActivity() {
                             ms = try {
                                 App.ensureLibbox()
                                 Libbox.measureDelay(config, url, timeout)
-                            } catch (_: Throwable) {
+                            } catch (e: Throwable) {
+                                lastDelayError = e.message
                                 -1
                             } finally {
                                 VpnBridge.exitDelay()
@@ -562,6 +567,7 @@ class KumoActivity : FlutterActivity() {
                     }.getOrNull()
                     result.success(text)
                 }
+                "lastDelayError" -> result.success(lastDelayError)
                 "clearCoreCrash" -> {
                     runCatching {
                         val core = File(filesDir, "core")
