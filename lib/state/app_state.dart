@@ -12,6 +12,7 @@ import '../core/ad_lists.dart' show adBaseAsset;
 import '../core/app_icon.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
+import '../core/device_sync.dart';
 import '../core/latency_tester.dart';
 import '../core/collector_sources.dart';
 import '../core/desktop_vpn.dart';
@@ -1042,9 +1043,12 @@ class AppState extends ChangeNotifier {
   void _saveSettings() {
     final locked = _settingsLocked;
     _settingsLocked = false;
-    _store(
-        _settingsFile,
-        jsonEncode({
+    _store(_settingsFile, jsonEncode(_settingsMap()), locked: locked).catchError((_) {});
+    notifyListeners();
+  }
+
+  /// Everything the settings file holds, as it is now.
+  Map<String, dynamic> _settingsMap() => {
           'theme': themeMode.name,
           'appIcon': appIcon,
           'language': languageCode,
@@ -1083,11 +1087,7 @@ class AppState extends ChangeNotifier {
           'alertSeen': _alertSeen,
           'delayUrl': delayUrl,
           'net': net.toJson(),
-        }),
-        locked: locked)
-        .catchError((_) {});
-    notifyListeners();
-  }
+        };
 
   /// Changes one of the switches in Settings.
   /// "Remember my choice" in the question before a real delay test: the next one starts with the same answer.
@@ -3062,6 +3062,68 @@ class AppState extends ChangeNotifier {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  // ---------------------------------------------------------------- sync with another device
+
+  /// The text that goes to another device (see device_sync.dart): the user's own lists of servers, clean IPs and
+  /// subscriptions, and with [settings] the settings that are safe to carry (how the app looks and behaves).
+  Future<String> syncPayload({required bool settings}) async {
+    // What is in memory goes to the file first, and is read from there: the file is what the lists are.
+    await _writeServers();
+    final text = await VpnChannel.readFile(_storeFile) ?? '{}';
+    final servers = jsonDecode(text);
+    return buildSyncPayload(servers is Map ? Map<String, dynamic>.from(servers) : <String, dynamic>{},
+        settings ? _settingsMap() : null);
+  }
+
+  /// Takes what another device sent. By default what is there is kept and what is new is added ([replace] false);
+  /// with [replace] the lists become those of the other device. Settings come only when [settings] is true, and only
+  /// the ones of [syncSettingsKeys]. Null when [text] is not a payload.
+  Future<({int servers, int subscriptions})?> applySync(String text,
+      {required bool replace, required bool settings}) async {
+    final payload = readSyncPayload(text);
+    final preview = previewSyncPayload(text);
+    if (payload == null || preview == null) return null;
+    try {
+      final incoming = Map<String, dynamic>.from(payload['servers'] as Map);
+      await _writeServers();
+      final raw = jsonDecode(await VpnChannel.readFile(_storeFile) ?? '{}');
+      final current = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+      final Map<String, dynamic> result;
+      var servers = preview.servers + preview.cleanIps;
+      var subs = preview.subscriptions.length;
+      if (replace) {
+        result = replaceSyncServers(current, incoming);
+      } else {
+        final m = mergeSyncServers(current, incoming);
+        result = m.merged;
+        servers = m.servers;
+        subs = m.subscriptions;
+      }
+      await _store(_storeFile, jsonEncode(result), locked: _storeLocked);
+      _storeLocked = false;
+      collector.configs.clear();
+      manual.configs.clear();
+      cleanGroup.configs.clear();
+      subscriptions.clear();
+      selected = null;
+      await _loadServers();
+      if (settings && payload['settings'] is Map) {
+        final incomingSettings = pickSyncSettings(Map<String, dynamic>.from(payload['settings'] as Map));
+        await _store(_settingsFile, jsonEncode({..._settingsMap(), ...incomingSettings}), locked: _settingsLocked);
+        _settingsLocked = false;
+        await _loadSettings();
+        delayTestUrl = delayUrl;
+        VpnChannel.scheduleSubUpdates(autoUpdateSubs).catchError((_) {});
+        VpnChannel.setIdleNotification(idleNotification);
+      }
+      _syncStandby();
+      notifyListeners();
+      return (servers: servers, subscriptions: subs);
+    } catch (_) {
+      return null;
     }
   }
 }

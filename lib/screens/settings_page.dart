@@ -26,6 +26,7 @@ import 'share_app_page.dart';
 import '../widgets/option_tile.dart';
 import 'network_settings.dart';
 import 'share_sheet.dart';
+import 'sync_page.dart';
 import 'update_dialog.dart';
 import 'usage_page.dart';
 import 'free_connections_page.dart';
@@ -598,6 +599,14 @@ class _SettingsPageState extends State<SettingsPage> {
           leading: const Icon(Icons.download),
           title: Text(tr(context, 'importBackup')),
           onTap: _import,
+        ),
+        ListTile(
+          leading: const Icon(Icons.devices_outlined),
+          title: Text(tr(context, 'syncTitle')),
+          subtitle: Text(tr(context, 'syncDesc')),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+              context, MaterialPageRoute(settings: const RouteSettings(name: '/SyncPage'), builder: (_) => SyncPage(state: state))),
         ),
       ]),
       _section(Icons.receipt_long, t.logs, [
