@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../core/clean_ip.dart' show withCleanIp;
+import '../core/extra_options.dart' show fragmentFinalMask;
 import '../core/link_fields.dart';
 import '../core/proxy_config.dart';
 import '../l10n/extra.dart' show tr;
@@ -197,6 +198,23 @@ class _EditConfigPageState extends State<EditConfigPage> {
           _param(t, 'fp', f.params['fp'] ?? ''),
           _anti('alpn', 'ALPN', f.params['alpn'] ?? '', hint: 'h2,http/1.1'),
           _anti('fm', tr(context, 'antiFm'), f.params['fm'] ?? '', lines: 4),
+          // Ready-made masks, so that nobody has to write the JSON of the usual one.
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Wrap(spacing: 8, runSpacing: 4, children: [
+              ActionChip(
+                key: const ValueKey('anti:fm-fragment'),
+                avatar: const Icon(Icons.call_split, size: 18),
+                label: Text(tr(context, 'antiFmFragment')),
+                onPressed: () => setState(() => _c('p:fm', '').text = fragmentFinalMask()),
+              ),
+              ActionChip(
+                key: const ValueKey('anti:fm-clear'),
+                label: Text(tr(context, 'antiFmClear')),
+                onPressed: () => setState(() => _c('p:fm', '').text = ''),
+              ),
+            ]),
+          ),
           _anti('cipherSuites', tr(context, 'antiCipher'), f.params['cipherSuites'] ?? ''),
           Align(
             alignment: AlignmentDirectional.centerStart,
