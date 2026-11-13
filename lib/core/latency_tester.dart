@@ -431,12 +431,31 @@ Future<void> testReal(
   int? stopAfterAlive,
   bool Function()? isCancelled,
   void Function(ProxyConfig c)? onResult,
+  bool udpDelay = false,
 }) async {
   if (!real) {
-    return testLatencies(candidates,
-        stopAfterAlive: stopAfterAlive,
-        isCancelled: isCancelled,
-        onResult: onResult);
+    // A server that runs over UDP (WireGuard, Hysteria, TUIC) has no TCP port: a TCP connect to it only times out,
+    // and the list showed every such server as dead. With [udpDelay] (no connection is up, so a test core can
+    // run) they are measured through the core; otherwise they are left as they were, and still counted as done.
+    final udpOnes = [for (final c in candidates) if (!c.isOpenVpn && udpProtocols.contains(c.protocol)) c];
+    final tcpOnes = [for (final c in candidates) if (c.isOpenVpn || !udpProtocols.contains(c.protocol)) c];
+    final queue = Queue<ProxyConfig>.of(udpOnes);
+    Future<void> udpWorker() async {
+      while (queue.isNotEmpty && !(isCancelled?.call() ?? false)) {
+        final c = queue.removeFirst();
+        if (udpDelay) {
+          final ms = await realDelayOrDomestic(c, timeout: NetPace.scale(const Duration(seconds: 5)));
+          if (ms != -2) c.latencyMs = ms;
+        }
+        onResult?.call(c);
+      }
+    }
+
+    await Future.wait([
+      testLatencies(tcpOnes, stopAfterAlive: stopAfterAlive, isCancelled: isCancelled, onResult: onResult),
+      for (var i = 0; i < 3; i++) udpWorker(),
+    ]);
+    return;
   }
   final udp = tcpFirst
       ? candidates.where((c) => udpProtocols.contains(c.protocol)).toList()

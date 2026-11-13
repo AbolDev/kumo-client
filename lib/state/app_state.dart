@@ -1891,6 +1891,7 @@ class AppState extends ChangeNotifier {
       await _job(null, () async {
         await testReal(
           real: real,
+          udpDelay: _real,
           tcpFirst: g.kind == GroupKind.collector,
           list,
           isCancelled: () => _stale(key, gen),

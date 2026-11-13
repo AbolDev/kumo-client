@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kumo/core/latency_tester.dart' show delayConfigForTest;
+import 'package:kumo/core/latency_tester.dart' show delayConfigForTest, testReal;
 import 'package:kumo/core/net_options.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
@@ -21,6 +21,14 @@ bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as 
     .any((r) => r is Map && (r['query_type'] as List?)?.contains('AAAA') == true && r['action'] == 'predefined');
 
 void main() {
+  test('a TCP ping of a list measures its UDP servers through the core when it may, and leaves them as they were when it may not', () async {
+    final wg = parseLink(_link())!..latencyMs = 55;
+    final seen = <String>[];
+    await testReal([wg], real: false, udpDelay: false, onResult: (c) => seen.add(c.protocol));
+    expect(wg.latencyMs, 55, reason: 'not measured while a connection is up');
+    expect(seen, ['wireguard'], reason: 'but counted as done');
+  });
+
   test('any test configuration that has endpoints and no outbound names its default (Warp-in-Warp too)', () {
     final one = parseLink(_link())!;
     final two = parseLink(_link(extra: '&x=2'))!;
