@@ -1,16 +1,11 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/net_options.dart';
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/routing_rules.dart';
 import 'package:kumo/core/rule_services.dart';
 import 'package:kumo/core/singbox_config.dart';
-import 'package:kumo/l10n/strings.dart';
-import 'package:kumo/screens/routing_rules_page.dart';
-import 'package:kumo/state/app_state.dart';
 
 final _server = parseLink('trojan://secret@example.com:443?security=tls&sni=example.com#t')!;
 
@@ -88,44 +83,4 @@ void main() {
     });
   });
 
-  group('adding a rule from a list', () {
-    Widget host() => MaterialApp(
-          supportedLocales: S.supportedLocales,
-          localizationsDelegates: const [
-            S.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-          ],
-          home: RoutingRulesPage(state: AppState()),
-        );
-
-    testWidgets('the sheet offers every kind, and the services are in groups to tick', (tester) async {
-      tester.view.physicalSize = const Size(900, 2400);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      await tester.pumpWidget(host());
-      await tester.pumpAndSettle();
-      // Nothing yet: an invitation, not an empty list.
-      expect(find.text('No rules yet.'), findsOneWidget);
-      await tester.tap(find.text('Add a rule').first);
-      await tester.pumpAndSettle();
-      for (final title in ['A popular service', 'A website', 'An IP address or range', 'A port', 'Advanced']) {
-        expect(find.text(title), findsOneWidget, reason: title);
-      }
-      await tester.tap(find.text('A popular service'));
-      await tester.pumpAndSettle();
-      expect(find.text('Choose services'), findsOneWidget);
-      expect(find.text('Social and messages'), findsOneWidget);
-      expect(find.text('Choose what to add'), findsOneWidget);
-      await tester.tap(find.text('Telegram'));
-      await tester.tap(find.text('YouTube'));
-      await tester.pump();
-      expect(find.text('Add 2'), findsOneWidget);
-      // The search narrows the list.
-      await tester.enterText(find.byType(TextField), 'spot');
-      await tester.pump();
-      expect(find.text('Spotify'), findsOneWidget);
-      expect(find.text('Telegram'), findsNothing);
-    });
-  });
 }

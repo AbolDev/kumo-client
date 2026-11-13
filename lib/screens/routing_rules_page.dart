@@ -1,33 +1,56 @@
-import 'dart:io' show Platform;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 
+import '../core/net_options.dart';
 import '../core/platform.dart';
 import '../core/routing_rules.dart';
+import '../core/rule_book.dart';
 import '../core/rule_services.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
 import '../widgets/app_icon.dart';
-import '../widgets/prompt_dialog.dart';
+import 'routing_rules_parts.dart';
+import 'share_sheet.dart';
 
-/// The user's own routing rules: apps, popular services, websites, addresses and ports that always go direct,
-/// always through the VPN, or are always blocked, whatever the country and app settings say. A rule is added by
-/// choosing what it is about from a list, so nothing has to be typed unless the user wants to.
+/// The user's own routing rules: apps, popular services, websites, addresses and ports that are always
+/// blocked, always sent through the VPN, or always sent direct, whatever the country and app settings say.
+///
+/// The page is the three lists in the order they are applied (block, then VPN, then direct), each with its
+/// colour and its count. A rule is added by choosing it from a list or typing one line; removing one can be
+/// undone; "Test" tells what would happen to a website, an address, a port or an app; the rules can be
+/// copied, saved to a file and imported again.
 class RoutingRulesPage extends StatefulWidget {
-  const RoutingRulesPage({super.key, required this.state});
+  const RoutingRulesPage({super.key, required this.state, this.update});
 
   final AppState state;
+
+  /// How a change of the options is made and saved: [AppState.updateNet] unless a test gives its own.
+  final Future<void> Function(void Function(NetOptions o) change)? update;
 
   @override
   State<RoutingRulesPage> createState() => _RoutingRulesPageState();
 }
+
+class _Entry {
+  const _Entry(this.action, this.text, this.rule);
+
+  final RuleAction action;
+  final String text;
+  final RouteRule rule;
+}
+
+enum _Menu { load, copy, save, clear }
 
 class _RoutingRulesPageState extends State<RoutingRulesPage> {
   AppState get state => widget.state;
 
   /// The apps of this device by id, for the names of the app rules (loaded once).
   Map<String, String> _appNames = const {};
+  final _search = TextEditingController();
+  RuleAction _lastAction = RuleAction.direct;
 
   @override
   void initState() {
@@ -37,227 +60,270 @@ class _RoutingRulesPageState extends State<RoutingRulesPage> {
     }).catchError((_) {});
   }
 
-  List<String> _rules(int tab) => switch (tab) {
-        0 => state.net.directRules,
-        1 => state.net.proxyRules,
-        _ => state.net.blockRules,
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  // ------------------------------------------------------------------------------------- the rules
+
+  RuleLists get _lists => RuleLists(block: state.net.blockRules, proxy: state.net.proxyRules, direct: state.net.directRules);
+
+  void _write(RuleLists l) {
+    void change(NetOptions o) {
+      o.blockRules = l.block;
+      o.proxyRules = l.proxy;
+      o.directRules = l.direct;
+    }
+
+    final update = widget.update;
+    unawaited(update != null ? update(change) : state.updateNet(change));
+    if (mounted) setState(() {});
+  }
+
+  /// Applies [next] and says so, with a way back.
+  void _change(RuleLists next, String message) {
+    final before = _lists;
+    _write(next);
+    toast(context, message, actionLabel: tr(context, 'rlUndo'), onAction: () => _write(before));
+  }
+
+  /// Adds [rules] to the list of [action]; how many were not there already.
+  int _addRules(RuleAction action, List<String> rules) {
+    final l = _lists;
+    final merged = withRules(l.of(action), rules);
+    final added = merged.length - l.of(action).length;
+    if (added == 0) return 0;
+    l.of(action)
+      ..clear()
+      ..addAll(merged);
+    _lastAction = action;
+    _write(l);
+    return added;
+  }
+
+  void _remove(_Entry e) {
+    final l = _lists..of(e.action).remove(e.text);
+    _change(l, tr(context, 'rlRemoved', {'rule': _title(e.rule)}));
+  }
+
+  void _move(_Entry e, RuleAction to) {
+    final l = _lists..of(e.action).remove(e.text);
+    l.of(to)
+      ..clear()
+      ..addAll(withRules(l.of(to), [e.text]));
+    _change(l, tr(context, 'rlMoved', {'list': tr(context, to.titleKey)}));
+  }
+
+  void _clearAll() {
+    final n = _lists.count;
+    if (n == 0) return;
+    _change(RuleLists(), tr(context, 'rlClearedAll', {'n': n}));
+  }
+
+  // ----------------------------------------------------------------------------------- what to show
+
+  String _title(RouteRule r) => switch (r.kind) {
+        RuleKind.app => _appNames[r.value] ?? r.value,
+        RuleKind.service => ruleServices[r.value]?.name ?? r.value,
+        _ => r.text,
       };
 
-  void _setRules(int tab, List<String> list) => state.updateNet((o) {
-        switch (tab) {
-          case 0:
-            o.directRules = list;
-          case 1:
-            o.proxyRules = list;
-          default:
-            o.blockRules = list;
-        }
-      });
+  bool _matchesSearch(_Entry e, String q) {
+    final r = e.rule;
+    final hay = [
+      e.text,
+      _title(r),
+      if (r.kind == RuleKind.service) ...?ruleServices[r.value]?.domains,
+      tr(context, 'ruleType_${r.kind.name}'),
+    ].join('\n').toLowerCase();
+    return hay.contains(q);
+  }
+
+  // ------------------------------------------------------------------------------------------ build
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Builder(
-        builder: (context) {
-          final controller = DefaultTabController.of(context);
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(tr(context, 'ruleTitle')),
-              bottom: TabBar(tabs: [
-                Tab(text: tr(context, 'ruleDirect')),
-                Tab(text: tr(context, 'ruleProxy')),
-                Tab(text: tr(context, 'ruleBlock')),
-              ]),
-            ),
-            floatingActionButton: FloatingActionButton.extended(
-              onPressed: () => _add(context, controller.index),
-              icon: const Icon(Icons.add),
-              label: Text(tr(context, 'ruleAdd')),
-            ),
-            body: ListenableBuilder(
-              listenable: state,
-              builder: (context, _) => TabBarView(children: [
-                for (var tab = 0; tab < 3; tab++)
-                  _RuleList(
-                    rules: _rules(tab),
-                    appNames: _appNames,
-                    onChange: (list) => _setRules(tab, list),
-                    onAdd: () => _add(context, tab),
-                  ),
-              ]),
-            ),
-          );
-        },
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(tr(context, 'ruleTitle')),
+        actions: [
+          IconButton(
+            tooltip: tr(context, 'rlTestTitle'),
+            icon: const Icon(Icons.fact_check_outlined),
+            onPressed: () => showTestRuleSheet(context, lists: () => _lists, appNames: _appNames),
+          ),
+          PopupMenuButton<_Menu>(
+            onSelected: _onMenu,
+            itemBuilder: (_) => [
+              _menuItem(_Menu.load, Icons.file_download_outlined, 'rlImportTitle'),
+              _menuItem(_Menu.copy, Icons.copy_outlined, 'rlCopy'),
+              _menuItem(_Menu.save, Icons.save_alt, 'rlSave'),
+              const PopupMenuDivider(),
+              _menuItem(_Menu.clear, Icons.delete_sweep_outlined, 'rlClearAll'),
+            ],
+          ),
+        ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openAdd(_lastAction),
+        icon: const Icon(Icons.add),
+        label: Text(tr(context, 'ruleAdd')),
+      ),
+      body: ListenableBuilder(listenable: state, builder: (context, _) => _body(context)),
     );
   }
 
-  /// Asks what kind of rule to add, then lets the user pick it from a list (or type it).
-  Future<void> _add(BuildContext context, int tab) async {
-    final kind = await showModalBottomSheet<_Kind>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      constraints: const BoxConstraints(maxWidth: 560),
-      builder: (sheet) => SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: Text(tr(sheet, 'ruleAddWhat'), style: Theme.of(sheet).textTheme.titleLarge),
-              ),
-            ),
-            for (final k in _Kind.values)
-              if (k != _Kind.app || canPickApps)
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Theme.of(sheet).colorScheme.primaryContainer,
-                    child: Icon(k.icon, color: Theme.of(sheet).colorScheme.onPrimaryContainer),
-                  ),
-                  title: Text(tr(sheet, k.title), style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(tr(sheet, '${k.title}Desc')),
-                  onTap: () => Navigator.pop(sheet, k),
+  PopupMenuItem<_Menu> _menuItem(_Menu value, IconData icon, String key) => PopupMenuItem(
+        value: value,
+        child: Row(children: [Icon(icon, size: 20), const SizedBox(width: 12), Flexible(child: Text(tr(context, key)))]),
+      );
+
+  void _openAdd(RuleAction action) => showAddRuleSheet(context, initial: action, lists: () => _lists, onAdd: _addRules);
+
+  Future<void> _onMenu(_Menu m) async {
+    switch (m) {
+      case _Menu.load:
+        final found = await showImportRulesDialog(context);
+        if (found == null || !mounted) return;
+        final l = _lists;
+        var added = 0;
+        for (final a in RuleAction.values) {
+          final merged = withRules(l.of(a), found.of(a));
+          added += merged.length - l.of(a).length;
+          l.of(a)
+            ..clear()
+            ..addAll(merged);
+        }
+        if (added == 0) {
+          toast(context, tr(context, 'rlImportNothingNew'));
+        } else {
+          _change(l, tr(context, 'rlImportDone', {'n': added}));
+        }
+      case _Menu.copy:
+        if (_lists.count == 0) {
+          toast(context, tr(context, 'rlNothingToExport'));
+          return;
+        }
+        await copyText(exportRules(_lists));
+        if (mounted) toast(context, tr(context, 'rlCopied'), kind: ToastKind.ok);
+      case _Menu.save:
+        if (_lists.count == 0) {
+          toast(context, tr(context, 'rlNothingToExport'));
+          return;
+        }
+        final saved = await saveRulesFile(exportRules(_lists));
+        if (mounted && saved) toast(context, tr(context, 'rlSaved'), kind: ToastKind.ok);
+      case _Menu.clear:
+        _clearAll();
+    }
+  }
+
+  Widget _body(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final lists = _lists;
+    final total = lists.count;
+    final q = _search.text.trim().toLowerCase();
+    final all = <_Entry>[
+      for (final a in RuleAction.values)
+        for (final t in lists.of(a))
+          if (parseRouteRule(t) case final r?) _Entry(a, t, r),
+    ];
+    final shown = [for (final e in all) if (q.isEmpty || _matchesSearch(e, q)) e];
+    final hasApps = all.any((e) => e.rule.kind == RuleKind.app);
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 720),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 112),
+          children: [
+            _InfoCard(icon: Icons.info_outline, title: tr(context, 'rlOrderTitle'), body: tr(context, 'rlOrderBody')),
+            if (hasApps && !state.net.tun)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _InfoCard(
+                  icon: Icons.warning_amber_rounded,
+                  body: tr(context, 'ruleAppNote'),
+                  color: scheme.tertiaryContainer,
+                  onColor: scheme.onTertiaryContainer,
                 ),
-          ]),
+              ),
+            if (total == 0) const _EmptyIntro(),
+            if (total >= 6)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: TextField(
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    hintText: tr(context, 'rlSearchHint'),
+                    border: const OutlineInputBorder(),
+                    suffixIcon: _search.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: tr(context, 'rlSearchClear'),
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(_search.clear),
+                          ),
+                  ),
+                ),
+              ),
+            if (q.isNotEmpty && shown.isEmpty)
+              _NoMatch(query: _search.text.trim(), onAdd: _addFromSearch)
+            else
+              for (final a in RuleAction.values)
+                if (q.isEmpty || shown.any((e) => e.action == a))
+                  _section(context, a, [for (final e in shown) if (e.action == a) e], lists),
+          ],
         ),
       ),
     );
-    if (kind == null || !context.mounted) return;
-    final current = _rules(tab);
-    final added = <String>[];
-    switch (kind) {
-      case _Kind.app:
-        final ids = await Navigator.push<List<String>>(
-          context,
-          MaterialPageRoute(
-            settings: const RouteSettings(name: '/RuleAppsPage'),
-            builder: (_) => _AppPickerPage(
-              taken: {for (final r in current) if (parseRouteRule(r)?.kind == RuleKind.app) parseRouteRule(r)!.value},
-            ),
-          ),
-        );
-        added.addAll([for (final id in ids ?? const <String>[]) 'app:$id']);
-      case _Kind.service:
-        final ids = await Navigator.push<List<String>>(
-          context,
-          MaterialPageRoute(
-            settings: const RouteSettings(name: '/RuleServicesPage'),
-            builder: (_) => _ServicePickerPage(
-              taken: {for (final r in current) if (parseRouteRule(r)?.kind == RuleKind.service) parseRouteRule(r)!.value},
-            ),
-          ),
-        );
-        added.addAll([for (final id in ids ?? const <String>[]) 'service:$id']);
-      case _Kind.site:
-      case _Kind.ip:
-      case _Kind.port:
-      case _Kind.advanced:
-        final text = await _askText(context, kind);
-        if (text != null) added.add(text);
-    }
-    if (added.isEmpty) return;
-    final merged = [...current, for (final a in added) if (!current.contains(a)) a];
-    _setRules(tab, merged);
   }
 
-  /// One line for a website, an address, a port or an advanced rule; the rule it makes, or null.
-  Future<String?> _askText(BuildContext context, _Kind kind) async {
-    String prefix = '';
-    var accepted = const <RuleKind>{};
-    switch (kind) {
-      case _Kind.site:
-        accepted = {RuleKind.domain, RuleKind.full};
-      case _Kind.ip:
-        accepted = {RuleKind.ip};
-      case _Kind.port:
-        prefix = 'port:';
-        accepted = {RuleKind.port};
-      default:
-        accepted = {...RuleKind.values}..removeAll([RuleKind.app, RuleKind.service]);
-    }
-    String? result;
-    await showPrompt(
-      context,
-      icon: kind.icon,
-      title: tr(context, kind.title),
-      label: tr(context, switch (kind) {
-        _Kind.site => 'ruleSiteLabel',
-        _Kind.ip => 'ruleIpLabel',
-        _Kind.port => 'rulePortLabel',
-        _ => 'ruleAdvLabel',
-      }),
-      hint: tr(context, switch (kind) {
-        _Kind.site => 'ruleSiteHint',
-        _Kind.ip => 'ruleIpHint',
-        _Kind.port => 'rulePortHint',
-        _ => 'ruleAdvHint',
-      }),
-      keyboard: kind == _Kind.port ? TextInputType.number : TextInputType.url,
-      confirm: tr(context, 'ruleAdd'),
-      check: (v) async {
-        final rule = parseRouteRule('$prefix${v.trim()}');
-        if (rule == null || !accepted.contains(rule.kind)) return tr(context, 'ruleInvalid');
-        result = rule.text;
-        return null;
-      },
-    );
-    return result;
+  void _addFromSearch(RuleAction a, RouteRule rule) {
+    final n = _addRules(a, [rule.text]);
+    _search.clear();
+    toast(context, n == 0 ? tr(context, 'rlAlreadyHere', {'list': tr(context, a.titleKey)}) : tr(context, 'rlAdded', {'rule': rule.text}),
+        kind: n == 0 ? ToastKind.info : ToastKind.ok);
   }
-}
 
-/// What a rule can be about, as the choices of the first sheet.
-enum _Kind {
-  app(Icons.apps, 'ruleKindApp'),
-  service(Icons.public, 'ruleKindService'),
-  site(Icons.language, 'ruleKindSite'),
-  ip(Icons.numbers, 'ruleKindIp'),
-  port(Icons.settings_ethernet, 'ruleKindPort'),
-  advanced(Icons.manage_search, 'ruleKindAdv');
-
-  const _Kind(this.icon, this.title);
-
-  final IconData icon;
-
-  /// The key of the title; the key of the line under it is the same with "Desc".
-  final String title;
-}
-
-/// Whether this device can list its apps for a rule: a phone does, a computer lists the programs that run.
-bool get canPickApps => isDesktop || Platform.isAndroid;
-
-class _RuleList extends StatelessWidget {
-  const _RuleList({required this.rules, required this.appNames, required this.onChange, required this.onAdd});
-
-  final List<String> rules;
-  final Map<String, String> appNames;
-  final void Function(List<String> rules) onChange;
-  final VoidCallback onAdd;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _section(BuildContext context, RuleAction a, List<_Entry> rows, RuleLists lists) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final parsed = [
-      for (final r in rules)
-        if (parseRouteRule(r) != null) (text: r, rule: parseRouteRule(r)!),
-    ];
-    final apps = parsed.where((p) => p.rule.kind == RuleKind.app).toList();
-    final services = parsed.where((p) => p.rule.kind == RuleKind.service).toList();
-    final others = parsed.where((p) => p.rule.kind != RuleKind.app && p.rule.kind != RuleKind.service).toList();
-
-    void remove(String rule) => onChange([...rules.where((r) => r != rule)]);
-
-    Widget section(String key, List<({String text, RouteRule rule})> items, Widget Function(({String text, RouteRule rule})) row) {
-      if (items.isEmpty) return const SizedBox.shrink();
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(
-          padding: const EdgeInsetsDirectional.fromSTEB(4, 16, 4, 6),
-          child: Text(tr(context, key), style: text.titleSmall?.copyWith(color: scheme.onSurfaceVariant)),
-        ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(4, 24, 0, 10),
+        child: Row(children: [
+          ActionBadge(a),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${a.index + 1}. ${tr(context, a.titleKey)}', style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              Text(tr(context, a.descKey), style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+            ]),
+          ),
+          if (rows.isNotEmpty)
+            Container(
+              margin: const EdgeInsetsDirectional.only(start: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              decoration: BoxDecoration(color: a.background(scheme), borderRadius: BorderRadius.circular(12)),
+              child: Text('${rows.length}', style: TextStyle(color: a.foreground(scheme), fontWeight: FontWeight.w700)),
+            ),
+          IconButton(
+            tooltip: tr(context, 'rlAddTo', {'list': tr(context, a.titleKey)}),
+            icon: const Icon(Icons.add_circle_outline),
+            onPressed: () => _openAdd(a),
+          ),
+        ]),
+      ),
+      if (rows.isEmpty)
+        _EmptySection(action: a, onAdd: () => _openAdd(a))
+      else
         Container(
           decoration: BoxDecoration(
             color: scheme.surfaceContainerLow,
@@ -266,269 +332,233 @@ class _RuleList extends StatelessWidget {
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(children: [
-            for (var i = 0; i < items.length; i++) ...[
+            for (var i = 0; i < rows.length; i++) ...[
               if (i > 0) Divider(height: 1, color: scheme.outlineVariant),
-              row(items[i]),
+              _tile(context, rows[i], lists),
             ],
           ]),
         ),
-      ]);
-    }
+    ]);
+  }
 
-    Widget tile(
-            {required Widget leading, required String title, String? subtitle, required String rule, bool ltr = true}) =>
-        ListTile(
-          leading: leading,
-          title: Text(title, textDirection: ltr ? TextDirection.ltr : null),
-          subtitle: subtitle == null ? null : Text(subtitle),
-          trailing: IconButton(
-            tooltip: MaterialLocalizations.of(context).deleteButtonTooltip,
-            icon: const Icon(Icons.close),
-            onPressed: () => remove(rule),
+  Widget _leading(_Entry e) {
+    final scheme = Theme.of(context).colorScheme;
+    switch (e.rule.kind) {
+      case RuleKind.app:
+        return isDesktop ? const SizedBox(width: 36, height: 36, child: Icon(Icons.apps)) : AppIcon(id: e.rule.value, size: 36);
+      case RuleKind.service:
+        return ServiceAvatar(ruleServices[e.rule.value]);
+      default:
+        return CircleAvatar(
+          backgroundColor: scheme.surfaceContainerHighest,
+          child: Icon(
+            switch (e.rule.kind) {
+              RuleKind.ip => Icons.numbers,
+              RuleKind.port => Icons.settings_ethernet,
+              RuleKind.keyword || RuleKind.regex => Icons.manage_search,
+              _ => Icons.language,
+            },
+            color: scheme.onSurfaceVariant,
           ),
         );
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-      children: [
-        Text(tr(context, 'ruleDesc'), style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-        if (parsed.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 40),
-            child: Column(children: [
-              Icon(Icons.alt_route, size: 56, color: scheme.outline),
-              const SizedBox(height: 12),
-              Text(tr(context, 'ruleNone'), style: text.titleMedium),
-              const SizedBox(height: 4),
-              Text(tr(context, 'ruleNoneHint'), textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 16),
-              FilledButton.tonalIcon(onPressed: onAdd, icon: const Icon(Icons.add), label: Text(tr(context, 'ruleAdd'))),
-            ]),
-          ),
-        section(
-            'ruleSectionApps',
-            apps,
-            (p) => tile(
-                  leading: AppIcon(id: p.rule.value, size: 36),
-                  title: appNames[p.rule.value] ?? p.rule.value,
-                  subtitle: appNames[p.rule.value] == null ? null : p.rule.value,
-                  rule: p.text,
-                  ltr: appNames[p.rule.value] == null,
-                )),
-        section('ruleSectionServices', services, (p) {
-          final service = ruleServices[p.rule.value];
-          return tile(
-            leading: CircleAvatar(
-              backgroundColor: scheme.primaryContainer,
-              child: Text((service?.name ?? '?').characters.first,
-                  style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700)),
-            ),
-            title: service?.name ?? p.rule.value,
-            subtitle: tr(context, 'ruleServiceSites', {'n': service?.domains.length ?? 0}),
-            rule: p.text,
-          );
-        }),
-        section(
-            'ruleSectionOther',
-            others,
-            (p) => tile(
-                  leading: Icon(switch (p.rule.kind) {
-                    RuleKind.ip => Icons.numbers,
-                    RuleKind.port => Icons.settings_ethernet,
-                    RuleKind.keyword || RuleKind.regex => Icons.manage_search,
-                    _ => Icons.language,
-                  }),
-                  title: p.text,
-                  subtitle: tr(context, 'ruleType_${p.rule.kind.name}'),
-                  rule: p.text,
-                )),
-        if (apps.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(tr(context, 'ruleAppNote'), style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        ],
-      ],
-    );
-  }
-}
-
-/// A page to choose several things from a list and add them: a search box, a check mark on each, and a button
-/// with how many are chosen. [taken] are the ones that are rules already.
-abstract class _PickerState<T extends StatefulWidget> extends State<T> {
-  final search = TextEditingController();
-  final chosen = <String>{};
-
-  @override
-  void dispose() {
-    search.dispose();
-    super.dispose();
+    }
   }
 
-  Widget scaffold({required String title, required Widget list, Widget? extra}) => Scaffold(
-        appBar: AppBar(title: Text(title)),
-        body: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: TextField(
-              controller: search,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                labelText: tr(context, 'ruleSearch'),
-                border: const OutlineInputBorder(),
-              ),
-            ),
+  String _subtitle(_Entry e) => switch (e.rule.kind) {
+        RuleKind.app when _appNames[e.rule.value] != null => e.rule.value,
+        RuleKind.service => tr(context, 'ruleServiceSites', {'n': ruleServices[e.rule.value]?.domains.length ?? 0}),
+        _ => tr(context, 'ruleType_${e.rule.kind.name}'),
+      };
+
+  Widget _tile(BuildContext context, _Entry e, RuleLists lists) {
+    final scheme = Theme.of(context).colorScheme;
+    final wins = lists.firstWith(e.text);
+    final plain = e.rule.kind != RuleKind.service && !(e.rule.kind == RuleKind.app && _appNames[e.rule.value] != null);
+    return Dismissible(
+      key: ValueKey('${e.action.name}|${e.text}'),
+      background: _swipeBackground(scheme, AlignmentDirectional.centerStart),
+      secondaryBackground: _swipeBackground(scheme, AlignmentDirectional.centerEnd),
+      onDismissed: (_) => _remove(e),
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.delete): () => _remove(e),
+          const SingleActivator(LogicalKeyboardKey.backspace): () => _remove(e),
+        },
+        child: ListTile(
+          tileColor: scheme.surfaceContainerLow,
+          leading: _leading(e),
+          title: Text(_title(e.rule), textDirection: plain ? TextDirection.ltr : null),
+          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_subtitle(e), textDirection: e.rule.kind == RuleKind.app && _appNames[e.rule.value] != null ? TextDirection.ltr : null),
+            if (wins != null && wins != e.action)
+              Text(tr(context, 'rlOverridden', {'list': tr(context, wins.titleKey)}),
+                  style: TextStyle(color: scheme.tertiary, fontWeight: FontWeight.w600)),
+          ]),
+          trailing: IconButton(
+            tooltip: tr(context, 'rlRemove'),
+            icon: const Icon(Icons.close),
+            onPressed: () => _remove(e),
           ),
-          if (extra != null) extra,
-          Expanded(child: list),
-        ]),
-        bottomNavigationBar: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: FilledButton(
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-              onPressed: chosen.isEmpty ? null : () => Navigator.pop(context, chosen.toList()),
-              child: Text(chosen.isEmpty ? tr(context, 'rulePickSome') : tr(context, 'ruleAddN', {'n': chosen.length})),
-            ),
-          ),
+          onTap: () => _openRow(e),
         ),
+      ),
+    );
+  }
+
+  Widget _swipeBackground(ColorScheme scheme, AlignmentGeometry alignment) => Container(
+        color: scheme.errorContainer,
+        alignment: alignment,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Icon(Icons.delete_outline, color: scheme.onErrorContainer),
       );
-}
 
-class _AppPickerPage extends StatefulWidget {
-  const _AppPickerPage({required this.taken});
-
-  final Set<String> taken;
-
-  @override
-  State<_AppPickerPage> createState() => _AppPickerPageState();
-}
-
-class _AppPickerPageState extends _PickerState<_AppPickerPage> {
-  List<AppEntry>? _apps;
-  final _custom = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    VpnChannel.listApps().then((l) {
-      if (mounted) setState(() => _apps = l);
-    }).catchError((_) {
-      if (mounted) setState(() => _apps = const []);
-    });
-  }
-
-  @override
-  void dispose() {
-    _custom.dispose();
-    super.dispose();
-  }
-
-  void _addCustom(String v) {
-    final name = v.trim();
-    if (name.isEmpty || parseRouteRule('app:$name') == null) return;
-    setState(() {
-      (_apps ??= []).add(AppEntry(name, name));
-      chosen.add(name);
-    });
-    _custom.clear();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final q = search.text.trim().toLowerCase();
-    final shown = [
-      for (final a in _apps ?? const <AppEntry>[])
-        if (q.isEmpty || a.label.toLowerCase().contains(q) || a.id.toLowerCase().contains(q)) a,
-    ];
-    return scaffold(
-      title: tr(context, 'ruleAppsTitle'),
-      extra: isDesktop
-          ? Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-              child: TextField(
-                controller: _custom,
-                onSubmitted: _addCustom,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.add),
-                  labelText: tr(context, 'addProcess'),
-                  border: const OutlineInputBorder(),
-                ),
+  /// What can be done with one rule: move it to another list, or remove it.
+  Future<void> _openRow(_Entry e) {
+    final scheme = Theme.of(context).colorScheme;
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (sheet) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: ActionBadge(e.action),
+            title: CodeText(_title(e.rule), style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text('${tr(context, e.action.titleKey)} · ${_subtitle(e)}'),
+          ),
+          const Divider(height: 1),
+          for (final a in RuleAction.values)
+            if (a != e.action)
+              ListTile(
+                leading: Icon(a.icon),
+                title: Text(tr(context, 'rlMoveTo', {'list': tr(context, a.titleKey)})),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  _move(e, a);
+                },
               ),
-            )
-          : null,
-      list: _apps == null
-          ? const Center(child: CircularProgressIndicator())
-          : shown.isEmpty
-              ? Center(child: Text(tr(context, 'ruleNoApps')))
-              : ListView(children: [
-                  for (final a in shown)
-                    CheckboxListTile(
-                      secondary: isDesktop ? const Icon(Icons.apps) : AppIcon(id: a.id),
-                      value: widget.taken.contains(a.id) || chosen.contains(a.id),
-                      onChanged: widget.taken.contains(a.id)
-                          ? null
-                          : (v) => setState(() => v == true ? chosen.add(a.id) : chosen.remove(a.id)),
-                      title: Text(a.label),
-                      subtitle: widget.taken.contains(a.id)
-                          ? Text(tr(context, 'ruleAlready'))
-                          : (a.label == a.id ? null : Text(a.id)),
-                    ),
-                ]),
+          ListTile(
+            leading: Icon(Icons.delete_outline, color: scheme.error),
+            title: Text(tr(context, 'rlRemove'), style: TextStyle(color: scheme.error)),
+            onTap: () {
+              Navigator.pop(sheet);
+              _remove(e);
+            },
+          ),
+        ]),
+      ),
     );
   }
 }
 
-class _ServicePickerPage extends StatefulWidget {
-  const _ServicePickerPage({required this.taken});
+/// A tinted box with a short explanation.
+class _InfoCard extends StatelessWidget {
+  const _InfoCard({required this.icon, required this.body, this.title, this.color, this.onColor});
 
-  final Set<String> taken;
+  final IconData icon;
+  final String body;
+  final String? title;
+  final Color? color, onColor;
 
-  @override
-  State<_ServicePickerPage> createState() => _ServicePickerPageState();
-}
-
-class _ServicePickerPageState extends _PickerState<_ServicePickerPage> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final q = search.text.trim().toLowerCase();
-    final shown = [
-      for (final s in ruleServiceList)
-        if (q.isEmpty || s.name.toLowerCase().contains(q) || s.domains.any((d) => d.contains(q))) s,
-    ];
-    final groups = <String>[];
-    for (final s in shown) {
-      if (!groups.contains(s.group)) groups.add(s.group);
-    }
-    return scaffold(
-      title: tr(context, 'ruleServicesTitle'),
-      list: shown.isEmpty
-          ? Center(child: Text(tr(context, 'ruleNoServices')))
-          : ListView(children: [
-              for (final g in groups) ...[
-                Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 16, 4),
-                  child: Text(tr(context, g),
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(color: scheme.onSurfaceVariant)),
-                ),
-                for (final s in shown.where((s) => s.group == g))
-                  CheckboxListTile(
-                    secondary: CircleAvatar(
-                      backgroundColor: scheme.primaryContainer,
-                      child: Text(s.name.characters.first,
-                          style: TextStyle(color: scheme.onPrimaryContainer, fontWeight: FontWeight.w700)),
-                    ),
-                    value: widget.taken.contains(s.id) || chosen.contains(s.id),
-                    onChanged: widget.taken.contains(s.id)
-                        ? null
-                        : (v) => setState(() => v == true ? chosen.add(s.id) : chosen.remove(s.id)),
-                    title: Text(s.name),
-                    subtitle: Text(widget.taken.contains(s.id)
-                        ? tr(context, 'ruleAlready')
-                        : tr(context, 'ruleServiceSites', {'n': s.domains.length})),
-                  ),
-              ],
-            ]),
+    final fg = onColor ?? scheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: color ?? scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(16)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 22, color: fg),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (title != null) Text(title!, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: fg, fontWeight: FontWeight.w700)),
+            if (title != null) const SizedBox(height: 2),
+            Text(body, style: TextStyle(color: fg, height: 1.4)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// Shown instead of the lists' contents before the first rule: what a rule is for.
+class _EmptyIntro extends StatelessWidget {
+  const _EmptyIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 28, 8, 4),
+      child: Column(children: [
+        Icon(Icons.alt_route, size: 56, color: scheme.primary),
+        const SizedBox(height: 12),
+        Text(tr(context, 'ruleNone'), style: text.titleLarge, textAlign: TextAlign.center),
+        const SizedBox(height: 6),
+        Text(tr(context, 'rlEmptyBody'),
+            textAlign: TextAlign.center, style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.4)),
+      ]),
+    );
+  }
+}
+
+/// What an empty list says: an example of what to put in it, and the way to add.
+class _EmptySection extends StatelessWidget {
+  const _EmptySection({required this.action, required this.onAdd});
+
+  final RuleAction action;
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(children: [
+        Expanded(child: Text(tr(context, action.exampleKey), style: TextStyle(color: scheme.onSurfaceVariant, height: 1.4))),
+        TextButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: Text(tr(context, 'ruleAdd'))),
+      ]),
+    );
+  }
+}
+
+/// What the search says when nothing matches; when the words are a rule, the three ways to add it.
+class _NoMatch extends StatelessWidget {
+  const _NoMatch({required this.query, required this.onAdd});
+
+  final String query;
+  final void Function(RuleAction action, RouteRule rule) onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final rule = parseUserRule(query);
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(children: [
+        Icon(Icons.search_off, size: 48, color: scheme.outline),
+        const SizedBox(height: 8),
+        Text(tr(context, 'rlNoMatch', {'q': query}), textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+        if (rule != null) ...[
+          const SizedBox(height: 16),
+          Text(tr(context, 'rlAddAs', {'rule': rule.text}), textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 8),
+          Wrap(alignment: WrapAlignment.center, spacing: 8, runSpacing: 8, children: [
+            for (final a in RuleAction.values)
+              FilledButton.tonalIcon(
+                onPressed: () => onAdd(a, rule),
+                icon: Icon(a.icon, size: 18),
+                label: Text(tr(context, a.shortKey)),
+              ),
+          ]),
+        ],
+      ]),
     );
   }
 }
