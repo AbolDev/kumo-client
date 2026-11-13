@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/latency_tester.dart' show delayConfigForTest;
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
 
@@ -19,6 +20,21 @@ bool _hasAaaaRule(Map<String, dynamic> cfg) => ((cfg['dns'] as Map)['rules'] as 
     .any((r) => r is Map && (r['query_type'] as List?)?.contains('AAAA') == true && r['action'] == 'predefined');
 
 void main() {
+  test('the test core of a WireGuard server looks names up through the tunnel, IPv4 only when it has no IPv6', () {
+    final c = parseLink(_link())!;
+    final cfg = jsonDecode(delayConfigForTest([c.outbound])) as Map<String, dynamic>;
+    final dns = cfg['dns'] as Map;
+    expect(((dns['servers'] as List).single as Map)['detour'], 'proxy');
+    expect(dns['strategy'], 'ipv4_only');
+    final both = parseLink(_link(address: '10.0.0.2%2F32,fd00%3A%3A2%2F128'))!;
+    expect(((jsonDecode(delayConfigForTest([both.outbound])) as Map)['dns'] as Map).containsKey('strategy'), isFalse);
+    // Any other server is given the name itself: its lookup stays as it was.
+    final other = jsonDecode(delayConfigForTest([
+      {'type': 'socks', 'server': '203.0.113.7', 'server_port': 1080},
+    ])) as Map<String, dynamic>;
+    expect((((other['dns'] as Map)['servers'] as List).single as Map).containsKey('detour'), isFalse);
+  });
+
   test('the link of a provider is read: the key and the address are decoded, and the name keeps its text', () {
     final c = parseLink(_link())!;
     expect(c.outbound['type'], 'wireguard');

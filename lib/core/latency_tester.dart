@@ -75,9 +75,16 @@ String _delayConfig(List<Map<String, dynamic>> layers) {
     'log': {'level': 'error'},
     'dns': {
       'servers': [
-        {'type': 'udp', 'tag': 'dns', 'server': '1.1.1.1'},
+        // A WireGuard tunnel carries addresses, not names: the core looks the name of the test page up itself
+        // before it dials. Asked from the phone's own network that lookup is lost where the filter drops or
+        // answers DNS to 1.1.1.1 itself, and every test of a working server timed out; so it is asked through
+        // the tunnel, as the traffic of a connection is. (Other servers are given the name and look it up.)
+        {'type': 'udp', 'tag': 'dns', 'server': '1.1.1.1', if (wireguard) 'detour': 'proxy'},
       ],
       'final': 'dns',
+      // A tunnel with no IPv6 address of its own cannot dial an IPv6 address: only IPv4 ones are asked for.
+      if (wireguard && !((layers.first['address'] as List?) ?? const []).any((a) => '$a'.contains(':')))
+        'strategy': 'ipv4_only',
     },
     if (!wireguard)
       'outbounds': [
