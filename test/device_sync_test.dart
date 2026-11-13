@@ -450,6 +450,9 @@ void main() {
         }
         expect(state.manual.configs.length, 2);
         expect(find.textContaining('Done: 1 servers'), findsOneWidget);
+        // Applying asks the proxy that is kept up to be looked at again, a moment later: that moment passes here,
+        // so no timer is left when the test ends.
+        await tester.pump(const Duration(seconds: 2));
       }, _RealHttp());
     });
   });
