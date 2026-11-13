@@ -44,6 +44,24 @@ object VpnBridge {
 
     private val main = Handler(Looper.getMainLooper())
 
+    /** What the core of the connection said and the app has not taken yet: `time|level|text`, the oldest first. */
+    private val coreLog = java.util.ArrayDeque<String>()
+
+    /** A line of the core's log ([level] as sing-box counts: 2 error, 3 warning, 4 info, 5 debug). */
+    fun addCoreLog(level: Int, message: String) {
+        synchronized(coreLog) {
+            if (coreLog.size >= 400) coreLog.removeFirst()
+            coreLog.addLast("${System.currentTimeMillis()}|$level|${message.replace('\n', ' ')}")
+        }
+    }
+
+    /** The lines kept since the last call; they are forgotten here. */
+    fun takeCoreLog(): List<String> = synchronized(coreLog) {
+        val out = ArrayList(coreLog)
+        coreLog.clear()
+        out
+    }
+
     /** The server in use, for the widgets. */
     @Volatile
     var serverName: String? = null

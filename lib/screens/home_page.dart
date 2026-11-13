@@ -2283,9 +2283,13 @@ class _ConfigTile extends StatelessWidget {
       case _ConfigAction.delete:
         _removeWithUndo(context, state, [(group: group, config: config)]);
       case _ConfigAction.tcping:
-        state.testOne(config, real: false);
+        if (!state.canTestNow(config, real: false)) {
+          toast(context, t.realDelayNeedsDisconnect);
+        } else {
+          state.testOne(config, real: false);
+        }
       case _ConfigAction.realDelay:
-        if (!state.canTestReal) {
+        if (!state.canTestNow(config, real: true)) {
           toast(context, t.realDelayNeedsDisconnect);
         } else {
           state.testOne(config, real: true);

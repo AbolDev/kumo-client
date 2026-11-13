@@ -568,6 +568,7 @@ class KumoActivity : FlutterActivity() {
                     result.success(text)
                 }
                 "lastDelayError" -> result.success(lastDelayError)
+                "takeCoreLog" -> result.success(VpnBridge.takeCoreLog())
                 "clearCoreCrash" -> {
                     runCatching {
                         val core = File(filesDir, "core")

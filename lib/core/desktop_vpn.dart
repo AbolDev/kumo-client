@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show ValueNotifier, visibleForTesting;
 
+import 'app_log.dart' show coreLogLine;
 import 'latency_tester.dart' show socksWarmDelay;
 import 'probe_fetch.dart' show probeFetch;
 import 'proxy_holder.dart';
@@ -242,12 +243,33 @@ class DesktopVpn {
     return port;
   }
 
-  Future<Process> _spawn(String exe, List<String> args, StringBuffer output) async {
+  /// What the core of the connection wrote and the app has not taken yet (see [takeCoreLog]).
+  final _coreLines = <String>[];
+
+  /// The lines the core of the connection wrote since the last call, as `time in ms|level|text` (the level as
+  /// sing-box counts it), the oldest first.
+  List<String> takeCoreLog() {
+    final out = List<String>.of(_coreLines);
+    _coreLines.clear();
+    return out;
+  }
+
+  /// With [keep] what the program writes is also kept line by line for the log of the app (the core of a
+  /// connection; not the throw-away cores of the tests).
+  Future<Process> _spawn(String exe, List<String> args, StringBuffer output, {bool keep = false}) async {
     final p = await Process.start(_exePath(exe), args, workingDirectory: dataDir);
     if (Platform.isWindows) WinJob.add(p.pid);
     _track(p);
     void collect(List<int> data) {
-      if (output.length < 4000) output.write(utf8.decode(data, allowMalformed: true));
+      final text = utf8.decode(data, allowMalformed: true);
+      if (output.length < 4000) output.write(text);
+      if (!keep) return;
+      for (final line in text.split('\n')) {
+        final entry = coreLogLine(line);
+        if (entry == null) continue;
+        if (_coreLines.length >= 400) _coreLines.removeAt(0);
+        _coreLines.add('${DateTime.now().millisecondsSinceEpoch}|$entry');
+      }
     }
 
     p.stdout.listen(collect, onError: (_) {});
@@ -482,7 +504,7 @@ rm -rf "$T"
           throw StateError('the password was not given: ${output.toString().trim()}');
         }
       } else {
-        core = _core = await _spawn('kumo-core', ['run', '-c', file], output);
+        core = _core = await _spawn('kumo-core', ['run', '-c', file], output, keep: true);
       }
       var exited = false;
       if (core != null) {
@@ -683,7 +705,7 @@ rm -rf "$T"
       final cfg = jsonDecode(configJson) as Map<String, dynamic>;
       final held = holdProxy ? await _front(cfg) : null;
       await _writeConfig(file, held == null ? configJson : jsonEncode(cfg));
-      final core = _sbCore = await _spawn('kumo-core', ['run', '-c', file], output);
+      final core = _sbCore = await _spawn('kumo-core', ['run', '-c', file], output, keep: true);
       var exited = false;
       core.exitCode.then((_) {
         exited = true;

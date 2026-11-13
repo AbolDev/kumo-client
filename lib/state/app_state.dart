@@ -211,9 +211,47 @@ class AppState extends ChangeNotifier {
   /// Changes with every new line of the log, so the log page redraws without the whole app doing it.
   final logRevision = ValueNotifier<int>(0);
 
+  var _pullingCore = false;
+
+  /// Takes what the core of the connection said since the last time and writes it to the log, each line at the
+  /// time the core said it. How much the core says is the log level of the network settings. A line said again
+  /// and again is written once, and a burst is cut short, so that the rest of the log is not pushed out.
+  Future<void> pullCoreLog() async {
+    if (_pullingCore) return;
+    _pullingCore = true;
+    try {
+      final lines = await VpnChannel.takeCoreLog();
+      String? last;
+      var written = 0;
+      var left = 0;
+      for (final raw in lines) {
+        final m = RegExp(r'^(\d+)\|(\d+)\|(.*)$').firstMatch(raw);
+        if (m == null) continue;
+        // On Android the text is the core's line as it is; on a computer the prefix is taken off already.
+        final text = (coreLogLine(m[3]!) ?? '').replaceFirst(RegExp(r'^\d+\|'), '');
+        if (text.isEmpty || text == last) continue;
+        last = text;
+        if (written >= 150) {
+          left++;
+          continue;
+        }
+        written++;
+        log('core: $text',
+            level: coreLogLevel(int.parse(m[2]!)),
+            tag: LogTag.core,
+            time: DateTime.fromMillisecondsSinceEpoch(int.parse(m[1]!)));
+      }
+      if (left > 0) log('core: … and $left more lines', level: LogLevel.debug, tag: LogTag.core);
+    } catch (_) {
+      // nothing to take
+    } finally {
+      _pullingCore = false;
+    }
+  }
+
   /// Adds a line to the log. Without a [level] or a [tag] they are told from what the line says.
-  void log(String text, {LogLevel? level, LogTag? tag}) {
-    logs.add(LogEntry(DateTime.now(), text, level: level, tag: tag));
+  void log(String text, {LogLevel? level, LogTag? tag, DateTime? time}) {
+    logs.add(LogEntry(time ?? DateTime.now(), text, level: level, tag: tag));
     if (logs.length > _maxLogs) logs.removeRange(0, logs.length - _maxLogs);
     _logTimer ??= Timer(const Duration(seconds: 2), () {
       _logTimer = null;
@@ -688,6 +726,7 @@ class AppState extends ChangeNotifier {
         _watch = Timer.periodic(const Duration(seconds: 20), (_) {
           _refreshActive();
           _healthTick();
+          pullCoreLog();
         });
         Future<void>.delayed(const Duration(seconds: 3), _refreshActive);
         _refreshListsSoon();
@@ -697,6 +736,8 @@ class AppState extends ChangeNotifier {
         _listsTimer?.cancel();
         if (changed && (s.status == VpnStatus.stopped || s.status == VpnStatus.error)) _warmLookup(const Duration(seconds: 3));
       }
+      // What the core said on the way to this state belongs before the line of the state itself.
+      if (changed) unawaited(pullCoreLog());
       if (s.status == VpnStatus.error) {
         final reason = s.error ?? '';
         message = (t) => t.connectFailed(reason);
@@ -1894,16 +1935,32 @@ class AppState extends ChangeNotifier {
 
   /// Tests one config from its menu.
   Future<void> testOne(ProxyConfig c, {required bool real}) async {
-    if (testing.contains(c) || (real && !_real)) return;
+    // While connected a real delay can only be taken of the server in use, through the connection itself.
+    final live = connected && identical(c, selected);
+    if (testing.contains(c) || (real && !_real && !live)) return;
     testing.add(c);
     notifyListeners();
     try {
       // A server that runs over UDP (WireGuard, Hysteria, TUIC) has no TCP port to connect to: a TCP ping of it
       // always timed out. It is asked the only way it can be, through the core, when that is possible now.
       final overUdp = !c.isOpenVpn && udpProtocols.contains(c.protocol);
-      final ms = real || (overUdp && _real) ? await realDelayOrDomestic(c) : await tcpLatency(c);
+      final int ms;
+      var how = real || (overUdp && _real) ? 'Real delay' : 'TCP ping';
+      if ((overUdp || real) && !_real) {
+        // While the connection is up no test core can be run, and a TCP connect to a UDP port only times out.
+        // The server in use is measured through the connection itself; another one cannot be measured now.
+        how = 'Delay through the connection';
+        ms = connected && identical(c, selected)
+            ? await tunnelDelay(
+                socksPort: _xrayPort,
+                socksAuth: _xrayAuth,
+                proxyPort: net.tun ? null : net.proxyPort,
+                url: c.domesticOnly ? domesticDelayUrl : null)
+            : -2;
+      } else {
+        ms = real || (overUdp && _real) ? await realDelayOrDomestic(c) : await tcpLatency(c);
+      }
       if (ms != -2) c.latencyMs = ms;
-      final how = real || (overUdp && _real) ? 'Real delay' : 'TCP ping';
       final result = ms == -2
           ? 'skipped, the connection is changing'
           : ms < 0
@@ -1931,6 +1988,14 @@ class AppState extends ChangeNotifier {
   }
 
   bool get canTestReal => _real;
+
+  /// Whether [c] can be tested from its menu now. While connected no test core can be run: the server in use is
+  /// measured through the connection, a TCP ping still works for a server with a TCP port, and anything else
+  /// (a real delay of another server, any test of another server that runs over UDP) has to wait.
+  bool canTestNow(ProxyConfig c, {required bool real}) {
+    if (_real || (connected && identical(c, selected))) return true;
+    return !real && (c.isOpenVpn || !udpProtocols.contains(c.protocol));
+  }
 
   /// In automatic mode: the answering server with the lowest ping, which is the one
   /// the automatic group starts with.

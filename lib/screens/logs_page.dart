@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -71,6 +72,22 @@ class _LogsPageState extends State<LogsPage> {
   var _query = '';
 
   AppState get state => widget.state;
+
+  Timer? _pull;
+
+  @override
+  void initState() {
+    super.initState();
+    // While the page is open, what the core says is taken every two seconds, so the log is live.
+    state.pullCoreLog();
+    _pull = Timer.periodic(const Duration(seconds: 2), (_) => state.pullCoreLog());
+  }
+
+  @override
+  void dispose() {
+    _pull?.cancel();
+    super.dispose();
+  }
 
   bool _fits(LogEntry e, {bool ignoreTag = false}) {
     if (_onlyProblems && !e.isProblem) return false;

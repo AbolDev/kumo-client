@@ -34,6 +34,39 @@ LogTag guessLogTag(String text) {
   return LogTag.app;
 }
 
+final _ansi = RegExp(r'\x1B\[[0-9;]*m');
+final _coreLevel = RegExp(r'\b(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|PANIC)\b');
+// What sing-box puts before its message: the zone and the time, the level, and the seconds since it started.
+final _corePrefix = RegExp(
+    r'^(?:[+-]\d{4}\s+)?(?:\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+)?(?:TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL|PANIC)\s*(?:\[\d+\]\s*)?');
+
+/// A line a core program wrote, as `level|text` with the level as sing-box counts it (0 panic, 1 fatal, 2 error,
+/// 3 warning, 4 info, 5 debug, 6 trace) and the colours and the time taken off. Null for an empty line.
+String? coreLogLine(String raw) {
+  final line = raw.replaceAll(_ansi, '').trim();
+  if (line.isEmpty) return null;
+  final level = switch (_coreLevel.firstMatch(line)?[1]) {
+    'PANIC' => 0,
+    'FATAL' => 1,
+    'ERROR' => 2,
+    'WARN' || 'WARNING' => 3,
+    'DEBUG' => 5,
+    'TRACE' => 6,
+    _ => 4,
+  };
+  final text = line.replaceFirst(_corePrefix, '').trim();
+  return '$level|${text.isEmpty ? line : text}';
+}
+
+/// The level of the app's log for a level of the core's.
+LogLevel coreLogLevel(int level) => level <= 2
+    ? LogLevel.error
+    : level == 3
+        ? LogLevel.warn
+        : level == 4
+            ? LogLevel.info
+            : LogLevel.debug;
+
 class LogEntry {
   LogEntry(this.time, this.text, {LogLevel? level, LogTag? tag})
       : level = level ?? guessLogLevel(text),

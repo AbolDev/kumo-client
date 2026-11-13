@@ -39,6 +39,20 @@ void main() {
     expect(guessLogTag('Kumo opened on android 14'), LogTag.app);
   });
 
+  test('a line of the core: the colours and the time are taken off and the level is read', () {
+    expect(coreLogLine('\x1B[31mERROR\x1B[0m[0012] outbound/wireguard[proxy]: connect to server: timeout'),
+        '2|outbound/wireguard[proxy]: connect to server: timeout');
+    expect(coreLogLine('+0330 2026-11-13 10:00:01 WARN router: no route'), '3|router: no route');
+    expect(coreLogLine('INFO[0000] sing-box started (1.2s)'), '4|sing-box started (1.2s)');
+    expect(coreLogLine('DEBUG[0001] dns: lookup'), '5|dns: lookup');
+    expect(coreLogLine('something without a level'), '4|something without a level');
+    expect(coreLogLine('   '), isNull);
+    expect(coreLogLevel(2), LogLevel.error);
+    expect(coreLogLevel(3), LogLevel.warn);
+    expect(coreLogLevel(4), LogLevel.info);
+    expect(coreLogLevel(6), LogLevel.debug);
+  });
+
   test('warnings and errors are the problems', () {
     LogEntry of(LogLevel l) => LogEntry(DateTime(2026), 'x', level: l, tag: LogTag.app);
     expect(of(LogLevel.error).isProblem, isTrue);
