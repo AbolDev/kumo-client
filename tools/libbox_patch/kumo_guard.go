@@ -21,8 +21,13 @@ func kumoGuard(err *error, work func() error) {
 		defer close(done)
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "kumo: panic in a test core: %v\n\ngoroutine 0 [recovered]:\n%s\n", r, debug.Stack())
-				*err = E.New("panic: ", fmt.Sprint(r))
+				stack := debug.Stack()
+				fmt.Fprintf(os.Stderr, "kumo: panic in a test core: %v\n\ngoroutine 0 [recovered]:\n%s\n", r, stack)
+				// The place of the panic goes with the error, so that the app can write it to its log.
+				if len(stack) > 6000 {
+					stack = stack[:6000]
+				}
+				*err = E.New("panic: ", fmt.Sprint(r), "\n", string(stack))
 			}
 		}()
 		*err = work()

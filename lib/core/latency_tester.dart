@@ -225,10 +225,18 @@ Future<String?> probeLog(ProxyConfig c, {String? url}) async {
     await VpnChannel.deleteFile('core/$file');
     final lines = text
         .split('\n')
-        .where((l) => l.trim().isNotEmpty && !RegExp('private_key|preshared_key|public_key').hasMatch(l))
+        // Not the lines that could hold a key, nor the two dozen that only say a worker started or stopped.
+        .where((l) =>
+            l.trim().isNotEmpty &&
+            !RegExp('private_key|preshared_key|public_key').hasMatch(l) &&
+            !RegExp(r'routine: (encryption|decryption|handshake) worker \d+ - (started|stopped)').hasMatch(l))
         .toList();
     final kept = lines.length > 60 ? [...lines.take(40), '…', ...lines.skip(lines.length - 20)] : lines;
-    return ['result: $ms${ms < 0 && error != null ? ' ($error)' : ''}', ...kept].join('\n');
+    // The error first, with the place of a panic under it (its lines, without the tabs of a Go trace).
+    final said = ms < 0 && error != null
+        ? error.split('\n').map((l) => l.replaceAll('\t', '  ')).where((l) => l.trim().isNotEmpty).take(70).toList()
+        : const <String>[];
+    return ['result: $ms${said.isEmpty ? '' : ' (${said.first})'}', ...said.skip(1), ...kept].join('\n');
   } catch (e) {
     return 'probe failed: $e';
   }
