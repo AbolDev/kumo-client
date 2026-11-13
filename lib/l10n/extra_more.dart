@@ -3,7 +3,7 @@
 
 const extraMoreEn = <String, String>{
   'ruleTitle': 'Routing rules',
-  'ruleDesc': 'Always send chosen domains or addresses directly, or always through the VPN.',
+  'ruleDesc': 'Choose apps, services, websites, addresses and ports that always go direct, always go through the VPN, or are always blocked.',
   'ruleDirect': 'Always direct',
   'ruleProxy': 'Always through the VPN',
   'ruleHint': 'Domain or IP, e.g. example.com or 10.0.0.0/8',
@@ -125,7 +125,7 @@ const extraMoreEn = <String, String>{
 
 const extraMoreFa = <String, String>{
   'ruleTitle': 'قوانین مسیریابی',
-  'ruleDesc': 'دامنه‌ها یا آدرس‌های دلخواه را همیشه مستقیم یا همیشه از طریق VPN بفرست.',
+  'ruleDesc': 'برنامه‌ها، سرویس‌ها، سایت‌ها، آدرس‌ها و پورت‌هایی را انتخاب کنید که همیشه مستقیم بروند، همیشه از VPN رد شوند یا همیشه مسدود باشند.',
   'ruleDirect': 'همیشه مستقیم',
   'ruleProxy': 'همیشه از VPN',
   'ruleHint': 'دامنه یا IP، مثلاً example.com یا 10.0.0.0/8',

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'net_options.dart';
 import 'proxy_config.dart';
 import 'routing_rules.dart';
+import 'rule_services.dart';
 import 'provider_routing.dart';
 import 'ad_lists.dart';
 
@@ -313,6 +314,9 @@ class _RuleFields {
   final ports = <int>[];
   final ranges = <String>[];
 
+  /// The apps (Android packages, or programs on a computer) whose traffic the rule is about.
+  final apps = <String>[];
+
   _RuleFields(List<String> texts) {
     for (final t in texts) {
       final r = parseRouteRule(t);
@@ -334,6 +338,13 @@ class _RuleFields {
           } else {
             ports.add(int.parse(r.value));
           }
+        case RuleKind.app:
+          if (!apps.contains(r.value)) apps.add(r.value);
+        case RuleKind.service:
+          // A service is all its names (each also covers its sub-domains).
+          for (final d in ruleServices[r.value]?.domains ?? const <String>[]) {
+            if (!suffix.contains(d)) suffix.add(d);
+          }
       }
     }
   }
@@ -342,7 +353,9 @@ class _RuleFields {
       suffix.isNotEmpty || full.isNotEmpty || keyword.isNotEmpty || regex.isNotEmpty;
 
   /// Rules sending what matches to [target] (an `outbound` or an `action`).
-  List<Map<String, dynamic>> rules(Map<String, dynamic> target, {bool domainsOnly = false}) => [
+  List<Map<String, dynamic>> rules(Map<String, dynamic> target, {bool domainsOnly = false, bool desktop = false}) => [
+        // An app is told by its package on the phone and by its program name on a computer.
+        if (!domainsOnly && apps.isNotEmpty) {(desktop ? 'process_name' : 'package_name'): apps, ...target},
         if (suffix.isNotEmpty) {'domain_suffix': suffix, ...target},
         if (full.isNotEmpty) {'domain': full, ...target},
         if (keyword.isNotEmpty) {'domain_keyword': keyword, ...target},
@@ -550,7 +563,7 @@ String buildSingBoxConfig(
   final rules = <Map<String, dynamic>>[
     {'action': 'sniff'},
     {'protocol': 'dns', 'action': 'hijack-dns'},
-    ...block.rules({'action': 'reject'}),
+    ...block.rules({'action': 'reject'}, desktop: windows),
     // Ads and trackers: the built-in names first (they need no download), then the lists.
     if (builtIn.isNotEmpty) ...[
       adRule({'domain_suffix': builtIn}, {'action': 'reject'}),
@@ -566,8 +579,8 @@ String buildSingBoxConfig(
     // WebRTC would show the network's own address; DNS over TLS would skip the resolver above.
     if (o.blockStun) {'protocol': 'stun', 'action': 'reject'},
     if (strict) {'port': 853, 'network': 'tcp', 'action': 'reject'},
-    ...proxy.rules({'outbound': 'proxy'}),
-    ...direct.rules({'outbound': 'direct'}),
+    ...proxy.rules({'outbound': 'proxy'}, desktop: windows),
+    ...direct.rules({'outbound': 'direct'}, desktop: windows),
     if (provider != null) ...provider.route,
     {'ip_is_private': true, 'outbound': 'direct'},
   ];
@@ -664,7 +677,9 @@ String buildSingBoxConfig(
           : 'proxy',
       'auto_detect_interface': true,
       'default_domain_resolver': strict ? 'dns-boot' : 'dns-local',
-      if (processRules) 'find_process': true,
+      // A computer finds the program of a connection only when asked; the phone does it by itself.
+      if (processRules || (windows && (block.apps.isNotEmpty || proxy.apps.isNotEmpty || direct.apps.isNotEmpty)))
+        'find_process': true,
       if (!windows && o.networkStrategy != 'default') ...{
         'default_network_strategy': o.networkStrategy,
         if (o.networkStrategy == 'fallback') 'default_fallback_delay': '300ms',

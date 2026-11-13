@@ -1,3 +1,5 @@
+import 'rule_services.dart';
+
 /// What a manual routing rule matches.
 enum RuleKind {
   /// A domain and its sub-domains: `example.com`.
@@ -17,6 +19,12 @@ enum RuleKind {
 
   /// A destination port or range: `port:443`, `port:1000-2000`.
   port,
+
+  /// What an app sends: `app:org.telegram.messenger` (an Android package) or `app:chrome.exe` (a program).
+  app,
+
+  /// All the names of a popular service: `service:telegram` (see rule_services.dart).
+  service,
 }
 
 /// A manual routing rule: a domain, an IP address / network or a port.
@@ -40,6 +48,8 @@ class RouteRule {
         RuleKind.keyword => 'keyword:$value',
         RuleKind.regex => 'regex:$value',
         RuleKind.port => 'port:$value',
+        RuleKind.app => 'app:$value',
+        RuleKind.service => 'service:$value',
       };
 }
 
@@ -165,6 +175,15 @@ RouteRule? parseRouteRule(String input) {
     // that Dart accepts but RE2 refuses would stop the core from starting at all.
     if (!isRe2Compatible(r)) return null;
     return RouteRule(RuleKind.regex, r);
+  }
+  if (lower.startsWith('app:')) {
+    // The name is kept as it was written: package names are case-sensitive and a program may have spaces.
+    final name = raw.substring('app:'.length).trim();
+    return name.isEmpty || name.length > 200 || name.contains(RegExp(r'[\r\n]')) ? null : RouteRule(RuleKind.app, name);
+  }
+  if (lower.startsWith('service:')) {
+    final id = lower.substring('service:'.length).trim();
+    return ruleServices.containsKey(id) ? RouteRule(RuleKind.service, id) : null;
   }
   if (lower.startsWith('port:')) {
     final m = RegExp(r'^(\d{1,5})(?:-(\d{1,5}))?$').firstMatch(lower.substring('port:'.length).trim());
