@@ -158,6 +158,8 @@ class _LogsPageState extends State<LogsPage> {
           key: const ValueKey('logs-problems'),
           avatar: const Icon(Icons.error_outline, size: 18),
           label: Text('${tr(context, 'logsOnlyProblems')} · $problems'),
+          // The tick of a chosen chip is drawn over its icon: the colour of the chip says it is chosen.
+          showCheckmark: false,
           selected: _onlyProblems,
           onSelected: (v) => setState(() => _onlyProblems = v),
         ),
@@ -166,6 +168,8 @@ class _LogsPageState extends State<LogsPage> {
           key: const ValueKey('logs-details'),
           avatar: const Icon(Icons.notes, size: 18),
           label: Text(tr(context, 'logsDetails')),
+          // The tick of a chosen chip is drawn over its icon: the colour of the chip says it is chosen.
+          showCheckmark: false,
           selected: _details,
           onSelected: (v) => setState(() => _details = v),
         ),
@@ -177,6 +181,8 @@ class _LogsPageState extends State<LogsPage> {
                 key: ValueKey('logs-tag-${tag.name}'),
                 avatar: Icon(_tagIcon(tag), size: 18),
                 label: Text('${tr(context, _tagKey(tag))} · ${perTag[tag] ?? 0}'),
+                // The tick of a chosen chip is drawn over its icon: the colour of the chip says it is chosen.
+                showCheckmark: false,
                 selected: _tag == tag,
                 onSelected: (v) => setState(() => _tag = v ? tag : null),
               ),
