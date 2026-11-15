@@ -155,6 +155,27 @@ void main() {
       expect(base64.decode(account.privateKey).sublist(121 - 65), sent.sublist(26));
     });
 
+    test('the ways to reach the service start with the profile\'s cut and go on with bigger pieces', () {
+      final p = WarpProfile(
+        version: 1,
+        issuedAt: DateTime.utc(2026, 1, 1),
+        expiresAt: DateTime.utc(2030, 1, 1),
+        keyId: 'k',
+        message: const {},
+        disabled: const {},
+        fragmentSize: (5, 40),
+        fragmentDelay: (10, 10),
+        apiIps: const ['104.16.192.82', '104.16.24.84'],
+        endpoints: const [],
+        methods: const [],
+      );
+      final tries = signUpTries(p);
+      expect(tries.first, ('104.16.192.82', (5, 40), (10, 10)));
+      expect(tries[1].$1, '104.16.24.84');
+      expect(tries.map((t) => t.$2).toSet(), {(5, 40), (20, 60), (50, 100)});
+      expect(tries.length, 12);
+    });
+
     test('goes on when switching the account on is refused', () async {
       final edge = _pem(newP256Keys(Random(10)).publicSpki);
       final account = await registerWarpMasque(
