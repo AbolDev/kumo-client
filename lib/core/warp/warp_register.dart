@@ -258,6 +258,15 @@ Future<Map<String, dynamic>> _call(int relayPort, String method, String path, Ma
   }
 }
 
+/// The ways the sign-up service is tried, in order: once as it is (no pieces; it passes on networks
+/// that cut the connection when the hello comes in pieces), then three rounds through every address
+/// with the hello cut as the profile says.
+List<(String, bool)> _signUpTries(WarpProfile profile) => [
+      if (profile.apiIps.isNotEmpty) (profile.apiIps.first, true),
+      for (var round = 0; round < 3; round++)
+        for (final ip in profile.apiIps) (ip, false),
+    ];
+
 /// Makes a WARP account for this device, reaching the service through the addresses and the piece
 /// sizes of [profile]. Tries its addresses in turn; throws [WarpRegisterException] when none answers.
 Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random}) async {
@@ -265,9 +274,11 @@ Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random}) async {
   Object? last;
   // The pieces are cut at random sizes, and a filter does not always lose the name in the same way:
   // a second go with other sizes often passes where the first did not.
-  for (final ip in [for (var round = 0; round < 3; round++) ...profile.apiIps]) {
+  for (final (ip, whole) in _signUpTries(profile)) {
     final relay = await FragmentRelay.start(ip,
-        size: profile.fragmentSize, delay: profile.fragmentDelay, random: random);
+        size: whole ? (1 << 20, 1 << 20) : profile.fragmentSize,
+        delay: whole ? (0, 0) : profile.fragmentDelay,
+        random: random);
     try {
       final reg = await _call(relay.port, 'POST', _apiPath, {
         'key': pub,
@@ -341,9 +352,11 @@ Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
   }
 
   if (call != null) return run(call);
-  for (final ip in [for (var round = 0; round < 3; round++) ...profile.apiIps]) {
+  for (final (ip, whole) in _signUpTries(profile)) {
     final relay = await FragmentRelay.start(ip,
-        size: profile.fragmentSize, delay: profile.fragmentDelay, random: random);
+        size: whole ? (1 << 20, 1 << 20) : profile.fragmentSize,
+        delay: whole ? (0, 0) : profile.fragmentDelay,
+        random: random);
     try {
       return await run((method, path, body, {String? token}) =>
           _call(relay.port, method, path, body, token: token, clientVersion: _masqueClientVersion));
