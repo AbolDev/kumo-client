@@ -29,7 +29,13 @@ class ProxyConfig {
     this.xrayNote = 'xhttp',
     this.ovpn,
     this.preferXray = false,
+    this.pinned = false,
   });
+
+  /// The link pins the server's certificate. Only Xray checks a pin; sing-box has no way to, so it takes
+  /// any certificate for such a server (see `_tls`). A pinned server therefore goes through Xray when it
+  /// is used on its own, and is not put in the automatic group (which runs on sing-box).
+  final bool pinned;
 
   final String link;
   final String protocol;
@@ -86,6 +92,19 @@ class ProxyConfig {
   /// True when Xray can carry this server.
   bool get canXray => xrayOutbound != null;
 
+  /// The server asks to skip the check of its certificate without a pin (`allowInsecure`). Xray 26 has no
+  /// way to do that, so a server that sing-box can carry stays on sing-box even when Xray is preferred.
+  bool get xrayCannotSkipCheck {
+    if (pinned || outbound.isEmpty) return false;
+    final tls = outbound['tls'];
+    return tls is Map && tls['insecure'] == true;
+  }
+
+  /// Whether this server, used alone, runs on Xray: it must, or the user wants Xray (the setting) or it
+  /// needs something only Xray does, and Xray can do it.
+  bool useXray(String core) =>
+      canXray && (needsXray || ((preferXray || core == 'xray') && !xrayCannotSkipCheck));
+
   /// The same server under another link text (the one it was saved with).
   ProxyConfig withLink(String original) => ProxyConfig(
         link: original,
@@ -99,6 +118,7 @@ class ProxyConfig {
         xrayNote: xrayNote,
         ovpn: ovpn,
         preferXray: preferXray,
+        pinned: pinned,
       )
         ..latencyMs = latencyMs
         ..domesticOnly = domesticOnly;
@@ -512,6 +532,7 @@ ProxyConfig? _make(
   List<Map<String, dynamic>> inner = const [],
   String xrayNote = 'xhttp',
   bool preferXray = false,
+  bool pinned = false,
 }) {
   if (host.isEmpty || port <= 0 || port > 65535) return null;
   if ((outbound == null || outbound.isEmpty) && xray == null) return null;
@@ -527,13 +548,22 @@ ProxyConfig? _make(
     xrayNote: xrayNote,
     // a final mask on a server that sing-box could carry too
     preferXray: preferXray && xray != null && (outbound?.isNotEmpty ?? false),
+    pinned: pinned,
   );
 }
 
+/// Whether the link pins the certificate (`pcs=`, `pinSHA256=`) of a server that uses TLS (not Reality).
+bool _pinnedCert(Map<String, String?> q) =>
+    (q['security'] ?? q['tls'] ?? '').toLowerCase() != 'reality' &&
+    (q['pcs'] ?? q['pinSHA256'] ?? '').trim().isNotEmpty;
+
 /// Whether the link asks for something only Xray does in the TLS hello: the `unsafe` fingerprint (sing-box
-/// has none and would use Chrome's) or a list of cipher suites (`cipherSuites=`).
+/// has none and would use Chrome's), a list of cipher suites (`cipherSuites=`), or a pinned certificate
+/// (only Xray checks the pin; sing-box would take any certificate).
 bool _xrayOnlyTls(Map<String, String?> q) =>
-    (q['fp'] ?? '').trim().toLowerCase() == 'unsafe' || (q['cipherSuites'] ?? '').trim().isNotEmpty;
+    (q['fp'] ?? '').trim().toLowerCase() == 'unsafe' ||
+    (q['cipherSuites'] ?? '').trim().isNotEmpty ||
+    _pinnedCert(q);
 
 /// Whether the link asks for a final mask (`fm=` with a JSON object that is not empty).
 bool _hasFinalmask(Map<String, String?> q) {
@@ -641,6 +671,7 @@ ProxyConfig? _vless(String link) {
   return _make(link, 'vless', name, u.host, u.port,
       outbound: box,
       xray: xray,
+      pinned: _pinnedCert(q),
       preferXray: _hasFinalmask(q) || _xrayOnlyTls(q),
       xrayNote: _xrayNoteFor(type, q['headerType'], encryption: encryption));
 }
@@ -733,7 +764,7 @@ ProxyConfig? _vmess(String link) {
     }
   }
   return _make(link, 'vmess', name, host, port,
-      outbound: box, xray: xray, preferXray: _hasFinalmask(q) || _xrayOnlyTls(q), xrayNote: _xrayNoteFor(type, '${j['type'] ?? ''}'));
+      outbound: box, xray: xray, pinned: _pinnedCert(q), preferXray: _hasFinalmask(q) || _xrayOnlyTls(q), xrayNote: _xrayNoteFor(type, '${j['type'] ?? ''}'));
 }
 
 ProxyConfig? _trojan(String link) {
@@ -781,7 +812,7 @@ ProxyConfig? _trojan(String link) {
     }
   }
   return _make(link, 'trojan', name, u.host, u.port,
-      outbound: box, xray: xray, preferXray: _hasFinalmask(q) || _xrayOnlyTls(q), xrayNote: _xrayNoteFor(type, q['headerType']));
+      outbound: box, xray: xray, pinned: _pinnedCert(q), preferXray: _hasFinalmask(q) || _xrayOnlyTls(q), xrayNote: _xrayNoteFor(type, q['headerType']));
 }
 
 ProxyConfig? _shadowsocks(String link) {
@@ -820,8 +851,12 @@ ProxyConfig? _shadowsocks(String link) {
   final colon = userInfo.indexOf(':');
   if (colon < 0) return null;
   final u = Uri.parse('ss://$hostPort');
-  final method = userInfo.substring(0, colon);
+  final rawMethod = userInfo.substring(0, colon);
   final password = userInfo.substring(colon + 1);
+  // sing-box knows the cipher only by its full name: "chacha20-poly1305" (the short name many links
+  // use) is "chacha20-ietf-poly1305" there, and a name it does not know stops the whole core.
+  final method = singboxSsMethod(rawMethod);
+  if (method == null) return null;
   final out = <String, dynamic>{
     'type': 'shadowsocks',
     'server': u.host,
@@ -879,10 +914,40 @@ ProxyConfig? _shadowsocks(String link) {
   }
   final xray = plugin.isNotEmpty
       ? null
-      : _xrayShadowsocks(u.host, u.port, method, password);
+      : _xrayShadowsocks(u.host, u.port, rawMethod.trim().toLowerCase(), password);
   return _make(link, 'ss', name.isEmpty ? 'ss ${u.host}:${u.port}' : name,
       u.host, u.port,
       outbound: out, xray: xray, inner: inner);
+}
+
+/// The Shadowsocks cipher names sing-box accepts.
+const _singboxSsMethods = {
+  'none',
+  'aes-128-gcm',
+  'aes-192-gcm',
+  'aes-256-gcm',
+  'chacha20-ietf-poly1305',
+  'xchacha20-ietf-poly1305',
+  'aes-128-ctr',
+  'aes-192-ctr',
+  'aes-256-ctr',
+  'aes-128-cfb',
+  'aes-192-cfb',
+  'aes-256-cfb',
+  'rc4-md5',
+  'chacha20-ietf',
+  'xchacha20',
+  '2022-blake3-aes-128-gcm',
+  '2022-blake3-aes-256-gcm',
+  '2022-blake3-chacha20-poly1305',
+};
+
+/// The name sing-box takes for a Shadowsocks cipher of a link, or null when it has no such cipher.
+String? singboxSsMethod(String raw) {
+  var m = raw.trim().toLowerCase();
+  if (m == 'chacha20-poly1305') m = 'chacha20-ietf-poly1305';
+  if (m == 'xchacha20-poly1305') m = 'xchacha20-ietf-poly1305';
+  return _singboxSsMethods.contains(m) ? m : null;
 }
 
 ProxyConfig? _hysteria2(String link) {

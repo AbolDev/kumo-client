@@ -70,6 +70,30 @@ import io.nekohasekai.libbox.NetworkInterface as LibboxNetworkInterface
  */
 class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     companion object {
+        /** The core could not use the IPv6 address of the tunnel (the phone has no IPv6 for it). */
+        fun isTunIpv6Failure(message: String?): Boolean =
+            message != null && message.contains("starting tun stack") && message.contains("listen tcp6") &&
+                message.contains("cannot assign requested address")
+
+        /** The configuration with the IPv6 addresses and routes of the tunnel taken out. */
+        fun withoutTunIpv6(content: String): String = try {
+            val root = JSONObject(content)
+            val inbounds = root.optJSONArray("inbounds")
+            for (i in 0 until (inbounds?.length() ?: 0)) {
+                val inbound = inbounds!!.getJSONObject(i)
+                if (inbound.optString("type") != "tun") continue
+                for (key in listOf("address", "route_address", "route_exclude_address")) {
+                    val list = inbound.optJSONArray(key) ?: continue
+                    val kept = org.json.JSONArray()
+                    for (j in 0 until list.length()) if (!list.optString(j).contains(':')) kept.put(list.get(j))
+                    inbound.put(key, kept)
+                }
+            }
+            root.toString()
+        } catch (_: Exception) {
+            content
+        }
+
         const val ACTION_STOP = "app.kumo.vpn.STOP"
         const val ACTION_RESTART = "app.kumo.vpn.RESTART"
         const val ACTION_CONNECT = "app.kumo.vpn.CONNECT"
@@ -194,8 +218,9 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         }
         val path = intent?.getStringExtra(EXTRA_CONFIG_PATH)
         // Every startForegroundService() must be answered by startForeground(), even when the
-        // request is ignored, or Android kills the app for it.
-        if (intent != null && path != null) runCatching { showForeground() }
+        // request is ignored or carries nothing to start (no configuration path), or Android kills the app
+        // for it ("did not then call Service.startForeground()").
+        runCatching { showForeground() }
         if (path == null || VpnBridge.status == VpnBridge.STARTING || VpnBridge.status == VpnBridge.STARTED ||
             VpnBridge.status == VpnBridge.STOPPING
         ) {
@@ -593,6 +618,13 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         try {
             server.startOrReloadService(content, OverrideOptions())
         } catch (e: Throwable) {
+            // The phone gave the tunnel no IPv6 address ("listen tcp6 [fdfe:..]:0: cannot assign requested
+            // address"): the same configuration without the IPv6 address of the tunnel.
+            if (isTunIpv6Failure(e.message)) {
+                Log.w(TAG, "the tunnel has no IPv6: starting without it", e)
+                server.startOrReloadService(withoutTunIpv6(content), OverrideOptions())
+                return
+            }
             val c = closing
             if (c == null || e.message?.contains("address already in use") != true) throw e
             Log.w(TAG, "a port is still held by the last core: waiting for it", e)
@@ -661,6 +693,19 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
      * VPN (see openTun), so Xray reaches the server directly and does not loop into the tunnel.
      */
     private fun startXray(configFile: String) {
+        try {
+            startXrayOnce(configFile)
+        } catch (e: IllegalStateException) {
+            // The Xray of the last connection may still be letting go of the port: once more, a moment later.
+            if (e.message?.contains("address already in use") != true) throw e
+            Log.w(TAG, "the Xray port is still held: trying once more", e)
+            stopXray()
+            Thread.sleep(1500)
+            startXrayOnce(configFile)
+        }
+    }
+
+    private fun startXrayOnce(configFile: String) {
         val exe = File(applicationInfo.nativeLibraryDir, "libxray.so")
         require(exe.exists()) { "xray binary is missing" }
 

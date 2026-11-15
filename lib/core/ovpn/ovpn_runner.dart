@@ -70,6 +70,9 @@ String runConfig(String config, {required int managementPort, required String pa
     ..write('\n')
     ..writeln('dev-node $ovpnAdapterName')
     ..writeln('windows-driver tap-windows6')
+    // OpenVPN 2.7 chooses its own ovpn-dco driver and stops with "Adapter ... is using tap-windows6
+    // driver, ovpn-dco expected" when the adapter is a TAP one: the data channel offload is turned off.
+    ..writeln('disable-dco')
     // The routes are Kumo's: nothing the server pushes changes how the computer is routed. One route
     // with a very high metric lets a program that is bound to the adapter (sing-box) send through it
     // without making it the way out for everything else.

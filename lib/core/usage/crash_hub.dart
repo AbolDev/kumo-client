@@ -16,6 +16,24 @@ bool isNetworkError(Object error) =>
     error is WebSocketException ||
     error is TimeoutException;
 
+/// True when the text of a failure (a core that did not start, what the system said) names the network
+/// and not the app: a server name that has no address (a bad or offline host), no route, an unreachable
+/// network. Such a start failure is the user's server or network, so it is not a crash report either.
+bool isNetworkFailureText(String text) {
+  final t = text.toLowerCase();
+  const marks = [
+    'unable to resolve host',
+    'no address associated with hostname',
+    'no such host',
+    'network is unreachable',
+    'no route to host',
+    'name or service not known',
+    'nodename nor servname',
+    'temporary failure in name resolution',
+  ];
+  return marks.any(t.contains);
+}
+
 /// The name of what was thrown. A release build renames the classes ("yq"), so the ones worth telling
 /// apart are named here by what they are; the rest keep the name the build gave them.
 String errorKind(Object error) {

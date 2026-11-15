@@ -1836,6 +1836,7 @@ class _GroupHeader extends StatelessWidget {
       case _GroupAction.tcping:
         state.ping(group, real: false);
       case _GroupAction.cancelTest:
+        if (!(state.tests[group.id]?.running ?? false)) return; // it ended while the menu was open
         _askUntested(context).then((remove) {
           if (remove != null) state.cancelPing(group, removeUntested: remove);
         });
@@ -1844,6 +1845,10 @@ class _GroupHeader extends StatelessWidget {
           if (remove != null) state.ping(group, real: true, removeDead: remove);
         });
       case _GroupAction.refresh:
+        if (state.refreshing.contains(group.id)) {
+          state.cancelRefresh(group);
+          return;
+        }
         group.kind == GroupKind.collector
             ? state.refreshCollector()
             : state.refreshSubscription(group);
@@ -2026,9 +2031,14 @@ class _GroupHeader extends StatelessWidget {
                   ]
                 : [
               if (state.tests[group.id]?.running ?? false)
+                // Follows the test while the menu is open: dimmed when it ends (a tap then does nothing).
                 PopupMenuItem(
                     value: _GroupAction.cancelTest,
-                    child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest'))),
+                    child: ListenableBuilder(
+                        listenable: state,
+                        builder: (_, __) => Opacity(
+                            opacity: (state.tests[group.id]?.running ?? false) ? 1 : 0.38,
+                            child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest'))))),
               PopupMenuItem(
                   value: _GroupAction.tcping,
                   child: _MenuRow(Icons.network_check, t.tcping)),
@@ -2037,14 +2047,15 @@ class _GroupHeader extends StatelessWidget {
                   value: _GroupAction.realDelay,
                   child: _MenuRow(Icons.speed, t.realDelay)),
               if (group.kind != GroupKind.manual && group.kind != GroupKind.cleanIp)
-                state.refreshing.contains(group.id)
-                    ? PopupMenuItem(
-                        value: _GroupAction.cancelRefresh,
-                        child: _MenuRow(Icons.cancel_outlined,
-                            tr(context, 'cancelUpdate')))
-                    : PopupMenuItem(
-                        value: _GroupAction.refresh,
-                        child: _MenuRow(Icons.refresh, t.refreshList)),
+                // One item that follows the update while the menu is open: "Cancel update" turns back
+                // into "Refresh" when the update ends. What a tap does is decided when it is tapped.
+                PopupMenuItem(
+                    value: _GroupAction.refresh,
+                    child: ListenableBuilder(
+                        listenable: state,
+                        builder: (_, __) => state.refreshing.contains(group.id)
+                            ? _MenuRow(Icons.cancel_outlined, tr(context, 'cancelUpdate'))
+                            : _MenuRow(Icons.refresh, t.refreshList))),
               if ((group.kind == GroupKind.manual || group.kind == GroupKind.cleanIp) && group.configs.isNotEmpty)
                 PopupMenuItem(
                     value: _GroupAction.deleteAll,

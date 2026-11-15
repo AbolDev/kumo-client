@@ -178,12 +178,8 @@ Map<String, dynamic>? _xrayStream(
       // The cipher suites to offer, as Xray takes them (names joined by colons): a way to look less like
       // the usual client to a filter that reads the hello.
       if (s('cipherSuites') != null) 'cipherSuites': s('cipherSuites'),
-      // A pinned certificate replaces the chain check (see _tls); Xray can check the pin itself.
-      if (_truthy(q['allowInsecure']) ||
-          _truthy(q['insecure']) ||
-          _truthy(q['allow_insecure']) ||
-          pins.isNotEmpty)
-        'allowInsecure': true,
+      // A pinned certificate replaces the chain check (see _tls); Xray checks the pin itself. There is no
+      // "allowInsecure" here: Xray 26 removed it and refuses to start when the key is present.
       // One text, the hashes joined by commas: Xray refuses a list here and does not start.
       if (pins.isNotEmpty) 'pinnedPeerCertSha256': pins.join(','),
       if (s('ech') != null) 'echConfigList': s('ech'),
@@ -283,10 +279,7 @@ Map<String, dynamic>? _xrayHysteria2(String host, int port, String password,
       'tlsSettings': {
         if (serverName.isNotEmpty) 'serverName': serverName,
         'alpn': _alpn(q['alpn']).isEmpty ? ['h3'] : _alpn(q['alpn']),
-        if (_truthy(q['insecure']) ||
-            _truthy(q['allowInsecure']) ||
-            (q['pinSHA256'] ?? '').isNotEmpty)
-          'allowInsecure': true,
+        // No "allowInsecure": Xray 26 removed it (the pin below is what replaces it).
         if ((q['pinSHA256'] ?? '').isNotEmpty)
           'pinnedPeerCertSha256': q['pinSHA256']!.replaceAll(':', '').toLowerCase(),
       },

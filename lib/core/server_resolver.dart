@@ -231,6 +231,7 @@ Future<List<ProxyConfig>> resolveServers(
       xrayNote: c.xrayNote,
       ovpn: c.ovpn,
       preferXray: c.preferXray,
+      pinned: c.pinned,
     )
       ..latencyMs = c.latencyMs
       ..domesticOnly = c.domesticOnly;

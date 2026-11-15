@@ -35,6 +35,8 @@ void main() {
     final text = runConfig('client\ndev tun\n', managementPort: 41234, passwordFile: r'C:\Users\a b\mgmt.pw');
     expect(text, contains('dev-node KumoOpenVPN'));
     expect(text, contains('windows-driver tap-windows6'));
+    // OpenVPN 2.7 expects its ovpn-dco driver unless that is turned off.
+    expect(text.split('\n'), contains('disable-dco'));
     expect(text, contains('route-nopull'));
     expect(text, contains('route 0.0.0.0 0.0.0.0 vpn_gateway 5000'));
     expect(text, contains(r'management 127.0.0.1 41234 "C:\\Users\\a b\\mgmt.pw"'));

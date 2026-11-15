@@ -694,7 +694,8 @@ class AppState extends ChangeNotifier {
         // are removed from the text; "revoked" is the user taking the VPN away, not a fault).
         if (s.status == VpnStatus.error && s.error != 'revoked') {
           final reason = (s.error ?? '').trim().isEmpty ? 'no reason given' : s.error!;
-          CrashHub.report(StateError(reason), null,
+          // A server name that cannot be looked up, or an unreachable network, is not a fault of the app.
+          if (!isNetworkFailureText(reason)) CrashHub.report(StateError(reason), null,
               kind: before == VpnStatus.starting ? 'core_start_failed' : 'core_exit', message: reason);
         }
       }
@@ -951,6 +952,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _sub?.cancel();
     _watch?.cancel();
+    _dueTimer?.cancel();
     _trafficSub?.cancel();
     traffic.dispose();
     logRevision.dispose();
@@ -2576,12 +2578,19 @@ class AppState extends ChangeNotifier {
   List<ProxyConfig> _chosenServers() {
     // A server whose Reality key the core would refuse is left out: one of them stops the whole core.
     // A server the safety check found changing what passes through it is left out too.
-    final plain = all.where((c) => c.canSingBox && !c.badRealityKey && !isDangerous(c)).toList();
+    // A server with a pinned certificate is left out as well: only Xray checks the pin, and this group runs
+    // on sing-box, which would take any certificate for it. Such a server is used when it is picked by hand.
+    final plain =
+        all.where((c) => c.canSingBox && !c.badRealityKey && !isDangerous(c) && !c.pinned).toList();
     // A server that reaches domestic sites only is not one to pick for the user.
     final alive = plain.where((c) => c.isAlive && !c.domesticOnly).toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
     final auto = (alive.isNotEmpty ? alive : plain).take(_autoGroupSize).toList();
-    return selected != null ? [selected!] : (auto.isNotEmpty ? auto : [all.first]);
+    if (selected != null) return [selected!];
+    if (auto.isNotEmpty) return auto;
+    // Nothing the automatic group may hold: one server alone (it goes through Xray when it needs to), and
+    // one that is not refused before one that is. [all] is not empty here (the callers check).
+    return [all.firstWhere((c) => !c.badRealityKey && !isDangerous(c), orElse: () => all.first)];
   }
 
   // ---------------------------------------------------------------- standby proxy
@@ -2658,9 +2667,7 @@ class AppState extends ChangeNotifier {
               wait: false,
               refresh: false)
           : <String, String>{};
-      final viaXray = chosen.length == 1 &&
-          chosen.first.canXray &&
-          (chosen.first.needsXray || chosen.first.preferXray || net.core == 'xray');
+      final viaXray = chosen.length == 1 && chosen.first.useXray(net.core);
       final xrayPort = viaXray ? 30000 + Random().nextInt(30000) : null;
       final parts = _standbyParts(chosen, routing, sets, xrayPort, resolved: await _resolveAhead(chosen));
       // Something changed while this was being prepared.
@@ -2999,9 +3006,7 @@ class AppState extends ChangeNotifier {
       final chain = net.chain.isEmpty ? null : parseLink(net.chain);
       // One chosen server runs on Xray when only Xray can carry it, or when Xray is the default
       // core and can. A group of servers (automatic mode) is always sing-box.
-      final viaXray = chosen.length == 1 &&
-          chosen.first.canXray &&
-          (chosen.first.needsXray || chosen.first.preferXray || net.core == 'xray');
+      final viaXray = chosen.length == 1 && chosen.first.useXray(net.core);
       // Xray's local port asks for a login of its own, so no other program here can use it.
       final xrayAuth = viaXray ? _newXrayAuth() : null;
       // The names of the chosen servers are looked up first (encrypted DNS, then the system's).
