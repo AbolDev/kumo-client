@@ -286,6 +286,7 @@ ProxyConfig? parseLink(String link) {
     if (link.startsWith('wireguard://') || link.startsWith('wg://')) {
       return _wireguard(link);
     }
+    if (link.startsWith('warp-masque://')) return _masque(link);
     if (link.startsWith('naive+')) return _naive(link);
     if (link.startsWith('openvpn://')) return _openvpn(link);
   } catch (_) {

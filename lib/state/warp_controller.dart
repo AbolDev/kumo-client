@@ -104,7 +104,33 @@ class WarpController extends ChangeNotifier {
       for (final m in p.usable(platform: platform, build: build))
         for (final e in p.endpoints)
           for (var i = 0; i < e.ports.length; i++) WarpCombo(m, e, i),
+      // The MASQUE ways come last (see [masqueMethods]).
+      for (final m in masqueMethods) WarpCombo(m, WarpEndpoint(masque?.endpoint ?? masqueDefaultEndpoint, const [443]), 0),
     ];
+  }
+
+  /// The account of the MASQUE ways, made the first time one of them is used (a different account from
+  /// [account]: a device that takes a MASQUE key no longer speaks WireGuard).
+  WarpMasqueAccount? masque;
+
+  /// The link of a way of reaching WARP. A MASQUE way makes its account first when there is none.
+  Future<String> _linkOf(WarpCombo c, {WarpAccount? wg, WarpEndpoint? endpoint, String name = 'WARP'}) async {
+    if (isMasqueKind(c.method.kind)) {
+      final account = await _ensureMasque();
+      return masqueLink(account, c.method, name: name);
+    }
+    return warpLink(wg ?? account!, c.method, endpoint ?? c.endpoint, endpoint == null ? c.portIndex : 0, name: name);
+  }
+
+  Future<WarpMasqueAccount> _ensureMasque() async {
+    final have = masque;
+    if (have != null) return have;
+    final p = store.profile;
+    if (p == null) throw StateError('no WARP profile is available');
+    final made = await registerWarpMasque(p);
+    masque = made;
+    await _save();
+    return made;
   }
 
   /// The profile's note for [language] (or English), if it has one.
@@ -139,6 +165,7 @@ class WarpController extends ChangeNotifier {
       if (j is Map) {
         account = WarpAccount.fromJson(j['account']);
         account2 = WarpAccount.fromJson(j['account2']);
+        masque = WarpMasqueAccount.fromJson(j['masque']);
         inWarp = j['inWarp'] == true && account2 != null;
         final cu = j['custom'];
         if (cu is Map && cu['method'] is String && cu['ip'] is String && cu['port'] is int) {
@@ -167,6 +194,7 @@ class WarpController extends ChangeNotifier {
       jsonEncode({
         'account': account?.toJson(),
         'account2': account2?.toJson(),
+        'masque': masque?.toJson(),
         'inWarp': inWarp,
         if (custom != null) 'custom': {'method': custom!.method, 'ip': custom!.ip, 'port': custom!.port},
         'enabled': enabled,
@@ -187,7 +215,8 @@ class WarpController extends ChangeNotifier {
 
   /// The ways Warp-in-Warp can use: plain WireGuard ones (a method with noise goes through Xray,
   /// which does not carry one tunnel inside another).
-  List<WarpCombo> _plain(List<WarpCombo> all) => all.where((c) => c.method.kind != 'wg-noise').toList();
+  List<WarpCombo> _plain(List<WarpCombo> all) =>
+      all.where((c) => c.method.kind != 'wg-noise' && !isMasqueKind(c.method.kind)).toList();
 
   Future<ProxyConfig?> _configFor(List<WarpCombo> all) async {
     if (account == null || all.isEmpty) return null;
@@ -202,7 +231,7 @@ class WarpController extends ChangeNotifier {
             list.map((x) => x.method).where((m) => m.id == cu.method).firstOrNull ?? list.first.method,
             WarpEndpoint(cu.ip, [cu.port]),
             0);
-    final text = warpLink(account!, c.method, c.endpoint, c.portIndex);
+    final text = await _linkOf(c);
     var config = parseLink(text);
     if (config == null) return null;
     if (useTwo) {
@@ -319,6 +348,41 @@ class WarpController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Every way the user can pick from, in the order of the list the link is made from (with Warp-in-Warp
+  /// only the plain WireGuard ones).
+  Future<List<WarpCombo>> choices() async {
+    final every = await combos();
+    return inWarp && account2 != null ? _plain(every) : every;
+  }
+
+  /// The place in [choices] of the way in use, or -1 when it is an address of the wider scan.
+  int currentChoice(List<WarpCombo> list) => custom != null || list.isEmpty ? -1 : choice % list.length;
+
+  /// Switches to the way at [index] of [choices] (picked by the user). A MASQUE way makes its account first.
+  Future<void> pick(int index) async {
+    if (account == null || busy || scanning) return;
+    final list = await choices();
+    if (index < 0 || index >= list.length) return;
+    busy = true;
+    error = null;
+    notifyListeners();
+    final before = (choice, custom);
+    try {
+      custom = null;
+      choice = index;
+      await _apply();
+      await _state.reconnectIfConnected();
+    } catch (e) {
+      // The way could not be set up (a MASQUE sign-up that failed): what was in use stays.
+      choice = before.$1;
+      custom = before.$2;
+      error = '$e'.replaceFirst('Bad state: ', '');
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
   /// Switches to the next way of reaching WARP (another method, endpoint or port).
   Future<void> nextMethod() async {
     if (account == null || busy) return;
@@ -356,7 +420,17 @@ class WarpController extends ChangeNotifier {
     if (account == null || busy || scanning) return;
     // The same list the server is made from (with Warp-in-Warp only the plain WireGuard ways).
     final every = await combos();
-    final all = inWarp && account2 != null ? _plain(every) : every;
+    var all = inWarp && account2 != null ? _plain(every) : every;
+    if (all.isEmpty) return;
+    // The MASQUE ways need their own account: made now (this is the one place a scan signs up), and when
+    // that does not work those ways are left out of the scan.
+    if (all.any((c) => isMasqueKind(c.method.kind))) {
+      try {
+        await _ensureMasque();
+      } catch (_) {
+        all = all.where((c) => !isMasqueKind(c.method.kind)).toList();
+      }
+    }
     if (all.isEmpty) return;
     scanning = true;
     scanFailed = false;
@@ -370,10 +444,15 @@ class WarpController extends ChangeNotifier {
       final test = delay ?? ((c) => realDelay(c, timeout: const Duration(seconds: 7)));
       final found = await scanWarp(
         count: all.length,
-        test: (i) {
-          final c = all[i];
-          final config = parseLink(warpLink(account!, c.method, c.endpoint, c.portIndex));
-          return config == null ? Future.value(-1) : test(config);
+        test: (i) async {
+          final String text;
+          try {
+            text = await _linkOf(all[i]);
+          } catch (_) {
+            return -1;
+          }
+          final config = parseLink(text);
+          return config == null ? -1 : await test(config);
         },
         onProgress: (d, t) {
           scanDone = d;
@@ -411,9 +490,13 @@ class WarpController extends ChangeNotifier {
     final every = await combos();
     final all = inWarp && account2 != null ? _plain(every) : every;
     if (all.isEmpty) return;
-    final method = (custom == null
+    // The wider scan looks for WireGuard endpoints: with a MASQUE way in use it takes the best WireGuard one.
+    final wgOnly = all.where((c) => !isMasqueKind(c.method.kind)).toList();
+    if (wgOnly.isEmpty) return;
+    var method = (custom == null
             ? all[choice % all.length].method
             : all.map((c) => c.method).where((m) => m.id == custom!.method).firstOrNull ?? all.first.method);
+    if (isMasqueKind(method.kind)) method = wgOnly.first.method;
     final addresses = pickScanAddresses(p.scanRanges, warpWideCount, random ?? Random());
     if (addresses.isEmpty) return;
     final ports = p.scanPorts;
@@ -497,6 +580,7 @@ class WarpController extends ChangeNotifier {
   Future<void> remove() async {
     account = null;
     account2 = null;
+    masque = null;
     inWarp = false;
     custom = null;
     enabled = false;

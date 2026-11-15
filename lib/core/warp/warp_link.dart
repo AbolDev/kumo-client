@@ -1,6 +1,20 @@
 import 'warp_profile.dart';
 import 'warp_register.dart';
 
+/// The `warp-masque://` link of a MASQUE account for the MASQUE [method] (`masque-h2` or `masque-h3`).
+String masqueLink(WarpMasqueAccount account, WarpMethod method, {String? endpoint, String name = 'WARP'}) {
+  final h3 = method.kind == 'masque-h3';
+  final query = {
+    'priv': account.privateKey,
+    'pub': account.edgeKey,
+    'address': '${account.v4}/32,${account.v6}/128',
+    'alpn': h3 ? 'h3' : 'h2',
+    'sni': masqueSniFor(method),
+  };
+  final text = query.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&');
+  return 'warp-masque://${endpoint ?? account.endpoint}:443?$text#${Uri.encodeComponent('$name ${method.id}')}';
+}
+
 /// The `wireguard://` link of a WARP account for one [method] of the profile, towards [endpoint]'s
 /// [portIndex]-th port. A method with noise adds `noise=`: the server is then reached through Xray,
 /// which sends the noise before the first packet of the tunnel (see buildXrayConfig).

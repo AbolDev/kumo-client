@@ -286,6 +286,51 @@ ProxyConfig? _wireguard(String link) {
       outbound: out, xray: xray);
 }
 
+/// The name of the server in the TLS hello of a MASQUE link that names none (see `masqueSniFor`).
+const masqueSni = 'cloudflareaccess.com';
+
+/// `warp-masque://host:443?priv=BASE64&pub=BASE64&address=172.16.0.2/32,2606:..::2/128&alpn=h2#name`: the WARP
+/// server that Kumo builds itself for a MASQUE account (see warp_link.dart). Only Xray carries it: a tunnel of
+/// CONNECT-IP (RFC 9484) over HTTP/2 (`alpn=h2`) or HTTP/3 (`alpn=h3`), the client certificate made from the
+/// private key (P-256) and the edge's certificate checked against its public key.
+ProxyConfig? _masque(String link) {
+  final u = Uri.parse(link);
+  final q = u.queryParameters;
+  final priv = (q['priv'] ?? '').trim();
+  final pub = (q['pub'] ?? '').trim();
+  final addresses = (q['address'] ?? '')
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .map(_withMask)
+      .toList();
+  if (priv.isEmpty || pub.isEmpty || addresses.isEmpty || u.host.isEmpty) return null;
+  final port = u.hasPort ? u.port : 443;
+  final alpn = (q['alpn'] ?? 'h2').trim().toLowerCase() == 'h3' ? 'h3' : 'h2';
+  final sni = (q['sni'] ?? '').trim().isEmpty ? masqueSni : q['sni']!.trim();
+  final xray = {
+    'protocol': 'masque',
+    'settings': {
+      'address': u.host,
+      'port': port,
+      // Names are asked through the tunnel, of Cloudflare's own resolvers.
+      'remoteDNS': ['1.1.1.1', '1.0.0.1'],
+    },
+    'streamSettings': {
+      'network': 'masque',
+      'masqueSettings': {
+        'warp': {'privateKey': priv, 'publicKey': pub, 'address': addresses},
+      },
+      'security': 'tls',
+      'tlsSettings': {
+        'serverName': sni,
+        'alpn': [alpn],
+      },
+    },
+  };
+  return _make(link, 'masque', _name(u, 'WARP masque-$alpn'), u.host, port, xray: xray, xrayNote: 'masque $alpn');
+}
+
 /// The DNS servers a WireGuard link names (`dns=1.1.1.1, 8.8.8.8`): the addresses, in their order. Names and
 /// anything that is not an address are left out. Empty for a link with none, or of another kind.
 List<String> wireguardLinkDns(String link) {

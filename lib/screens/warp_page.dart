@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/kumo_mark.dart';
 
 import '../core/usage_stats.dart' show formatBytes;
+import '../core/warp/warp_profile.dart' show isMasqueKind;
 import '../core/warp/warp_store.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
@@ -41,6 +42,50 @@ class _WarpPageState extends State<WarpPage> {
       ),
     );
     if (ok == true) await warp.remove();
+  }
+
+  /// A sheet with every way of reaching WARP: the user picks one.
+  Future<void> _pickMethod() async {
+    final list = await warp.choices();
+    if (!mounted || list.isEmpty) return;
+    final now = warp.currentChoice(list);
+    final index = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        maxChildSize: 0.95,
+        builder: (c, scroll) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(tr(c, 'warpPickMethod'), style: Theme.of(c).textTheme.titleMedium),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              controller: scroll,
+              itemCount: list.length,
+              itemBuilder: (c, i) {
+                final w = list[i];
+                return ListTile(
+                  selected: i == now,
+                  leading: Icon(isMasqueKind(w.method.kind) ? Icons.hub_outlined : Icons.vpn_key_outlined),
+                  title: Text(w.method.id, textDirection: TextDirection.ltr),
+                  subtitle: Text('${w.endpoint.ip}:${w.port}', textDirection: TextDirection.ltr),
+                  trailing: i == now ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.pop(c, i),
+                );
+              },
+            ),
+          ),
+        ]),
+      ),
+    );
+    if (index != null && index != now) await warp.pick(index);
   }
 
   String? _updateText(BuildContext context) => switch (warp.lastUpdate) {
@@ -115,6 +160,12 @@ class _WarpPageState extends State<WarpPage> {
                   ]),
                 ),
                 const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.list_alt),
+                  title: Text(tr(context, 'warpPickMethod')),
+                  subtitle: Text(tr(context, 'warpPickMethodDesc')),
+                  onTap: warp.busy || warp.scanning ? null : _pickMethod,
+                ),
                 ListTile(
                   leading: const Icon(Icons.swap_horiz),
                   title: Text(tr(context, 'warpTryNext')),

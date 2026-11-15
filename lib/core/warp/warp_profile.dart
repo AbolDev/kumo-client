@@ -183,6 +183,35 @@ class WarpMethod {
   final List<WarpNoise> noise;
 }
 
+/// The MASQUE ways of reaching WARP (a tunnel over HTTP/2 or HTTP/3 instead of WireGuard). They are not
+/// in the signed profile: a profile can only name kinds the app knows, and these need their own account
+/// (see [WarpMasqueAccount]). They come after the profile's own methods, so nothing changes for a user
+/// until the scan (or "try the next way") reaches them. They use Xray.
+///
+/// Each kind has two names of the server in the TLS hello: `cloudflareaccess.com` (the first, and the one
+/// that passes where the name of Cloudflare's own MASQUE service is cut) and the `-alt` way with that name,
+/// `consumer-masque.cloudflareclient.com`. The edge accepts the account with either.
+const masqueMethods = [
+  WarpMethod(
+      id: 'masque-h2', kind: 'masque-h2', rank: 1000, platforms: {}, requires: {}, minBuild: null, maxBuild: null, noise: []),
+  WarpMethod(
+      id: 'masque-h2-alt', kind: 'masque-h2', rank: 1001, platforms: {}, requires: {}, minBuild: null, maxBuild: null, noise: []),
+  WarpMethod(
+      id: 'masque-h3', kind: 'masque-h3', rank: 1002, platforms: {}, requires: {}, minBuild: null, maxBuild: null, noise: []),
+  WarpMethod(
+      id: 'masque-h3-alt', kind: 'masque-h3', rank: 1003, platforms: {}, requires: {}, minBuild: null, maxBuild: null, noise: []),
+];
+
+/// The name of the server in the TLS hello of a MASQUE way (`-alt` ways use the other name).
+String masqueSniFor(WarpMethod method) =>
+    method.id.endsWith('-alt') ? masqueSniAlt : masqueSniDefault;
+
+const masqueSniDefault = 'cloudflareaccess.com';
+const masqueSniAlt = 'consumer-masque.cloudflareclient.com';
+
+/// Whether [kind] is one of the MASQUE kinds.
+bool isMasqueKind(String kind) => kind == 'masque-h2' || kind == 'masque-h3';
+
 class WarpProfile {
   const WarpProfile({
     required this.version,

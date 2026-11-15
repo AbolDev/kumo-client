@@ -94,7 +94,10 @@ String buildXrayConfig(ProxyConfig server, int port,
           sockopt);
     }
     // Splitting the TLS hello is a TCP final mask in Xray.
-    if (o.tlsFragment && security == 'tls') {
+    // (Not for MASQUE over HTTP/3: that runs on UDP, where a TCP mask has nothing to act on.)
+    final tlsAlpn = tls is Map ? tls['alpn'] : null;
+    final masqueH3 = stream['network'] == 'masque' && tlsAlpn is List && tlsAlpn.contains('h3');
+    if (o.tlsFragment && security == 'tls' && !masqueH3) {
       final fm = stream['finalmask'] is Map<String, dynamic>
           ? stream['finalmask'] as Map<String, dynamic>
           : <String, dynamic>{};
