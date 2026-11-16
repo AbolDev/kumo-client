@@ -12,6 +12,7 @@ import 'net_options.dart' show NetOptions;
 import 'proxy_config.dart';
 import 'server_resolver.dart' show resolveOutbound, systemLookup;
 import 'singbox_config.dart' show XrayAuth, buildXrayConfig, tweakLayers;
+import 'socks_get.dart' show socksPing;
 import 'vpn_channel.dart';
 
 /// Page fetched through the proxy to measure the real delay. Plain HTTP on purpose: HTTPS adds a
@@ -335,6 +336,9 @@ Future<int> _delayOnce(
 /// timing the first one counts the whole set-up, which came out about three times as high. Falls
 /// back to the time of the first request when the end of its answer cannot be told. -1 on failure.
 Future<int> socksWarmDelay(int socksPort, Uri uri, Duration timeout, {XrayAuth? auth}) async {
+  // An https page (a delay address the user chose) needs TLS on the connection: a plain request to its port
+  // always failed.
+  if (uri.scheme == 'https') return socksPing('$uri', socksPort, auth: auth, timeout: timeout * 2);
   Socket? socket;
   try {
     socket = await Socket.connect('127.0.0.1', socksPort, timeout: timeout);

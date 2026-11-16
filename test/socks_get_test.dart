@@ -291,4 +291,30 @@ void main() {
     // A certificate nobody trusts is refused when nothing says it is fine.
     expect(await socksGet('https://localhost/a', proxy.port), isNull);
   });
+
+  test('the delay of an HTTPS page through the proxy: two requests over one TLS connection', () async {
+    final context = SecurityContext()
+      ..useCertificateChainBytes(utf8.encode(_certificate))
+      ..usePrivateKeyBytes(utf8.encode(_privateKey));
+    final secure = await HttpServer.bindSecure(InternetAddress.loopbackIPv4, 0, context);
+    addTearDown(() => secure.close(force: true));
+    var requests = 0;
+    final connections = <int>{};
+    secure.listen((request) async {
+      requests++;
+      connections.add(request.connectionInfo!.remotePort);
+      request.response.headers.contentLength = 0;
+      await request.response.close();
+    });
+    final proxy = await _fakeSocks({'localhost:443': secure.port}, seen: seen);
+    addTearDown(proxy.close);
+    final ms = await socksPing('https://localhost/__down?bytes=0', proxy.port, onBadCertificate: (_) => true);
+    expect(ms, greaterThanOrEqualTo(0));
+    expect(requests, 2);
+    expect(connections.length, 1);
+    // Plain HTTP too, with a body to read before the second answer.
+    expect(await socksPing('http://lists.test/hello', socks.port), greaterThanOrEqualTo(0));
+    expect(await socksPing('https://localhost/x', proxy.port), -1); // an untrusted certificate
+    expect(await socksPing('https://nowhere.test/x', proxy.port), -1);
+  });
 }

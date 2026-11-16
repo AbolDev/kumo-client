@@ -108,14 +108,63 @@ Future<void> _socksHandshake(_Pipe p, String host, int port, XrayAuth? auth) asy
   }
 }
 
-/// The start of a request: [method], the page, the headers every request has and [extra] ones.
-List<int> _request(String method, Uri uri, [String extra = '']) {
+/// The start of a request: [method], the page, the headers every request has and [extra] ones. With [keepAlive]
+/// the connection stays open for another request.
+List<int> _request(String method, Uri uri, [String extra = '', bool keepAlive = false]) {
   final defaultPort = uri.scheme == 'https' ? 443 : 80;
   final hostHeader = uri.port == defaultPort ? uri.host : '${uri.host}:${uri.port}';
   final path = uri.path.isEmpty ? '/' : uri.path;
   final query = uri.hasQuery ? '?${uri.query}' : '';
   return utf8.encode('$method $path$query HTTP/1.1\r\nHost: $hostHeader\r\nUser-Agent: Kumo\r\n'
-      'Accept: */*\r\nAccept-Encoding: identity\r\nConnection: close\r\n$extra\r\n');
+      'Accept: */*\r\nAccept-Encoding: identity\r\nConnection: ${keepAlive ? 'keep-alive' : 'close'}\r\n$extra\r\n');
+}
+
+/// The delay of [url] through the SOCKS5 proxy at 127.0.0.1:[socksPort], plain HTTP or HTTPS: two requests over
+/// one connection, and the time from the second one to the first byte of its answer, in ms (the first one opens
+/// everything on the way, TLS included). When the end of the first answer cannot be told its own time is given.
+/// -1 on failure. [timeout] is for the whole; [onBadCertificate] is for tests.
+Future<int> socksPing(
+  String url,
+  int socksPort, {
+  XrayAuth? auth,
+  Duration timeout = const Duration(seconds: 6),
+  bool Function(X509Certificate certificate)? onBadCertificate,
+}) async {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) return -1;
+  final open = <Socket>[];
+  Future<int> run() async {
+    final pipe = await _connect(uri, socksPort, auth, timeout, onBadCertificate, open);
+    var ms = -1;
+    for (var i = 0; i < 2; i++) {
+      final sw = Stopwatch()..start();
+      await pipe.write(_request('GET', uri, '', true));
+      final first = await pipe.next();
+      ms = sw.elapsedMilliseconds;
+      if (first == null) return -1;
+      pipe.unread(first);
+      final head = await _readHead(pipe);
+      if (head == null) return -1;
+      // Any answer is a round trip (a redirect too); its body is read so that the next answer can be found.
+      final length = int.tryParse(head.headers['content-length'] ?? '');
+      final bodyless = head.status == 204 || head.status == 304 || length == 0;
+      if (bodyless) continue;
+      final chunked = (head.headers['transfer-encoding'] ?? '').toLowerCase().contains('chunked');
+      if (chunked || length == null || length > 65536) return ms;
+      await pipe.take(length);
+    }
+    return ms;
+  }
+
+  try {
+    return await run().timeout(timeout, onTimeout: () => -1);
+  } catch (_) {
+    return -1;
+  } finally {
+    for (final s in open) {
+      s.destroy();
+    }
+  }
 }
 
 /// The status and the headers (names in lower case) of an answer; what comes after them stays in [p].

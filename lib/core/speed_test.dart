@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'latency_tester.dart' show socksWarmDelay;
 import 'singbox_config.dart' show XrayAuth;
 import 'socks_get.dart';
 
@@ -237,7 +236,9 @@ class LiveRate {
 /// A page's delay: two requests over one connection, the second counts (the first opens everything on the
 /// way, as in a real delay), in ms; -1 on failure.
 Future<int> _ping(Uri uri, SpeedRoute route, Duration timeout) async {
-  if (route.socksPort != null) return socksWarmDelay(route.socksPort!, uri, timeout, auth: route.auth);
+  // The page is https: through Xray's port the request needs TLS of its own on the connection (a plain request
+  // to port 443 always failed, so the delay was missing through every Xray server on the phone).
+  if (route.socksPort != null) return socksPing('$uri', route.socksPort!, auth: route.auth, timeout: timeout * 2);
   final client = HttpClient()..connectionTimeout = timeout;
   if (route.proxyPort != null) client.findProxy = (_) => 'PROXY 127.0.0.1:${route.proxyPort}';
   final sw = Stopwatch();
