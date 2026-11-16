@@ -167,6 +167,9 @@ void main() {
       final state = AppState();
       await tester.pumpWidget(_app(PrivacyPage(state: state, android: true)));
       await tester.scrollUntilVisible(find.byKey(const ValueKey('code-switch')), 200);
+      // The whole row on the screen (scrolling stops as soon as a part of it shows).
+      await tester.ensureVisible(find.byKey(const ValueKey('code-switch')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('code-switch')));
       await tester.pumpAndSettle();
       expect(find.text('Turn on the erase code?'), findsOneWidget);
