@@ -6,7 +6,7 @@
 
 # Kumo：免费、开源的 VPN 客户端，支持 Android、Windows、macOS 和 Linux
 
-网站: [kumo-client.ir](https://kumo-client.ir/zh/)
+网站: [kumo-client.ir](https://kumo-client.ir/zh/) · [Telegram](https://t.me/Kumo_Client)
 
 </div>
 

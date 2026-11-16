@@ -6,7 +6,7 @@
 
 # Kumo: ứng dụng VPN miễn phí, mã nguồn mở cho Android, Windows, macOS và Linux
 
-Trang web: [kumo-client.ir](https://kumo-client.ir/vi/)
+Trang web: [kumo-client.ir](https://kumo-client.ir/vi/) · [Telegram](https://t.me/Kumo_Client)
 
 </div>
 

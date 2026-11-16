@@ -6,7 +6,7 @@
 
 <h1 dir="rtl">Kumo: عميل VPN مجاني ومفتوح المصدر لأندرويد وويندوز وmacOS ولينكس</h1>
 
-الموقع: [kumo-client.ir](https://kumo-client.ir/ar/)
+الموقع: [kumo-client.ir](https://kumo-client.ir/ar/) · [Telegram](https://t.me/Kumo_Client)
 
 </div>
 

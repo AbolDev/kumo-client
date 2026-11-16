@@ -6,7 +6,7 @@
 
 <h1 dir="rtl">کومو: VPN رایگان و متن‌باز برای اندروید، ویندوز، مک و لینوکس</h1>
 
-وب‌سایت: [kumo-client.ir](https://kumo-client.ir/fa/)
+وب‌سایت: [kumo-client.ir](https://kumo-client.ir/fa/) · [Telegram](https://t.me/Kumo_Client)
 
 </div>
 

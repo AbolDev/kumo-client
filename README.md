@@ -6,7 +6,7 @@
 
 # Kumo: free, open-source VPN client for Android, Windows, macOS and Linux
 
-Website: [kumo-client.ir](https://kumo-client.ir)
+Website: [kumo-client.ir](https://kumo-client.ir) · [Telegram](https://t.me/Kumo_Client)
 
 </div>
 
