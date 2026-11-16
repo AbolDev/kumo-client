@@ -235,6 +235,54 @@ void main() {
       expect(r.upMbps, isNull);
     });
 
+    test('a stage whose connections are all refused is tried once more on one, and the log is told why', () async {
+      var downloads = 0;
+      final busy = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => busy.close(force: true));
+      busy.listen((req) async {
+        try {
+          if (req.uri.path == '/down' && ++downloads <= 2) {
+            req.response.statusCode = 429; // a busy server refuses the first two
+          } else if (req.uri.path == '/down') {
+            req.response.add(Uint8List(500000));
+          } else if (req.method == 'POST') {
+            await req.drain<void>();
+          }
+          await req.response.close();
+        } catch (_) {}
+      });
+      final base = 'http://127.0.0.1:${busy.port}';
+      final fake = SpeedServer('busy', 'Busy', '127.0.0.1', '$base/down', '$base/ping', uploadUrl: '$base/up');
+      final notes = <String>[];
+      final r = await runSpeedTest(fake, const SpeedRoute(),
+          pings: 1, streams: 2, window: const Duration(seconds: 2), warmup: Duration.zero, onNote: notes.add);
+      expect(r.downMbps, greaterThan(0));
+      expect(downloads, 3);
+      expect(notes.single, contains('status 429 ×2'));
+      expect(notes.single, contains('one more try on one connection worked'));
+    });
+
+    test('a download cut by its time limit keeps the speed of what came', () async {
+      final slow = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => slow.close(force: true));
+      slow.listen((req) async {
+        try {
+          // Data comes, but the answer never ends within the limit of the whole.
+          for (var i = 0; i < 100; i++) {
+            req.response.add(Uint8List(32768));
+            await req.response.flush();
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          }
+          await req.response.close();
+        } catch (_) {}
+      });
+      final why = <String>[];
+      final v = await httpSpeed('http://127.0.0.1:${slow.port}/', upload: false,
+          window: const Duration(seconds: 30), timeout: const Duration(seconds: 2), onFail: why.add);
+      expect(v, greaterThan(0));
+      expect(why, isEmpty);
+    });
+
     test('nothing reachable gives nothing', () async {
       final dead = SpeedServer('dead', 'Dead', '127.0.0.1', 'http://127.0.0.1:1/d', 'http://127.0.0.1:1/p', uploadUrl: 'http://127.0.0.1:1/u');
       final r = await runSpeedTest(dead, const SpeedRoute(),

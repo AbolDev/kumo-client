@@ -261,7 +261,9 @@ Future<int> _ping(Uri uri, SpeedRoute route, Duration timeout) async {
 
 /// How fast data goes through [route] to [url], in Mbit/s, over a plain connection or the local proxy; -1
 /// when it could not be measured. A download counts what arrives until it ends or [window] has passed, minus
-/// the [warmup]; an upload sends [bytes] of zeros and counts the time until the server has answered.
+/// the [warmup]; an upload sends [bytes] of zeros and counts the time until the server has answered. When
+/// [timeout] runs out half-way, what went through so far (64 KB at least) gives the speed. [onFail] is told
+/// why it could not be measured.
 Future<double> httpSpeed(
   String url, {
   int? proxyPort,
@@ -271,12 +273,17 @@ Future<double> httpSpeed(
   Duration warmup = Duration.zero,
   int? maxBytes,
   void Function(int bytes)? onBytes,
+  void Function(String why)? onFail,
   Duration timeout = const Duration(seconds: 30),
 }) async {
   final uri = Uri.tryParse(url);
   if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) return -1;
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
   if (proxyPort != null) client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
+  // What has gone through so far, for an answer when the time runs out.
+  final meter = RateMeter(warmup: warmup);
+  var sent = 0;
+  final sw = Stopwatch();
 
   Future<double> run() async {
     if (upload) {
@@ -285,7 +292,7 @@ Future<double> httpSpeed(
         ..contentLength = bytes
         ..contentType = ContentType.binary;
       final chunk = Uint8List(32768);
-      final sw = Stopwatch()..start();
+      sw.start();
       var left = bytes;
       var sinceFlush = 0;
       while (left > 0) {
@@ -293,6 +300,7 @@ Future<double> httpSpeed(
         req.add(n == chunk.length ? chunk : Uint8List.sublistView(chunk, 0, n));
         left -= n;
         sinceFlush += n;
+        sent += n;
         onBytes?.call(n);
         if (sinceFlush >= 262144) {
           await req.flush();
@@ -302,19 +310,23 @@ Future<double> httpSpeed(
       final res = await req.close();
       await res.drain<void>();
       sw.stop();
-      if (res.statusCode >= 400) return -1;
+      if (res.statusCode >= 400) {
+        onFail?.call('status ${res.statusCode}');
+        return -1;
+      }
       return bytes * 8 / (sw.elapsedMicroseconds / 1e6) / 1e6;
     }
     final req = await client.getUrl(uri);
     final res = await req.close();
     if (res.statusCode != 200) {
       await res.drain<void>();
+      onFail?.call('status ${res.statusCode}');
       return -1;
     }
-    final meter = RateMeter(warmup: warmup);
     final it = StreamIterator<List<int>>(res);
     while (true) {
-      final left = meter.started ? window - meter.elapsed : window;
+      // The first bytes may be slow to come on a slow line: they get twice the window.
+      final left = meter.started ? window - meter.elapsed : window * 2;
       if (left <= Duration.zero) break;
       final more = await it.moveNext().timeout(left, onTimeout: () => false);
       if (!more) break;
@@ -322,16 +334,32 @@ Future<double> httpSpeed(
       onBytes?.call(it.current.length);
       if (maxBytes != null && meter.total >= maxBytes) break;
     }
+    if (meter.total == 0) onFail?.call('no data came');
     return meter.mbps();
   }
 
+  double outOfTime() {
+    final got = upload
+        ? (sent >= 65536 && sw.elapsedMicroseconds > 0 ? sent * 8 / (sw.elapsedMicroseconds / 1e6) / 1e6 : -1.0)
+        : (meter.total >= 65536 ? meter.mbps() : -1.0);
+    if (got < 0) onFail?.call('timeout');
+    return got;
+  }
+
   try {
-    return await run().timeout(timeout, onTimeout: () => -1);
-  } catch (_) {
+    return await run().timeout(timeout, onTimeout: outOfTime);
+  } catch (e) {
+    onFail?.call(_why(e));
     return -1;
   } finally {
     client.close(force: true);
   }
+}
+
+/// A short reason for a failed transfer, for the log.
+String _why(Object e) {
+  final text = '$e'.split('\n').first;
+  return text.length > 120 ? '${text.substring(0, 120)}…' : text;
 }
 
 /// Runs [count] things at once and adds up what they give: the speed of several connections is what the
@@ -348,6 +376,7 @@ Future<double?> _sum(int count, Future<double> Function(int i) one) async {
 /// download leaves its first [warmup] out. Neither the download nor the upload uses more than [maxMb] MB (the
 /// connections share it); a smaller share is cheaper and less exact on a fast line. [onStage] is told what is being measured and [onResult] gets
 /// the numbers as they come, [onPingTry] each try of the delay (-1: it failed), [onLive] the speed of the download or the upload while it runs (four times a second);
+/// [onNote] is told, for the log, why a stage could not be measured or needed a second try;
 /// [cancelled] is asked between the stages and the result so far is returned.
 Future<SpeedResult> runSpeedTest(
   SpeedServer server,
@@ -362,6 +391,7 @@ Future<SpeedResult> runSpeedTest(
   void Function(SpeedResult partial)? onResult,
   void Function(SpeedStage stage, double mbps, Duration elapsed)? onLive,
   void Function(int done, int total, int ms)? onPingTry,
+  void Function(String note)? onNote,
   bool Function()? cancelled,
   DateTime? now,
 }) async {
@@ -370,7 +400,9 @@ Future<SpeedResult> runSpeedTest(
   // What each connection may use of the most.
   final share = (maxMb * 1000000 / streams).floor();
 
-  Future<double> down(int bytes, LiveRate live) => route.socksPort != null
+  // Why the connections of a stage failed, for the log.
+  final why = <String>[];
+  Future<double> down(int bytes, LiveRate live, {Duration extra = Duration.zero}) => route.socksPort != null
       ? socksSpeed(server.download(bytes), route.socksPort!,
           auth: route.auth,
           upload: false,
@@ -378,7 +410,8 @@ Future<SpeedResult> runSpeedTest(
           warmup: warmup,
           maxBytes: bytes,
           onBytes: live.add,
-          timeout: window + const Duration(seconds: 20))
+          onFail: why.add,
+          timeout: window + const Duration(seconds: 20) + extra)
       : httpSpeed(server.download(bytes),
           proxyPort: route.proxyPort,
           upload: false,
@@ -386,12 +419,44 @@ Future<SpeedResult> runSpeedTest(
           warmup: warmup,
           maxBytes: bytes,
           onBytes: live.add,
-          timeout: window + const Duration(seconds: 20));
-  Future<double> up(int bytes, LiveRate live) => route.socksPort != null
+          onFail: why.add,
+          timeout: window + const Duration(seconds: 20) + extra);
+  Future<double> up(int bytes, LiveRate live, {Duration extra = Duration.zero}) => route.socksPort != null
       ? socksSpeed(server.uploadUrl!, route.socksPort!,
-          auth: route.auth, upload: true, bytes: bytes, onBytes: live.add, timeout: window + const Duration(seconds: 25))
+          auth: route.auth,
+          upload: true,
+          bytes: bytes,
+          onBytes: live.add,
+          onFail: why.add,
+          timeout: window + const Duration(seconds: 25) + extra)
       : httpSpeed(server.uploadUrl!,
-          proxyPort: route.proxyPort, upload: true, bytes: bytes, onBytes: live.add, timeout: window + const Duration(seconds: 25));
+          proxyPort: route.proxyPort,
+          upload: true,
+          bytes: bytes,
+          onBytes: live.add,
+          onFail: why.add,
+          timeout: window + const Duration(seconds: 25) + extra);
+
+  // A stage whose connections all failed is tried once more on one connection with more time (several at
+  // once can be too much for a slow or busy line, and a busy server may refuse one of them), and the log is
+  // told why. A smaller part of the data goes to that one.
+  Future<double?> stage(
+      SpeedStage s, int bytes, Future<double> Function(int bytes, LiveRate live, {Duration extra}) one) async {
+    final live = LiveRate((v, e) => onLive?.call(s, v, e))..start();
+    var got = await _sum(streams, (_) => one(bytes, live));
+    live.stop();
+    if (got == null && !stop()) {
+      final first = [...why];
+      why.clear();
+      final again = LiveRate((v, e) => onLive?.call(s, v, e))..start();
+      final v = await one(bytes < 10000000 ? bytes : 10000000, again, extra: const Duration(seconds: 15));
+      again.stop();
+      got = v >= 0 ? v : null;
+      onNote?.call('${s.name} failed on $streams connections (${_reasons(first)})'
+          '${got == null ? '; one more try failed too (${_reasons(why)})' : '; one more try on one connection worked'}');
+    }
+    return got;
+  }
 
   // The delay.
   onStage?.call(SpeedStage.ping);
@@ -419,9 +484,8 @@ Future<SpeedResult> runSpeedTest(
 
   // The download: each connection asks for more than the window can carry.
   onStage?.call(SpeedStage.download);
-  final liveDown = LiveRate((v, e) => onLive?.call(SpeedStage.download, v, e))..start();
-  final d = await _sum(streams, (_) => down(share, liveDown));
-  liveDown.stop();
+  why.clear();
+  final d = await stage(SpeedStage.download, share, down);
   if (d != null) {
     r = r.copyWith(downMbps: d);
     onResult?.call(r);
@@ -429,22 +493,32 @@ Future<SpeedResult> runSpeedTest(
   if (stop() || !server.canUpload) return r;
 
   // The upload: a small try tells how much each connection may send in the window, so a slow line is not
-  // asked for minutes and a fast one is not asked for too little to count.
+  // asked for minutes and a fast one is not asked for too little to count. When the try fails (a busy moment)
+  // the upload is still made, with a modest size.
   onStage?.call(SpeedStage.upload);
-  final liveUp = LiveRate((v, e) => onLive?.call(SpeedStage.upload, v, e))..start();
-  try {
-  final probe = await up(300000, liveUp);
-  if (probe >= 0 && !stop()) {
-    // (The try is slow because the connection is still speeding up, so twice what it says is asked for.)
-    final perStream = (probe * 1e6 / 8 * window.inSeconds * 2 / streams).clamp(100000, share < 8000000 ? share : 8000000).toInt();
-    final u = await _sum(streams, (_) => up(perStream, liveUp));
-    if (u != null) {
-      r = r.copyWith(upMbps: u);
-      onResult?.call(r);
-    }
-  }
-  } finally {
-    liveUp.stop();
+  why.clear();
+  final liveProbe = LiveRate((v, e) => onLive?.call(SpeedStage.upload, v, e))..start();
+  final probe = await up(300000, liveProbe);
+  liveProbe.stop();
+  if (stop()) return r;
+  final most = share < 8000000 ? share : 8000000;
+  // (The try is slow because the connection is still speeding up, so twice what it says is asked for.)
+  final perStream =
+      probe >= 0 ? (probe * 1e6 / 8 * window.inSeconds * 2 / streams).clamp(100000, most).toInt() : (500000 < most ? 500000 : most);
+  final u = await stage(SpeedStage.upload, perStream, up);
+  if (u != null) {
+    r = r.copyWith(upMbps: u);
+    onResult?.call(r);
   }
   return r;
+}
+
+/// The reasons of the failed connections, each once with how many times it came.
+String _reasons(List<String> why) {
+  if (why.isEmpty) return 'no reason given';
+  final count = <String, int>{};
+  for (final w in why) {
+    count[w] = (count[w] ?? 0) + 1;
+  }
+  return count.entries.map((e) => e.value > 1 ? '${e.key} ×${e.value}' : e.key).join(', ');
 }

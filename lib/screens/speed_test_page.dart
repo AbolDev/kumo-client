@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../core/app_log.dart' show LogLevel, LogTag;
 import '../core/speed_test.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
@@ -116,6 +117,8 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
           if (ms >= 0) _pingLast = ms;
         });
       },
+      // Why a stage needed a second try or could not be measured goes to the log (Tests).
+      onNote: (note) => widget.state.log('Speed test (${_server.name}): $note', level: LogLevel.warn, tag: LogTag.test),
       cancelled: () => _cancel || !mounted,
     );
     if (!mounted) return;

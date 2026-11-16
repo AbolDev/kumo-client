@@ -276,7 +276,8 @@ class RateMeter {
 /// of a download is not counted (see [RateMeter]), and a download stops once [maxBytes] have come. [onBytes] is
 /// told of the bytes as they come or go, for a live number.
 ///
-/// [timeout] is for the whole, set-up included. [onBadCertificate] is for tests.
+/// [timeout] is for the whole, set-up included; when it runs out half-way, what went through so far (64 KB at
+/// least) gives the speed. [onFail] is told why it could not be measured. [onBadCertificate] is for tests.
 Future<double> socksSpeed(
   String url,
   int socksPort, {
@@ -288,14 +289,17 @@ Future<double> socksSpeed(
   Duration warmup = Duration.zero,
   int? maxBytes,
   void Function(int bytes)? onBytes,
+  void Function(String why)? onFail,
   bool Function(X509Certificate certificate)? onBadCertificate,
 }) async {
   final uri = Uri.tryParse(url);
   if (uri == null || uri.host.isEmpty || (uri.scheme != 'http' && uri.scheme != 'https')) return -1;
   final open = <Socket>[];
-  // What an upload has sent, and since when: when the time runs out half-way, they give its speed.
+  // What an upload has sent, and since when, and what a download has got: when the time runs out half-way,
+  // they give its speed.
   var sent = 0;
   final sw = Stopwatch();
+  final meter = RateMeter(warmup: warmup);
   Future<double> run() async {
     final pipe = await _connect(uri, socksPort, auth, timeout, onBadCertificate, open);
     if (upload) {
@@ -312,15 +316,21 @@ Future<double> socksSpeed(
       }
       final head = await _readHead(pipe);
       sw.stop();
-      if (head == null || head.status >= 400) return -1;
+      if (head == null || head.status >= 400) {
+        onFail?.call(head == null ? 'no answer' : 'status ${head.status}');
+        return -1;
+      }
       return bytes * 8 / (sw.elapsedMicroseconds / 1e6) / 1e6;
     }
     await pipe.write(_request('GET', uri));
     final head = await _readHead(pipe);
-    if (head == null || head.status != 200) return -1;
-    final meter = RateMeter(warmup: warmup);
+    if (head == null || head.status != 200) {
+      onFail?.call(head == null ? 'no answer' : 'status ${head.status}');
+      return -1;
+    }
     while (true) {
-      final left = meter.started ? window - meter.elapsed : window;
+      // The first bytes may be slow to come on a slow line: they get twice the window.
+      final left = meter.started ? window - meter.elapsed : window * 2;
       if (left <= Duration.zero) break;
       final chunk = await pipe.next().timeout(left, onTimeout: () => null);
       if (chunk == null) break;
@@ -328,15 +338,24 @@ Future<double> socksSpeed(
       onBytes?.call(chunk.length);
       if (maxBytes != null && meter.total >= maxBytes) break;
     }
+    if (meter.total == 0) onFail?.call('no data came');
     return meter.mbps();
   }
 
-  // An upload out of time: the speed of what went out (at least 64 KB of it); anything else out of time is -1.
-  double outOfTime() =>
-      upload && sent >= 65536 && sw.elapsedMicroseconds > 0 ? sent * 8 / (sw.elapsedMicroseconds / 1e6) / 1e6 : -1;
+  // Out of time: the speed of what went out or came in (at least 64 KB of it), else -1.
+  double outOfTime() {
+    final got = upload
+        ? (sent >= 65536 && sw.elapsedMicroseconds > 0 ? sent * 8 / (sw.elapsedMicroseconds / 1e6) / 1e6 : -1.0)
+        : (meter.total >= 65536 ? meter.mbps() : -1.0);
+    if (got < 0) onFail?.call('timeout');
+    return got;
+  }
+
   try {
     return await run().timeout(timeout, onTimeout: outOfTime);
-  } catch (_) {
+  } catch (e) {
+    final text = '$e'.split('\n').first;
+    onFail?.call(text.length > 120 ? '${text.substring(0, 120)}…' : text);
     return -1;
   } finally {
     for (final s in open) {
