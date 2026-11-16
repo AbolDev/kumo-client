@@ -191,6 +191,7 @@ class WarpController extends ChangeNotifier {
         final fp = j['masqueFp'];
         masqueFingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
         inWarp = j['inWarp'] == true && account2 != null;
+        h2Default = j['h2Default'] == true;
         final cu = j['custom'];
         if (cu is Map && cu['method'] is String && cu['ip'] is String && cu['port'] is int) {
           final port = cu['port'] as int;
@@ -221,6 +222,7 @@ class WarpController extends ChangeNotifier {
         'masque': masque?.toJson(),
         if (masqueFingerprint.isNotEmpty) 'masqueFp': masqueFingerprint,
         'inWarp': inWarp,
+        if (h2Default) 'h2Default': true,
         if (custom != null) 'custom': {'method': custom!.method, 'ip': custom!.ip, 'port': custom!.port},
         'enabled': enabled,
         'choice': choice,
@@ -232,25 +234,41 @@ class WarpController extends ChangeNotifier {
   Future<void> startup() async {
     await restoreServer();
     if (account == null || !enabled) return;
-    // An account made before the MASQUE ways were in the list: their own account is asked for once a run, in
-    // the background, so that they show in the group too.
-    if (masque == null && !inWarp) unawaited(_addMasque());
+    // An account made before MASQUE over HTTP/2 was the default: moved to it once (its own account is asked for
+    // in the background, once a run until it works), so that the MASQUE ways show in the group too.
+    if (!inWarp && (!h2Default || masque == null)) unawaited(_upgrade());
     if (DateTime.now().millisecondsSinceEpoch - _checkedAt < _every.inMilliseconds) {
       return;
     }
     await updateProfile(silent: true);
   }
 
-  Future<void> _addMasque() async {
+  /// Whether the way in use was moved to [defaultMethodId] once (a new account starts there); until then each
+  /// run tries it again.
+  bool h2Default = false;
+
+  Future<void> _upgrade() async {
     if (_masqueTried || busy || scanning) return;
+    _masqueTried = true;
     final all = await combos();
     if (!all.any((c) => isMasqueKind(c.method.kind))) return;
+    final h2 = all.indexWhere((c) => c.method.id == defaultMethodId);
+    final before = (choice, custom);
     try {
+      if (!h2Default && h2 >= 0) {
+        custom = null;
+        choice = h2;
+      }
+      // Makes the MASQUE account when there is none (an error leaves the list as it was).
       await _apply();
-      notifyListeners();
+      h2Default = true;
+      await _save();
+      if (isChosen) await _state.reconnectIfConnected();
     } catch (_) {
-      // tried again at the next start
+      choice = before.$1;
+      custom = before.$2;
     }
+    notifyListeners();
   }
 
   /// The ways Warp-in-Warp can use: plain WireGuard ones (a method with noise goes through Xray,
@@ -372,7 +390,8 @@ class WarpController extends ChangeNotifier {
       if (isMasqueKind(m.kind) && masque == null) continue;
       final inUse = m.id == now.combo.method.id;
       final way = inUse ? now : (combo: all[i], index: i);
-      final text = await _linkOf(way.combo, name: 'WARP ${m.id}');
+      // A MASQUE link puts the method after the name itself.
+      final text = await _linkOf(way.combo, name: isMasqueKind(m.kind) ? 'WARP' : 'WARP ${m.id}');
       final config = parseLink(text);
       if (config == null) continue;
       _ways[config] = way;
@@ -447,11 +466,13 @@ class WarpController extends ChangeNotifier {
       }
       try {
         await _apply(choose: true);
+        if (fresh && !inWarp) h2Default = true;
       } catch (_) {
         if (choice == 0) rethrow;
         choice = 0;
         await _apply(choose: true);
       }
+      await _save();
     } catch (e) {
       error = '$e'.replaceFirst('Bad state: ', '');
       if (account == null) enabled = false;
@@ -685,6 +706,7 @@ class WarpController extends ChangeNotifier {
     account2 = null;
     masque = null;
     masqueFingerprint = '';
+    h2Default = false;
     inWarp = false;
     custom = null;
     enabled = false;
