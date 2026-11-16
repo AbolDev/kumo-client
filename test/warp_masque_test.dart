@@ -155,7 +155,7 @@ void main() {
       expect(base64.decode(account.privateKey).sublist(121 - 65), sent.sublist(26));
     });
 
-    test('the ways to reach the service start with the profile\'s cut and go on with bigger pieces', () {
+    test('the ways to reach the service start with the cuts that pass, then the profile\'s own', () {
       final p = WarpProfile(
         version: 1,
         issuedAt: DateTime.utc(2026, 1, 1),
@@ -170,16 +170,34 @@ void main() {
         methods: const [],
       );
       final tries = signUpTries(p);
-      expect(tries.first, ('104.16.192.82', (5, 40), (10, 10)));
+      // The cuts measured to pass come first (pieces of 40 to 80 bytes), the profile's own after them.
+      expect(tries.first, ('104.16.192.82', (40, 80), (5, 10)));
       expect(tries[1].$1, '104.16.24.84');
-      expect(tries.map((t) => t.$2).toSet(), {(5, 40), (20, 60), (50, 100)});
-      expect(tries.length, 12);
+      expect(tries.map((t) => t.$2).toSet(), {(40, 80), (35, 70), (60, 70), (20, 60), (5, 40), (50, 100)});
+      expect(tries.length, 24);
       // Raced in two waves: every cut and address once, then a second go.
       final waves = signUpWaves(p);
       expect(waves.length, 2);
-      expect(waves.first.length, 6);
-      expect(waves.first.map((t) => (t.$1, t.$2)).toSet().length, 6);
+      expect(waves.first.length, 12);
+      expect(waves.first.map((t) => (t.$1, t.$2)).toSet().length, 12);
       expect([...waves.first, ...waves.last], tries);
+    });
+
+    test('a profile whose cut is one of the known ones does not make it twice', () {
+      final p = WarpProfile(
+        version: 1,
+        issuedAt: DateTime.utc(2026, 1, 1),
+        expiresAt: DateTime.utc(2030, 1, 1),
+        keyId: 'k',
+        message: const {},
+        disabled: const {},
+        fragmentSize: (40, 80),
+        fragmentDelay: (5, 10),
+        apiIps: const ['104.16.192.82'],
+        endpoints: const [],
+        methods: const [],
+      );
+      expect(signUpTries(p).where((t) => t.$2 == (40, 80)).length, 2); // once a round
     });
 
     test('goes on when switching the account on is refused', () async {

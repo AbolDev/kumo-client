@@ -133,6 +133,10 @@ class FragmentRelay {
         return;
       }
       up.setOption(SocketOption.tcpNoDelay, true);
+      // A write to a socket the other side has dropped fails its `done` too; nobody waits for it, and an
+      // error left there would be an uncaught one.
+      unawaited(up.done.catchError((Object _) {}));
+      unawaited(client.done.catchError((Object _) {}));
       var first = true;
       // The pieces go out one after the other even when the next chunk arrives in the meantime.
       var chain = Future<void>.value();
@@ -230,7 +234,7 @@ Future<Map<String, dynamic>> _call(int relayPort, String method, String path, Ma
     ]);
     final buffer = BytesBuilder();
     ({int status, Uint8List body})? response;
-    await for (final chunk in tls.timeout(const Duration(seconds: 15))) {
+    await for (final chunk in tls.timeout(const Duration(seconds: 10))) {
       buffer.add(chunk);
       response = parseHttpResponse(buffer.toBytes());
       if (response != null) break;
@@ -258,21 +262,64 @@ Future<Map<String, dynamic>> _call(int relayPort, String method, String path, Ma
   }
 }
 
+/// [_call], tried again on a new connection (with new random pieces) when the connection itself failed: the
+/// filter lets a cut hello through with a chance, not always, and an account takes two or three calls. An answer
+/// of the service, an error too, is not tried again.
+Future<Map<String, dynamic>> _callRetry(int relayPort, String method, String path, Map<String, dynamic> body,
+    {String? token, String clientVersion = _clientVersion, int tries = 4}) async {
+  Object? last;
+  for (var i = 0; i < tries; i++) {
+    try {
+      return await _call(relayPort, method, path, body, token: token, clientVersion: clientVersion);
+    } on WarpRegisterException catch (e) {
+      if (!e.message.startsWith('no answer')) rethrow;
+      last = e;
+    } on Exception catch (e) {
+      // A timeout, a reset, a handshake that did not finish.
+      last = e;
+    }
+  }
+  throw last is WarpRegisterException ? last : WarpRegisterException('$last');
+}
+
 /// One way to reach the sign-up service: the address and how the hello is cut.
 typedef SignUpTry = (String ip, (int, int) size, (int, int) delay);
 
-/// The ways the sign-up service is tried, in order: two rounds, each cutting the hello as the profile
-/// says and then in bigger pieces. A filter that drops a connection whose hello comes in many tiny
-/// pieces lets pieces of 20 to 100 bytes through (the name is still cut), so those follow the profile's.
-List<SignUpTry> signUpTries(WarpProfile profile) => [
-      for (var round = 0; round < 2; round++)
-        for (final cut in [
-          (profile.fragmentSize, profile.fragmentDelay),
-          ((20, 60), (5, 5)),
-          ((50, 100), (10, 10)),
-        ])
-          for (final ip in profile.apiIps) (ip, cut.$1, cut.$2),
-    ];
+/// How the hello is cut (the size of a piece, the pause after it, each a [min, max] range in bytes and ms).
+typedef SignUpCut = ((int, int) size, (int, int) delay);
+
+/// The cuts that pass a filter which blocks the name of the service in one piece, best first. Measured on an
+/// Iranian network (Nov 2026), where the connection to the service stalls unless the hello is cut: pieces of
+/// 40 to 80 bytes passed 36 times of 36 (a fixed 60 or 70 bytes 12 of 12), 20 to 60 about one in three, 50 to
+/// 100 one in four, 5 to 40 (the profile's) never, and pieces of 80 bytes or more (the whole name in one piece)
+/// or of 30 bytes or fewer (too many pieces) never. The pause between pieces hardly matters.
+const knownCuts = <SignUpCut>[
+  ((40, 80), (5, 10)),
+  ((35, 70), (10, 15)),
+  ((60, 70), (10, 10)),
+  ((20, 60), (30, 30)),
+];
+
+/// The ways the sign-up service is tried: the cuts that are known to pass, the cut of the profile (it may have
+/// been made for another network) and a wider one, each through every address; two rounds, the second a second
+/// go with other random sizes.
+List<SignUpTry> signUpTries(WarpProfile profile) {
+  final cuts = <SignUpCut>[
+    ...knownCuts,
+    (profile.fragmentSize, profile.fragmentDelay),
+    ((50, 100), (30, 30)),
+  ];
+  final seen = <SignUpCut>{};
+  final unique = [
+    for (final c in cuts)
+      if (seen.add(c)) c,
+  ];
+  return [
+    for (var round = 0; round < 2; round++)
+      for (final cut in unique)
+        for (final ip in profile.apiIps) (ip, cut.$1, cut.$2),
+  ];
+}
 
 /// The tries of [signUpTries] in waves: the ways of one wave are raced, the next wave is a second go (the
 /// pieces are cut at random sizes, and a filter does not always lose the name in the same way).
@@ -353,7 +400,7 @@ Future<T> _throughService<T>(WarpProfile profile, Random? random, void Function(
 Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random, void Function(double)? onProgress}) async {
   final (priv, pub) = newWireGuardKeys(random);
   final account = await _throughService(profile, random, onProgress, (port) async {
-    final reg = await _call(port, 'POST', _apiPath, {
+    final reg = await _callRetry(port, 'POST', _apiPath, {
       'key': pub,
       'install_id': '',
       'fcm_token': '',
@@ -367,7 +414,7 @@ Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random, void Func
     if (id is! String || token is! String || !RegExp(r'^[A-Za-z0-9-]{8,64}$').hasMatch(id)) {
       throw WarpRegisterException('the answer has no account');
     }
-    final on = await _call(port, 'PATCH', '$_apiPath/$id', {'warp_enabled': true}, token: token);
+    final on = await _callRetry(port, 'PATCH', '$_apiPath/$id', {'warp_enabled': true}, token: token);
     final account = _account(priv, (on['config'] ?? reg['config']));
     if (account == null) throw WarpRegisterException('the answer is incomplete');
     return account;
@@ -429,7 +476,7 @@ Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
       random,
       onProgress,
       (port) => run((method, path, body, {String? token}) =>
-          _call(port, method, path, body, token: token, clientVersion: _masqueClientVersion)));
+          _callRetry(port, method, path, body, token: token, clientVersion: _masqueClientVersion)));
   onProgress?.call(1);
   return account;
 }
