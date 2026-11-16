@@ -22,6 +22,13 @@
     <string name="widget_name_stats">وضعیت کومو</string>
     <string name="widget_cfg_title">ظاهر ویجت</string>
     <string name="widget_cfg_done">تأیید</string>
+    <string name="widget_cfg_bg">رنگ پس‌زمینه</string>
+    <string name="widget_cfg_opacity">شفافیت پس‌زمینه</string>
+    <string name="widget_cfg_cancel">انصراف</string>
+    <string name="widget_cfg_save">ذخیره</string>
+    <string name="widget_cfg_state">پیش‌نمایش در حالت</string>
+    <string name="widget_cfg_off">قطع</string>
+    <string name="widget_cfg_on">وصل</string>
     <string name="notif_proxy">پروکسی روی 127.0.0.1:%1$d فعال است</string>
     <string name="notif_stop_proxy">توقف پروکسی</string>
     <string name="widget_toggle">وصل یا قطع کردن</string>

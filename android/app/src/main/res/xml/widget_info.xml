@@ -5,7 +5,7 @@
     android:initialLayout="@layout/wg_bar"
     android:minWidth="110dp"
     android:minHeight="40dp"
-    android:minResizeWidth="110dp"
+    android:minResizeWidth="40dp"
     android:minResizeHeight="40dp"
     android:previewLayout="@layout/wg_bar"
     android:resizeMode="horizontal|vertical"

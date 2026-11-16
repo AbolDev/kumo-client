@@ -1,15 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The status card more than one row high and three cells wide or more: the name and the delay on top, both
+     speeds in the middle, the data used and the time at the bottom with the power button in the corner.
+     Always drawn left to right, whatever the language of the phone. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:layoutDirection="ltr">
 
     <ImageView
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="fitXY"
-        android:src="@drawable/wg_round"
+        android:src="@drawable/wg_r24"
         android:tint="#FFFFFFFF" />
 
     <LinearLayout
@@ -28,45 +32,45 @@
             android:orientation="horizontal">
 
             <TextView
-            android:id="@+id/wg_brand"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FF2C2C2A"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:text="Kumo" />
-
-            <FrameLayout
-            android:id="@+id/wg_chip_box"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp">
-
-            <ImageView
-                android:id="@+id/wg_chip_bg"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="fitXY"
-                android:src="@drawable/wg_pill"
-                android:tint="#FFEDECE6" />
-
-            <TextView
-                android:id="@+id/wg_chip"
-                android:layout_width="wrap_content"
+                android:id="@+id/wg_title"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
                 android:includeFontPadding="false"
                 android:maxLines="1"
-                android:paddingStart="8dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="8dp"
-                android:paddingBottom="3dp"
-                android:textColor="#FF444441"
-                android:textSize="11sp" />
-        </FrameLayout>
+                android:text="Kumo"
+                android:textColor="#FF2C2C2A"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:id="@+id/wg_chip_box"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp">
+
+                <ImageView
+                    android:id="@+id/wg_chip_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/wg_pill"
+                    android:tint="#FFEDECE6" />
+
+                <TextView
+                    android:id="@+id/wg_chip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:paddingStart="8dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="3dp"
+                    android:textColor="#FF444441"
+                    android:textSize="11sp" />
+            </FrameLayout>
         </LinearLayout>
 
         <LinearLayout
@@ -76,108 +80,90 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
+            <TextView
+                android:id="@+id/wg_down"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FF2C2C2A"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/wg_up"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FF2C2C2A"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="bottom"
+            android:orientation="horizontal">
+
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:orientation="vertical">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <TextView
-            android:id="@+id/wg_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FF5F5E5A"
-            android:textSize="12sp"
-            android:text="Kumo" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
+                    android:id="@+id/wg_total"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:orientation="horizontal">
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#FF5F5E5A"
+                    android:textSize="11sp" />
 
-                    <TextView
-            android:id="@+id/wg_down"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FF2C2C2A"
-            android:textSize="17sp"
-            android:textStyle="bold" />
-
-                    <TextView
-            android:id="@+id/wg_up"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FF2C2C2A"
-            android:textSize="17sp"
-            android:textStyle="bold"
-            android:layout_marginStart="14dp" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <Chronometer
+                    android:id="@+id/wg_time"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:orientation="horizontal">
-
-                    <TextView
-            android:id="@+id/wg_total"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FF5F5E5A"
-            android:textSize="11sp" />
-
-                    <Chronometer
-                        android:id="@+id/wg_time"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:includeFontPadding="false"
-                        android:textColor="#FF5F5E5A"
-                        android:textSize="11sp" />
-                </LinearLayout>
+                    android:layout_marginStart="8dp"
+                    android:includeFontPadding="false"
+                    android:textColor="#FF5F5E5A"
+                    android:textSize="11sp" />
             </LinearLayout>
 
             <FrameLayout
-            android:id="@+id/wg_button"
-            android:layout_width="48dp"
-            android:layout_height="48dp">
+                android:id="@+id/wg_button"
+                android:layout_width="44dp"
+                android:layout_height="44dp">
 
-            <ImageView
-                android:id="@+id/wg_btn_bg"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:src="@drawable/wg_circle"
-                android:tint="#FFE1F5EE" />
+                <ImageView
+                    android:id="@+id/wg_btn_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/wg_circle"
+                    android:tint="#FFE1F5EE" />
 
-            <ImageView
-                android:id="@+id/wg_ring"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:src="@drawable/wg_ring"
-                android:tint="#FF1D9E75" />
+                <ImageView
+                    android:id="@+id/wg_ring"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/wg_ring"
+                    android:tint="#FF1D9E75" />
 
-            <ImageView
-                android:id="@+id/wg_icon"
-                android:layout_width="24dp"
-                android:layout_height="24dp"
-                android:layout_gravity="center"
-                android:contentDescription="@string/widget_toggle"
-                android:src="@drawable/ic_power"
-                android:tint="#FF0F6E56" />
-        </FrameLayout>
+                <ImageView
+                    android:id="@+id/wg_icon"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@string/widget_toggle"
+                    android:src="@drawable/ic_power"
+                    android:tint="#FF0F6E56" />
+            </FrameLayout>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

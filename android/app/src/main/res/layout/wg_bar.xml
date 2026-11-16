@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The quick bar, a little wider than the button: the power button, the name and one line under it.
+     Always drawn left to right, whatever the language of the phone. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:layoutDirection="ltr">
 
     <ImageView
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="fitXY"
-        android:src="@drawable/wg_pill"
+        android:src="@drawable/wg_r20"
         android:tint="#FFFFFFFF" />
 
     <LinearLayout
@@ -17,7 +20,7 @@
         android:layout_height="match_parent"
         android:gravity="start|center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="6dp"
+        android:paddingStart="8dp"
         android:paddingEnd="12dp">
 
         <FrameLayout
@@ -52,32 +55,32 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
             <TextView
-            android:id="@+id/wg_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FF2C2C2A"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:text="Kumo" />
+                android:id="@+id/wg_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="Kumo"
+                android:textColor="#FF2C2C2A"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
             <TextView
-            android:id="@+id/wg_sub"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FF5F5E5A"
-            android:textSize="11sp"
-            android:layout_marginTop="2dp" />
+                android:id="@+id/wg_sub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FF5F5E5A"
+                android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

@@ -1,29 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The power button widget when it is wide and one row high: the button at the start, the state beside it.
+     Always drawn left to right. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:layoutDirection="ltr">
 
     <ImageView
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:scaleType="fitXY"
-        android:src="@drawable/wg_round"
+        android:src="@drawable/wg_r20"
         android:tint="#FFFFFFFF" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="10dp"
-        android:paddingEnd="12dp">
+        android:paddingEnd="14dp">
 
         <FrameLayout
             android:id="@+id/wg_button"
-            android:layout_width="40dp"
-            android:layout_height="40dp">
+            android:layout_width="44dp"
+            android:layout_height="44dp">
 
             <ImageView
                 android:id="@+id/wg_btn_bg"
@@ -41,8 +44,8 @@
 
             <ImageView
                 android:id="@+id/wg_icon"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
                 android:layout_gravity="center"
                 android:contentDescription="@string/widget_toggle"
                 android:src="@drawable/ic_power"
@@ -53,13 +56,13 @@
             android:id="@+id/wg_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:ellipsize="end"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:textColor="#FF2C2C2A"
             android:textSize="13sp"
-            android:textStyle="bold"
-            android:layout_marginStart="8dp" />
+            android:textStyle="bold" />
     </LinearLayout>
 </FrameLayout>
