@@ -148,17 +148,31 @@ List<String> _fromJson(Object? json) {
     }
     final outbounds = v['outbounds'];
     if (outbounds is List) {
-      final singbox = outbounds.where((o) => o is Map && o['type'] != null);
+      final singbox = outbounds.where((o) => o is Map && o['type'] != null).cast<Map>().toList();
       if (singbox.isNotEmpty) {
+        // The outbounds by their tag: a server can be reached through another one (`detour`), such as the
+        // ShadowTLS layer under a Shadowsocks server.
+        final byTag = {for (final o in singbox) if (_s(o['tag']) != null) _s(o['tag'])!: o};
         for (final o in singbox) {
-          final l = _singBoxLink(o as Map);
+          final l = _singBoxLink(o, byTag);
           if (l != null) out.add(l);
         }
         handled = true;
       }
     }
+    // sing-box 1.11 and later list WireGuard servers as endpoints.
+    final endpoints = v['endpoints'];
+    if (endpoints is List) {
+      for (final e in endpoints) {
+        if (e is Map && _s(e['type'])?.toLowerCase() == 'wireguard') {
+          final l = _singBoxWireguard(e);
+          if (l != null) out.add(l);
+          handled = true;
+        }
+      }
+    }
     if (!handled && v['type'] != null && v['server'] != null) {
-      final l = _singBoxLink(v) ?? _clashLink(v);
+      final l = _singBoxLink(v, const {}) ?? _clashLink(v);
       if (l != null) {
         out.add(l);
         handled = true;
@@ -201,8 +215,9 @@ String _host(String host) =>
 String _alpn(Object? v) =>
     v is List ? v.map((e) => '$e').join(',') : (_s(v) ?? '');
 
+/// A Shadowsocks link; [plugin] is a SIP003 plugin with its options (`obfs-local;obfs=tls;obfs-host=..`).
 String? _ssLink(String? method, String? password, String? server, Object? port,
-    Object? name) {
+    Object? name, {String? plugin}) {
   if (method == null ||
       password == null ||
       server == null ||
@@ -210,7 +225,77 @@ String? _ssLink(String? method, String? password, String? server, Object? port,
     return null;
   }
   final userinfo = base64.encode(utf8.encode('$method:$password'));
-  return 'ss://$userinfo@${_host(server)}:${_s(port)}#${_tag(name)}';
+  final query = plugin == null ? '' : '/?plugin=${Uri.encodeComponent(plugin)}';
+  return 'ss://$userinfo@${_host(server)}:${_s(port)}$query#${_tag(name)}';
+}
+
+/// The SIP003 plugin of a Clash Shadowsocks server (`plugin` and `plugin-opts`), as a link writes it. Null when it
+/// has none; an empty text for a plugin the cores do not have (the server is then left out: without its plugin
+/// it cannot work).
+String? _clashSsPlugin(Map p) {
+  final name = _s(p['plugin'])?.toLowerCase();
+  if (name == null) return null;
+  final o = p['plugin-opts'] is Map ? p['plugin-opts'] as Map : const {};
+  String opts(Map<String, Object?> kv) => [
+        for (final e in kv.entries)
+          if (e.value == true) e.key else if (_s(e.value) != null) '${e.key}=${_s(e.value)}',
+      ].join(';');
+  switch (name) {
+    case 'obfs' || 'obfs-local' || 'simple-obfs':
+      final rest = opts({'obfs': _s(o['mode']) ?? 'http', 'obfs-host': o['host']});
+      return 'obfs-local;$rest';
+    case 'v2ray-plugin':
+      final rest = opts({
+        'mode': _s(o['mode']) ?? 'websocket',
+        'tls': _on(o['tls']),
+        'host': o['host'],
+        'path': o['path'],
+        'mux': _on(o['mux']) ? '1' : null,
+      });
+      return 'v2ray-plugin;$rest';
+    case 'shadow-tls':
+      final rest = opts({
+        'host': o['host'],
+        'password': o['password'],
+        'version': o['version'] ?? 3,
+        'fingerprint': p['client-fingerprint'],
+      });
+      return 'shadow-tls;$rest';
+  }
+  return '';
+}
+
+/// `http(s)://user:pass@host:port?sni=..&insecure=1#name`: an HTTP proxy (see `isHttpProxyLink`).
+String? _httpLink(String server, String port, Object? name,
+    {String? user, String? pass, bool tls = false, String? sni, String? insecure}) {
+  final auth = user == null ? '' : '${Uri.encodeComponent(user)}:${Uri.encodeComponent(pass ?? '')}@';
+  return '${tls ? 'https' : 'http'}://$auth${_host(server)}:$port${_query({
+        if (tls) 'sni': sni,
+        if (tls) 'insecure': insecure,
+      })}#${_tag(name)}';
+}
+
+/// `wireguard://PRIVATE_KEY@host:port?publickey=..&address=..` from the parts of a WireGuard server.
+String? _wireguardLink(String server, String port, Object? name,
+    {String? privateKey,
+    String? publicKey,
+    List<String> addresses = const [],
+    String? preSharedKey,
+    Object? reserved,
+    Object? mtu,
+    Object? keepAlive,
+    Object? allowedIps}) {
+  if (privateKey == null || publicKey == null || addresses.isEmpty) return null;
+  final res = reserved is List ? reserved.join(',') : _s(reserved);
+  return 'wireguard://${Uri.encodeComponent(privateKey)}@${_host(server)}:$port${_query({
+        'publickey': publicKey,
+        'address': addresses.join(','),
+        'presharedkey': preSharedKey,
+        'reserved': res,
+        'mtu': _s(mtu),
+        'keepalive': _s(keepAlive),
+        'allowedips': allowedIps is List ? allowedIps.join(',') : _s(allowedIps),
+      })}#${_tag(name)}';
 }
 
 String? _sip008Link(Map s) => _ssLink(_s(s['method']), _s(s['password']),
@@ -273,7 +358,39 @@ String? _clashLink(Map p) {
 
   switch (type) {
     case 'ss':
-      return _ssLink(_s(p['cipher']), _s(p['password']), server, port, name);
+      final plugin = _clashSsPlugin(p);
+      if (plugin != null && plugin.isEmpty) return null;
+      return _ssLink(_s(p['cipher']), _s(p['password']), server, port, name, plugin: plugin);
+    case 'http':
+      return _httpLink(server, port, name,
+          user: _s(p['username']), pass: _s(p['password']), tls: tls, sni: sni, insecure: insecure);
+    case 'ssh':
+      final user = _s(p['username']);
+      if (user == null) return null;
+      return 'ssh://${Uri.encodeComponent(user)}:${Uri.encodeComponent(_s(p['password']) ?? '')}@${_host(server)}:$port${_query({
+            'private_key': _s(p['private-key']),
+            'private_key_passphrase': _s(p['private-key-passphrase']),
+            'host_key': p['host-key'] is List ? (p['host-key'] as List).join(',') : _s(p['host-key']),
+          })}#${_tag(name)}';
+    case 'wireguard':
+      // Mihomo writes the peer in the server itself, or in a list of peers.
+      final peer = p['peers'] is List && (p['peers'] as List).isNotEmpty && (p['peers'] as List).first is Map
+          ? (p['peers'] as List).first as Map
+          : p;
+      final peerServer = _s(peer['server']) ?? server;
+      final peerPort = _s(peer['port']) ?? port;
+      return _wireguardLink(peerServer, peerPort, name,
+          privateKey: _s(p['private-key']),
+          publicKey: _s(peer['public-key']),
+          addresses: [
+            if (_s(p['ip']) != null) _s(p['ip'])!,
+            if (_s(p['ipv6']) != null) _s(p['ipv6'])!,
+          ],
+          preSharedKey: _s(peer['pre-shared-key']),
+          reserved: peer['reserved'],
+          mtu: p['mtu'],
+          keepAlive: p['persistent-keepalive'],
+          allowedIps: peer['allowed-ips']);
     case 'vmess':
       final ws = p['ws-opts'] is Map ? p['ws-opts'] as Map : const {};
       final headers = ws['headers'] is Map ? ws['headers'] as Map : const {};
@@ -366,11 +483,51 @@ String? _clashLink(Map p) {
   return null;
 }
 
-/// One sing-box outbound.
-String? _singBoxLink(Map o) {
-  final type = _s(o['type'])?.toLowerCase();
-  final server = _s(o['server']);
-  final port = _s(o['server_port']);
+/// A sing-box WireGuard endpoint (sing-box 1.11 and later): the first of its peers.
+String? _singBoxWireguard(Map e) {
+  final peers = e['peers'];
+  if (peers is! List || peers.isEmpty || peers.first is! Map) return null;
+  final peer = peers.first as Map;
+  final server = _s(peer['address']);
+  final port = _s(peer['port']);
+  if (server == null || port == null) return null;
+  final address = e['address'];
+  return _wireguardLink(server, port, e['tag'],
+      privateKey: _s(e['private_key']),
+      publicKey: _s(peer['public_key']),
+      addresses: address is List ? [for (final a in address) if (_s(a) != null) _s(a)!] : [if (_s(address) != null) _s(address)!],
+      preSharedKey: _s(peer['pre_shared_key']),
+      reserved: peer['reserved'],
+      mtu: e['mtu'],
+      keepAlive: peer['persistent_keepalive_interval'],
+      allowedIps: peer['allowed_ips']);
+}
+
+/// One sing-box outbound; [byTag] holds the others, for one it is dialled through.
+String? _singBoxLink(Map o, Map<String, Map> byTag) {
+  var type = _s(o['type'])?.toLowerCase();
+  var server = _s(o['server']);
+  var port = _s(o['server_port']);
+  // A Shadowsocks server behind ShadowTLS: the address is the ShadowTLS layer's, which a link writes as the
+  // shadow-tls plugin.
+  String? shadowTls;
+  final under = byTag[_s(o['detour'])];
+  if (type == 'shadowsocks' && under != null && _s(under['type'])?.toLowerCase() == 'shadowtls') {
+    final t = under['tls'] is Map ? under['tls'] as Map : const {};
+    final u = t['utls'] is Map ? t['utls'] as Map : const {};
+    server = _s(under['server']);
+    port = _s(under['server_port']);
+    shadowTls = [
+      'shadow-tls',
+      if (_s(t['server_name']) != null) 'host=${_s(t['server_name'])}',
+      if (_s(under['password']) != null) 'password=${_s(under['password'])}',
+      'version=${_s(under['version']) ?? '3'}',
+      if (_s(u['fingerprint']) != null) 'fingerprint=${_s(u['fingerprint'])}',
+    ].join(';');
+  } else if (under != null && _s(under['type'])?.toLowerCase() != 'direct') {
+    // Another kind of chain cannot be written as one link (going out directly is no chain).
+    return null;
+  }
   if (type == null || server == null || port == null) return null;
   final name = o['tag'];
   final tlsMap = o['tls'] is Map ? o['tls'] as Map : const {};
@@ -407,7 +564,23 @@ String? _singBoxLink(Map o) {
 
   switch (type) {
     case 'shadowsocks':
-      return _ssLink(_s(o['method']), _s(o['password']), server, port, name);
+      var plugin = shadowTls;
+      final pname = _s(o['plugin'])?.toLowerCase();
+      if (plugin == null && pname != null) {
+        // obfs-local and v2ray-plugin, the two sing-box has built in; another one cannot work.
+        if (pname != 'obfs-local' && pname != 'v2ray-plugin') return null;
+        plugin = [pname, if (_s(o['plugin_opts']) != null) _s(o['plugin_opts'])].join(';');
+      }
+      return _ssLink(_s(o['method']), _s(o['password']), server, port, name, plugin: plugin);
+    case 'http':
+      // A path or headers of its own cannot be written in a link.
+      if (_s(o['path']) != null || o['headers'] is Map && (o['headers'] as Map).isNotEmpty) return null;
+      return _httpLink(server, port, name,
+          user: _s(o['username']), pass: _s(o['password']), tls: tls, sni: sni, insecure: insecure);
+    case 'naive':
+      return '${_on(o['quic']) ? 'naive+quic' : 'naive+https'}://'
+          '${_s(o['username']) == null ? '' : '${Uri.encodeComponent(_s(o['username'])!)}:${Uri.encodeComponent(_s(o['password']) ?? '')}@'}'
+          '${_host(server)}:$port${_query({'sni': sni})}#${_tag(name)}';
     case 'vmess':
       final json = {
         'v': '2',

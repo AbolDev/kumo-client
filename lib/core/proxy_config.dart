@@ -174,11 +174,45 @@ const _supportedSchemes = [
   'openvpn://',
 ];
 
+/// The parameters an HTTP proxy link may carry: anything else in a query makes the address a page (a
+/// subscription), not a proxy.
+const _httpProxyParams = {'sni', 'peer', 'insecure', 'allowinsecure', 'allow_insecure'};
+
+/// `http(s)://[login@]host:port[/][?tls params][#name]`: the shape of an HTTP proxy, with the port written out.
+final _httpProxyShape = RegExp(
+    r'^https?://(?:([^@/?#\s]+)@)?(\[[0-9A-Fa-f:.]+\]|[^:/?#@\s\[\]]+):(\d{1,5})/?(?:\?([^#\s]*))?(?:#\S*)?$');
+
+/// The parts of an HTTP proxy link (see [isHttpProxyLink]) when [link] has its shape; null otherwise.
+({bool login, String host})? _httpProxyParts(String link) {
+  final m = _httpProxyShape.firstMatch(link.trim());
+  if (m == null) return null;
+  final port = int.parse(m[3]!);
+  if (port < 1 || port > 65535) return null;
+  final query = m[4];
+  if (query != null && query.isNotEmpty) {
+    for (final part in query.split('&')) {
+      if (!_httpProxyParams.contains(part.split('=').first.toLowerCase())) return null;
+    }
+  }
+  return (login: (m[1] ?? '').isNotEmpty, host: m[2]!.replaceAll(RegExp(r'^\[|\]$'), ''));
+}
+
+/// Whether text someone pasted or a list holds, [link], is an HTTP or HTTPS proxy
+/// (`http://user:pass@host:port#name`) and not the address of a page such as a subscription. A proxy has its
+/// port written out, no path (or only `/`), no query but its TLS settings (`sni`, `insecure`), and a login or
+/// an IP address. The address of a subscription has a path (`/sub/...`) or a query of its own (`?token=`), or
+/// a name with neither a login nor a port, so the two are never taken for each other: a proxy is never fetched
+/// as a subscription and a subscription is never added as a server.
+bool isHttpProxyLink(String link) {
+  final p = _httpProxyParts(link);
+  return p != null && (p.login || _isIp(p.host));
+}
+
 /// Splits a subscription body into share links. Handles both plain text lists
 /// and a single base64 blob.
 List<String> extractLinks(String body) {
   var text = convertTelegramProxyLinks(body.trim());
-  if (!_supportedSchemes.any(text.contains)) {
+  if (!_supportedSchemes.any(text.contains) && !_words(text).any(isHttpProxyLink)) {
     try {
       text = utf8.decode(_b64(text), allowMalformed: true);
     } catch (_) {
@@ -192,9 +226,18 @@ List<String> extractLinks(String body) {
       final l = piece.trim().replaceFirst(RegExp(r'''[,;'"]+$'''), '');
       if (_supportedSchemes.any(l.startsWith)) out.add(l);
     }
+    // An HTTP proxy only as a whole word that is nothing but a proxy address: a web or subscription address
+    // in the text, or one inside another link, is never taken for one.
+    out.addAll(_words(line).where(isHttpProxyLink));
   }
   return out;
 }
+
+/// The words of [text], with the quotes and separators around them taken off.
+Iterable<String> _words(String text) => text
+    .split(RegExp(r'[\s,;]+'))
+    .map((w) => w.replaceAll(RegExp(r'''^['"(<]+|['")>]+$'''), ''))
+    .where((w) => w.isNotEmpty);
 
 /// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`).
 final _schemeStart = RegExp(
@@ -289,6 +332,9 @@ ProxyConfig? parseLink(String link) {
     if (link.startsWith('warp-masque://')) return _masque(link);
     if (link.startsWith('naive+')) return _naive(link);
     if (link.startsWith('openvpn://')) return _openvpn(link);
+    // A link made from a Clash or sing-box list may be a proxy with neither a login nor an IP address; it is
+    // read here, but text that is pasted is only taken for a proxy by [isHttpProxyLink].
+    if (_httpProxyParts(link) != null) return _httpProxy(link);
   } catch (_) {
     // malformed link: skip it
   }

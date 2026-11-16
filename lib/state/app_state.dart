@@ -2430,7 +2430,9 @@ class AppState extends ChangeNotifier {
     final deep = subscriptionDeepLink(input.split(RegExp(r'\s')).first);
     if (deep != null) input = deep.url;
     final typed = input.split(RegExp(r'\s')).first;
-    if (typed.startsWith('http://') || typed.startsWith('https://')) {
+    // An http(s) address is a subscription, unless it is an HTTP proxy (a port, no path, and a login or an IP
+    // address: see isHttpProxyLink), which is added as a server below.
+    if ((typed.startsWith('http://') || typed.startsWith('https://')) && !isHttpProxyLink(typed)) {
       // A #name at the end of the address is the name the user wants for the subscription (and
       // is not part of the address that is downloaded).
       final hash = typed.indexOf('#');

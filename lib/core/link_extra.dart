@@ -74,6 +74,47 @@ ProxyConfig? _socks(String link) {
       outbound: out, xray: xray);
 }
 
+/// An HTTP proxy, `http://user:pass@host:port#name`, or one reached over TLS, `https://...?sni=..&insecure=1`
+/// (see [isHttpProxyLink]). Both cores carry it; Xray cannot skip the check of a certificate, so a proxy that
+/// asks for that runs on sing-box only.
+ProxyConfig? _httpProxy(String link) {
+  final u = Uri.parse(link.trim());
+  final tls = u.scheme == 'https';
+  final port = u.port;
+  final (user, pass) = _userPass(u.userInfo);
+  final q = u.queryParameters;
+  final tlsOut = tls ? _tls(q, u.host) : null;
+  final out = <String, dynamic>{
+    'type': 'http',
+    'server': u.host,
+    'server_port': port,
+    if (user.isNotEmpty) 'username': user,
+    if (user.isNotEmpty) 'password': pass,
+    if (tlsOut != null) 'tls': tlsOut,
+  };
+  final insecure = tlsOut?['insecure'] == true;
+  final xray = insecure
+      ? null
+      : {
+          'protocol': 'http',
+          'settings': {
+            'servers': [
+              {
+                'address': u.host,
+                'port': port,
+                if (user.isNotEmpty) 'users': [{'user': user, 'pass': pass}],
+              },
+            ],
+          },
+          'streamSettings': {
+            'network': 'raw',
+            if (tls) 'security': 'tls',
+            if (tls && tlsOut?['server_name'] != null) 'tlsSettings': {'serverName': tlsOut!['server_name']},
+          },
+        };
+  return _make(link, u.scheme, _name(u, '${u.scheme} ${u.host}:$port'), u.host, port, outbound: out, xray: xray);
+}
+
 ProxyConfig? _anytls(String link) {
   final u = Uri.parse(link);
   final q = u.queryParameters;
