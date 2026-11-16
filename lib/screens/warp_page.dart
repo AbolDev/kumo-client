@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../widgets/kumo_mark.dart';
 
+import '../core/net_options.dart' show fingerprints;
 import '../core/usage_stats.dart' show formatBytes;
-import '../core/warp/warp_profile.dart' show isMasqueKind;
+import '../core/warp/warp_profile.dart' show WarpMethod, isMasqueKind;
 import '../core/warp/warp_store.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
@@ -49,6 +50,14 @@ class _WarpPageState extends State<WarpPage> {
     final list = await warp.choices();
     if (!mounted || list.isEmpty) return;
     final now = warp.currentChoice(list);
+    // One line per method: the ways of one method differ only in address and port, and the scan picks
+    // those. The line stands for the first (best) way of its method.
+    final firsts = <int>[];
+    final seen = <String>{};
+    for (var i = 0; i < list.length; i++) {
+      if (seen.add(list[i].method.id)) firsts.add(i);
+    }
+    final nowId = now >= 0 ? list[now].method.id : warp.custom?.method;
     final index = await showModalBottomSheet<int>(
       context: context,
       isScrollControlled: true,
@@ -68,16 +77,17 @@ class _WarpPageState extends State<WarpPage> {
           Expanded(
             child: ListView.builder(
               controller: scroll,
-              itemCount: list.length,
-              itemBuilder: (c, i) {
-                final w = list[i];
+              itemCount: firsts.length,
+              itemBuilder: (c, g) {
+                final w = list[firsts[g]];
+                final on = w.method.id == nowId;
                 return ListTile(
-                  selected: i == now,
+                  selected: on,
                   leading: Icon(isMasqueKind(w.method.kind) ? Icons.hub_outlined : Icons.vpn_key_outlined),
                   title: Text(w.method.id, textDirection: TextDirection.ltr),
-                  subtitle: Text('${w.endpoint.ip}:${w.port}', textDirection: TextDirection.ltr),
-                  trailing: i == now ? const Icon(Icons.check) : null,
-                  onTap: () => Navigator.pop(c, i),
+                  subtitle: Text(_kindText(c, w.method)),
+                  trailing: on ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.pop(c, firsts[g]),
                 );
               },
             ),
@@ -85,8 +95,42 @@ class _WarpPageState extends State<WarpPage> {
         ]),
       ),
     );
-    if (index != null && index != now) await warp.pick(index);
+    if (index != null && list[index].method.id != nowId) await warp.pick(index);
   }
+
+  /// The uTLS fingerprint of the MASQUE ways over HTTP/2 (some networks cut one name of client and pass another).
+  Future<void> _pickFingerprint() async {
+    final now = warp.masqueFingerprint;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (c) => SimpleDialog(
+        title: Text(tr(c, 'warpFingerprint')),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text(tr(c, 'warpFingerprintDesc'), style: Theme.of(c).textTheme.bodySmall),
+          ),
+          for (final f in fingerprints)
+            ListTile(
+              selected: f == now,
+              title: Text(f.isEmpty ? tr(c, 'warpFingerprintDefault') : f, textDirection: TextDirection.ltr),
+              trailing: f == now ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(c, f),
+            ),
+        ],
+      ),
+    );
+    if (picked != null && picked != now) await warp.setMasqueFingerprint(picked);
+  }
+
+  /// A short description of how a method connects, for the list of methods.
+  String _kindText(BuildContext context, WarpMethod m) => switch (m.kind) {
+        'wg-plain' => tr(context, 'warpKindWg'),
+        'wg-noise' => tr(context, 'warpKindNoise'),
+        'masque-h2' => tr(context, m.id.endsWith('-alt') ? 'warpKindH2Alt' : 'warpKindH2'),
+        'masque-h3' => tr(context, m.id.endsWith('-alt') ? 'warpKindH3Alt' : 'warpKindH3'),
+        _ => m.kind,
+      };
 
   String? _updateText(BuildContext context) => switch (warp.lastUpdate) {
         WarpUpdateResult.updated => tr(context, 'warpUpdated'),
@@ -165,6 +209,17 @@ class _WarpPageState extends State<WarpPage> {
                   title: Text(tr(context, 'warpPickMethod')),
                   subtitle: Text(tr(context, 'warpPickMethodDesc')),
                   onTap: warp.busy || warp.scanning ? null : _pickMethod,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.fingerprint),
+                  title: Text(tr(context, 'warpFingerprint')),
+                  subtitle: Text(
+                    warp.masqueFingerprint.isEmpty
+                        ? tr(context, 'warpFingerprintDefault')
+                        : warp.masqueFingerprint,
+                    textDirection: TextDirection.ltr,
+                  ),
+                  onTap: warp.busy || warp.scanning ? null : _pickFingerprint,
                 ),
                 ListTile(
                   leading: const Icon(Icons.swap_horiz),

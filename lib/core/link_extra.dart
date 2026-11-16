@@ -308,6 +308,8 @@ ProxyConfig? _masque(String link) {
   final port = u.hasPort ? u.port : 443;
   final alpn = (q['alpn'] ?? 'h2').trim().toLowerCase() == 'h3' ? 'h3' : 'h2';
   final sni = (q['sni'] ?? '').trim().isEmpty ? masqueSni : q['sni']!.trim();
+  // Xray applies the fingerprint to the HTTP/2 hello only; over HTTP/3 it is not used.
+  final fp = alpn == 'h2' ? _fingerprint(q['fp']) : null;
   final xray = {
     'protocol': 'masque',
     'settings': {
@@ -325,6 +327,7 @@ ProxyConfig? _masque(String link) {
       'tlsSettings': {
         'serverName': sni,
         'alpn': [alpn],
+        if (fp != null) 'fingerprint': fp,
       },
     },
   };

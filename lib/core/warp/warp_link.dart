@@ -2,7 +2,11 @@ import 'warp_profile.dart';
 import 'warp_register.dart';
 
 /// The `warp-masque://` link of a MASQUE account for the MASQUE [method] (`masque-h2` or `masque-h3`).
-String masqueLink(WarpMasqueAccount account, WarpMethod method, {String? endpoint, String name = 'WARP'}) {
+///
+/// [fingerprint] is the uTLS fingerprint of the TLS hello (`chrome`, `firefox`, ...); empty keeps Xray's own.
+/// Xray applies it over HTTP/2 only.
+String masqueLink(WarpMasqueAccount account, WarpMethod method,
+    {String? endpoint, String name = 'WARP', String fingerprint = ''}) {
   final h3 = method.kind == 'masque-h3';
   final query = {
     'priv': account.privateKey,
@@ -10,6 +14,7 @@ String masqueLink(WarpMasqueAccount account, WarpMethod method, {String? endpoin
     'address': '${account.v4}/32,${account.v6}/128',
     'alpn': h3 ? 'h3' : 'h2',
     'sni': masqueSniFor(method),
+    if (fingerprint.isNotEmpty) 'fp': fingerprint,
   };
   final text = query.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&');
   return 'warp-masque://${endpoint ?? account.endpoint}:443?$text#${Uri.encodeComponent('$name ${method.id}')}';

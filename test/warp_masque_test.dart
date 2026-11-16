@@ -249,6 +249,21 @@ void main() {
       expect(tls['serverName'], 'cloudflareaccess.com');
     });
 
+    test('a fingerprint is passed to the hello over HTTP/2 only, and only a known one', () {
+      Map tlsOf(String id, String fp) {
+        final m = masqueMethods.firstWhere((m) => m.id == id);
+        final c = parseLink(masqueLink(account, m, fingerprint: fp))!;
+        return (c.xrayOutbound!['streamSettings'] as Map)['tlsSettings'] as Map;
+      }
+
+      expect(tlsOf('masque-h2', 'firefox')['fingerprint'], 'firefox');
+      expect(tlsOf('masque-h2-alt', 'chrome')['fingerprint'], 'chrome');
+      expect(tlsOf('masque-h2', '').containsKey('fingerprint'), isFalse);
+      expect(tlsOf('masque-h2', 'nonsense').containsKey('fingerprint'), isFalse);
+      // Xray does not use it over HTTP/3.
+      expect(tlsOf('masque-h3', 'firefox').containsKey('fingerprint'), isFalse);
+    });
+
     test('the -alt ways use the name of Cloudflare\'s own MASQUE service', () {
       for (final id in ['masque-h2-alt', 'masque-h3-alt']) {
         final m = masqueMethods.firstWhere((m) => m.id == id);

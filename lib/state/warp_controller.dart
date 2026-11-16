@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/latency_tester.dart' show realDelay;
+import '../core/net_options.dart' show fingerprints;
 import '../core/proxy_config.dart';
 import '../core/vpn_channel.dart';
 import '../core/warp/warp_link.dart';
@@ -38,6 +39,9 @@ class WarpController extends ChangeNotifier {
 
   static const _file = 'warp_account.json';
   static const _every = Duration(hours: 6);
+
+  /// The method a new account starts with.
+  static const defaultMethodId = 'masque-h2';
 
   late final WarpProfileStore store = WarpProfileStore(
     read: VpnChannel.readFile,
@@ -113,11 +117,29 @@ class WarpController extends ChangeNotifier {
   /// [account]: a device that takes a MASQUE key no longer speaks WireGuard).
   WarpMasqueAccount? masque;
 
+  /// The uTLS fingerprint of the MASQUE ways over HTTP/2 (`chrome`, `firefox`, ...); empty keeps Xray's own.
+  String masqueFingerprint = '';
+
+  /// Changes the fingerprint of the MASQUE ways and rebuilds the server with it.
+  Future<void> setMasqueFingerprint(String fp) async {
+    if (account == null || busy || !fingerprints.contains(fp) || fp == masqueFingerprint) return;
+    masqueFingerprint = fp;
+    error = null;
+    try {
+      await _apply();
+      await _state.reconnectIfConnected();
+    } catch (e) {
+      error = '$e'.replaceFirst('Bad state: ', '');
+    }
+    await _save();
+    notifyListeners();
+  }
+
   /// The link of a way of reaching WARP. A MASQUE way makes its account first when there is none.
   Future<String> _linkOf(WarpCombo c, {WarpAccount? wg, WarpEndpoint? endpoint, String name = 'WARP'}) async {
     if (isMasqueKind(c.method.kind)) {
       final account = await _ensureMasque();
-      return masqueLink(account, c.method, name: name);
+      return masqueLink(account, c.method, name: name, fingerprint: masqueFingerprint);
     }
     return warpLink(wg ?? account!, c.method, endpoint ?? c.endpoint, endpoint == null ? c.portIndex : 0, name: name);
   }
@@ -166,6 +188,8 @@ class WarpController extends ChangeNotifier {
         account = WarpAccount.fromJson(j['account']);
         account2 = WarpAccount.fromJson(j['account2']);
         masque = WarpMasqueAccount.fromJson(j['masque']);
+        final fp = j['masqueFp'];
+        masqueFingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
         inWarp = j['inWarp'] == true && account2 != null;
         final cu = j['custom'];
         if (cu is Map && cu['method'] is String && cu['ip'] is String && cu['port'] is int) {
@@ -195,6 +219,7 @@ class WarpController extends ChangeNotifier {
         'account': account?.toJson(),
         'account2': account2?.toJson(),
         'masque': masque?.toJson(),
+        if (masqueFingerprint.isNotEmpty) 'masqueFp': masqueFingerprint,
         'inWarp': inWarp,
         if (custom != null) 'custom': {'method': custom!.method, 'ip': custom!.ip, 'port': custom!.port},
         'enabled': enabled,
@@ -302,7 +327,8 @@ class WarpController extends ChangeNotifier {
     try {
       await load();
       if (store.profile == null) throw StateError('no WARP profile is available');
-      if (account == null) {
+      final fresh = account == null;
+      if (fresh) {
         try {
           account = await registerWarp(store.profile!);
         } catch (_) {
@@ -313,7 +339,19 @@ class WarpController extends ChangeNotifier {
         }
       }
       enabled = true;
-      await _apply(choose: true);
+      // A new account starts with MASQUE over HTTP/2 (it passes where WireGuard is cut). When its sign-up
+      // does not work, the first way of the profile is used, as before.
+      if (fresh && !inWarp) {
+        final i = (await combos()).indexWhere((c) => c.method.id == defaultMethodId);
+        if (i >= 0) choice = i;
+      }
+      try {
+        await _apply(choose: true);
+      } catch (_) {
+        if (choice == 0) rethrow;
+        choice = 0;
+        await _apply(choose: true);
+      }
     } catch (e) {
       error = '$e'.replaceFirst('Bad state: ', '');
       if (account == null) enabled = false;
@@ -581,6 +619,7 @@ class WarpController extends ChangeNotifier {
     account = null;
     account2 = null;
     masque = null;
+    masqueFingerprint = '';
     inWarp = false;
     custom = null;
     enabled = false;

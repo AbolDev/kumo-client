@@ -75,7 +75,10 @@ String buildXrayConfig(ProxyConfig server, int port,
   // The options of Settings that apply to Xray too.
   if (stream != null) {
     final tls = stream['tlsSettings'];
-    if (tls is Map<String, dynamic> && o.fingerprint.isNotEmpty) {
+    // A MASQUE server that has its own fingerprint (picked on the WARP page) keeps it.
+    if (tls is Map<String, dynamic> &&
+        o.fingerprint.isNotEmpty &&
+        !(stream['network'] == 'masque' && tls.containsKey('fingerprint'))) {
       tls['fingerprint'] = o.fingerprint;
     }
     final reality = stream['realitySettings'];
