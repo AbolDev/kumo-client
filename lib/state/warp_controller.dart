@@ -575,7 +575,44 @@ class WarpController extends ChangeNotifier {
   /// True after a scan in which nothing answered.
   bool scanFailed = false;
 
+  /// Whether the scan that runs (or ran last) is the wider one, of addresses outside the profile.
+  bool scanIsWide = false;
+
+  /// While a scan runs: how many ways answered, the fastest of them, the last ways tried (newest first, the
+  /// delay -1 for no answer), and when it started (for the time that is left).
+  int scanAnswered = 0;
+  ({String text, int ms})? scanBest;
+  List<({String text, int ms})> scanRecent = const [];
+  DateTime? scanStarted;
+
   void cancelScan() => _scanCancel = true;
+
+  void _startScan(int total, {required bool wide}) {
+    scanning = true;
+    scanIsWide = wide;
+    scanFailed = false;
+    scanResults = const [];
+    scanDone = 0;
+    scanTotal = total;
+    scanAnswered = 0;
+    scanBest = null;
+    scanRecent = const [];
+    scanStarted = DateTime.now();
+    _scanCancel = false;
+    error = null;
+    notifyListeners();
+  }
+
+  /// One way of a scan was tried: [text] is how it is shown, [ms] its delay (negative: no answer).
+  void _noteTry(String text, int ms) {
+    final item = (text: text, ms: ms);
+    if (ms >= 0) {
+      scanAnswered++;
+      final best = scanBest;
+      if (best == null || ms < best.ms) scanBest = item;
+    }
+    scanRecent = [item, ...scanRecent.take(3)];
+  }
 
   /// Tries every way of reaching WARP (a method of the profile, an endpoint, a port) with the real
   /// delay test, and switches to the fastest one that answered. Nothing changes when none did.
@@ -595,14 +632,7 @@ class WarpController extends ChangeNotifier {
       }
     }
     if (all.isEmpty) return;
-    scanning = true;
-    scanFailed = false;
-    scanResults = const [];
-    scanDone = 0;
-    scanTotal = all.length < warpScanLimit ? all.length : warpScanLimit;
-    _scanCancel = false;
-    error = null;
-    notifyListeners();
+    _startScan(all.length < warpScanLimit ? all.length : warpScanLimit, wide: false);
     try {
       final test = delay ?? ((c) => realDelay(c, timeout: const Duration(seconds: 7)));
       final found = await scanWarp(
@@ -617,6 +647,7 @@ class WarpController extends ChangeNotifier {
           final config = parseLink(text);
           return config == null ? -1 : await test(config);
         },
+        onResult: (i, ms) => _noteTry('${all[i].method.id} ${all[i].endpoint.ip}:${all[i].port}', ms),
         onProgress: (d, t) {
           scanDone = d;
           notifyListeners();
@@ -662,14 +693,7 @@ class WarpController extends ChangeNotifier {
     final addresses = pickScanAddresses(p.scanRanges, warpWideCount, random ?? Random());
     if (addresses.isEmpty) return;
     final ports = p.scanPorts;
-    scanning = true;
-    scanFailed = false;
-    scanResults = const [];
-    scanDone = 0;
-    scanTotal = addresses.length;
-    _scanCancel = false;
-    error = null;
-    notifyListeners();
+    _startScan(addresses.length, wide: true);
     try {
       final test = delay ?? ((c) => realDelay(c, timeout: const Duration(seconds: 7)));
       final found = await scanWarp(
@@ -679,6 +703,7 @@ class WarpController extends ChangeNotifier {
           final config = parseLink(warpLink(account!, method, endpoint, 0));
           return config == null ? Future.value(-1) : test(config);
         },
+        onResult: (i, ms) => _noteTry('${method.id} ${addresses[i]}:${ports[i % ports.length]}', ms),
         onProgress: (d, t) {
           scanDone = d;
           notifyListeners();

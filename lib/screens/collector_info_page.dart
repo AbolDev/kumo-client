@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/option_tile.dart' show SwitchOption;
+
 import '../l10n/extra.dart';
 import '../l10n/strings.dart';
 import '../core/usage_stats.dart' show formatBytes;
@@ -88,7 +90,7 @@ class CollectorInfoPage extends StatelessWidget {
                     formatBytes(state.publicUsage[0] + state.publicUsage[1])),
               ]),
               _card(context, tr(context, 'collSecurity'), [
-                SwitchListTile(
+                SwitchOption(
                   secondary: Icon(state.collectorAllowInsecure
                       ? Icons.gpp_maybe_outlined
                       : Icons.verified_user_outlined),

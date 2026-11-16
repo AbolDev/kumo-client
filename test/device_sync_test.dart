@@ -9,6 +9,7 @@ import 'package:kumo/core/desktop_vpn.dart';
 import 'package:kumo/core/device_sync.dart';
 import 'package:kumo/screens/sync_page.dart';
 import 'package:kumo/state/app_state.dart';
+import 'package:kumo/widgets/option_tile.dart' show SwitchOption;
 
 /// Gives the real HTTP client back (the test framework answers every request with its own otherwise).
 class _RealHttp extends HttpOverrides {}
@@ -387,7 +388,7 @@ void main() {
       expect(find.byKey(const ValueKey('sync-scan')), findsNothing);
       expect(find.byKey(const ValueKey('sync-enter')), findsOneWidget);
       // The settings do not go unless asked for.
-      expect(tester.widget<SwitchListTile>(find.byKey(const ValueKey('sync-settings'))).value, isFalse);
+      expect(tester.widget<SwitchOption>(find.byKey(const ValueKey('sync-settings'))).value, isFalse);
       await tester.pumpWidget(app(SyncPage(state: AppState(), camera: true)));
       expect(find.byKey(const ValueKey('sync-scan')), findsOneWidget);
     });

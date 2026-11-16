@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../widgets/option_tile.dart' show SwitchOption;
 import '../widgets/kumo_mark.dart';
 
 import '../core/net_options.dart' show fingerprints;
@@ -107,10 +109,111 @@ class _WarpPageState extends State<WarpPage> {
         Card(
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows),
+          // A thin line between the rows, so each option stands apart.
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (final (i, row) in rows.indexed) ...[
+              if (i > 0) Divider(height: 1, indent: 16, endIndent: 16, color: scheme.outlineVariant),
+              row,
+            ],
+          ]),
         ),
       ]),
     );
+  }
+
+  /// One of the two scans: its row, and under it, while it runs, what it is doing (a bar, how many ways were
+  /// tried and answered, about how long is left, the fastest so far, the last ways tried and a button to stop),
+  /// and when it is over, the ways that answered or that none did.
+  Widget _scanTile(BuildContext context, {required bool wide}) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final running = warp.scanning && warp.scanIsWide == wide;
+    final last = !warp.scanning && warp.scanIsWide == wide;
+    final small = text.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    Widget way(({String text, int ms}) r, {bool inUse = false}) => Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(children: [
+            Icon(r.ms >= 0 ? Icons.check_circle : Icons.cancel_outlined,
+                size: 16, color: r.ms >= 0 ? Colors.green : scheme.error),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(r.text,
+                  textDirection: TextDirection.ltr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodySmall?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+            ),
+            if (inUse)
+              Container(
+                margin: const EdgeInsetsDirectional.only(end: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(10)),
+                child: Text(tr(context, 'warpScanInUse'),
+                    style: text.labelSmall?.copyWith(color: scheme.onPrimaryContainer)),
+              ),
+            Text(r.ms >= 0 ? '${r.ms} ms' : tr(context, 'warpScanNoAnswer'),
+                textDirection: r.ms >= 0 ? TextDirection.ltr : null, style: small),
+          ]),
+        );
+
+    final details = <Widget>[];
+    if (running) {
+      final done = warp.scanDone, total = warp.scanTotal;
+      String status = tr(context, 'warpScanStatus', {'done': done, 'total': total, 'ok': warp.scanAnswered});
+      final started = warp.scanStarted;
+      if (started != null && done > 0 && done < total) {
+        final perTry = DateTime.now().difference(started).inMilliseconds / done;
+        status += ' · ${tr(context, 'warpScanLeft', {'s': (perTry * (total - done) / 1000).ceil()})}';
+      }
+      final best = warp.scanBest;
+      details.addAll([
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(value: total == 0 ? null : done / total, minHeight: 6),
+        ),
+        const SizedBox(height: 8),
+        Text(status, style: small),
+        if (best != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(tr(context, 'warpScanBest', {'way': best.text, 'ms': best.ms}),
+                style: text.bodySmall?.copyWith(color: Colors.green, fontWeight: FontWeight.w600)),
+          ),
+        for (final r in warp.scanRecent) way(r),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: TextButton.icon(
+            onPressed: warp.cancelScan,
+            icon: const Icon(Icons.stop_circle_outlined, size: 18),
+            label: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+          ),
+        ),
+      ]);
+    } else if (last && warp.scanFailed) {
+      details.add(Text(tr(context, 'warpScanNone'), style: text.bodySmall?.copyWith(color: scheme.error)));
+    } else if (last && warp.scanResults.isNotEmpty) {
+      details.addAll([
+        Text(tr(context, 'warpScanFound'), style: small?.copyWith(fontWeight: FontWeight.w600)),
+        for (final (i, r) in warp.scanResults.indexed) way(r, inUse: i == 0),
+      ]);
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      ListTile(
+        leading: running
+            ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+            : Icon(wide ? Icons.travel_explore : Icons.radar),
+        title: Text(running
+            ? tr(context, 'warpScanning', {'done': warp.scanDone, 'total': warp.scanTotal})
+            : tr(context, wide ? 'warpScanWide' : 'warpScan')),
+        subtitle: Text(tr(context, wide ? 'warpScanWideDesc' : 'warpScanDesc')),
+        onTap: warp.busy || warp.scanning ? null : (wide ? warp.scanWide : warp.scan),
+      ),
+      if (details.isNotEmpty)
+        Padding(
+          padding: const EdgeInsetsDirectional.fromSTEB(72, 0, 16, 12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: details),
+        ),
+    ]);
   }
 
   String? _updateText(BuildContext context) => switch (warp.lastUpdate) {
@@ -191,38 +294,9 @@ class _WarpPageState extends State<WarpPage> {
                     child: Text(tr(context, 'warpWaysHint'),
                         style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
                   ),
-                  // The scan: every way of reaching WARP is tried, the fastest one that answers is used.
-                  ListTile(
-                    leading: warp.scanning
-                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.radar),
-                    title: Text(warp.scanning
-                        ? tr(context, 'warpScanning', {'done': warp.scanDone, 'total': warp.scanTotal})
-                        : tr(context, 'warpScan')),
-                    subtitle: Text(tr(context, 'warpScanDesc')),
-                    trailing: warp.scanning
-                        ? TextButton(
-                            onPressed: warp.cancelScan,
-                            child: Text(MaterialLocalizations.of(context).cancelButtonLabel))
-                        : null,
-                    onTap: warp.busy || warp.scanning ? null : warp.scan,
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.travel_explore),
-                    title: Text(tr(context, 'warpScanWide')),
-                    subtitle: Text(tr(context, 'warpScanWideDesc')),
-                    onTap: warp.busy || warp.scanning ? null : warp.scanWide,
-                  ),
-                  if (warp.scanFailed)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: Text(tr(context, 'warpScanNone'), style: TextStyle(color: scheme.error)),
-                    ),
-                  for (final r in warp.scanResults)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(72, 0, 16, 6),
-                      child: Text('${r.text}  ${r.ms} ms', textDirection: TextDirection.ltr),
-                    ),
+                  // The scans: every way of the profile, or addresses outside it; the fastest that answers is used.
+                  _scanTile(context, wide: false),
+                  _scanTile(context, wide: true),
                 ]),
                 _section(context, tr(context, 'warpSecMore'), [
                   // Two hops: WARP is reached through another server (the same setting as the proxy chain of the
@@ -258,7 +332,7 @@ class _WarpPageState extends State<WarpPage> {
                     ),
                     onTap: warp.busy || warp.scanning ? null : _pickFingerprint,
                   ),
-                  SwitchListTile(
+                  SwitchOption(
                     secondary: const Icon(Icons.layers_outlined),
                     title: Text(tr(context, 'warpInWarp')),
                     subtitle: Text(tr(context, 'warpInWarpDesc')),

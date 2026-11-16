@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../widgets/option_tile.dart' show SwitchOption;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -371,7 +373,7 @@ class _SyncPageState extends State<SyncPage> {
                 Expanded(child: Text(_busy!)),
               ]),
             ),
-          SwitchListTile(
+          SwitchOption(
             key: const ValueKey('sync-settings'),
             contentPadding: EdgeInsets.zero,
             value: _settings,

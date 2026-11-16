@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../widgets/option_tile.dart' show SwitchOption;
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
 import '../core/extra_options.dart';
@@ -75,7 +77,7 @@ class _ExtraSheetState extends State<_ExtraSheet> {
     final value = readOption(_json, o);
     switch (o.kind) {
       case ExtraKind.toggle:
-        return SwitchListTile(
+        return SwitchOption(
           key: ValueKey('xo:${o.id}:$_rev'),
           contentPadding: EdgeInsets.zero,
           value: value == true,

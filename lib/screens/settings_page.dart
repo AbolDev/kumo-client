@@ -312,7 +312,7 @@ class _SettingsPageState extends State<SettingsPage> {
         : tr(context, 'limitMb', {'n': v});
   }
 
-  Widget _switch(String key, bool value, String title, String desc) => SwitchListTile(
+  Widget _switch(String key, bool value, String title, String desc) => SwitchOption(
         value: value,
         onChanged: (v) => state.setFlag(key, v),
         title: Text(title),
@@ -472,7 +472,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
         _switch('restartOnChange', state.restartOnChange, t.restartOnChange, t.restartOnChangeDesc),
         _switch('confirmDelete', state.confirmDelete, t.confirmDelete, t.confirmDeleteDesc),
-        SwitchListTile(
+        SwitchOption(
           value: state.usage.enabled,
           onChanged: (v) => state.usage.setEnabled(v),
           title: Text(tr(context, 'usageStats')),
@@ -521,12 +521,12 @@ class _SettingsPageState extends State<SettingsPage> {
       ...networkSections(context, state, _section).cast<_Section>(),
       if (isDesktop)
         _section(Icons.desktop_windows, tr(context, Platform.isWindows ? 'windows' : 'desktop'), [
-          SwitchListTile(
+          SwitchOption(
             value: state.net.minimizeToTray,
             onChanged: (v) => state.updateNet((o) => o.minimizeToTray = v, reconnect: false),
             title: Text(tr(context, 'minimizeToTray')),
           ),
-          SwitchListTile(
+          SwitchOption(
             value: state.net.startWithWindows,
             onChanged: (v) async {
               // The switch follows what really happened, not what was asked.
@@ -738,7 +738,7 @@ class _SettingsPageState extends State<SettingsPage> {
             if (v != null) await state.updateNet((o) => o.certStore = v);
           },
         ),
-        SwitchListTile(
+        SwitchOption(
           secondary: const Icon(Icons.schedule),
           value: state.net.ntp,
           onChanged: (v) => state.updateNet((o) => o.ntp = v),
@@ -884,7 +884,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return switch (w) {
       InfoSwitchTile() => '${w.title} ${w.description}',
-      SwitchListTile() => '${text(w.title)} ${text(w.subtitle)}',
+      SwitchOption() => '${text(w.title)} ${text(w.subtitle)}',
       ListTile() => '${text(w.title)} ${text(w.subtitle)}',
       RadioListTile() => text(w.title),
       CheckboxListTile() => '${text(w.title)} ${text(w.subtitle)}',

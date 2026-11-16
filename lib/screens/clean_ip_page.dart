@@ -4,6 +4,8 @@ import 'dart:math' show max, min;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+
+import '../widgets/option_tile.dart' show SwitchOption;
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../core/clean_ip.dart';
@@ -710,7 +712,7 @@ class _CleanIpPageState extends State<CleanIpPage> {
 
   // ---- pieces of the page
 
-  Widget _option(IconData icon, bool value, String title, String? desc, ValueChanged<bool> onChanged) => SwitchListTile(
+  Widget _option(IconData icon, bool value, String title, String? desc, ValueChanged<bool> onChanged) => SwitchOption(
         contentPadding: EdgeInsets.zero,
         secondary: Icon(icon),
         value: value,
@@ -850,7 +852,11 @@ class _CleanIpPageState extends State<CleanIpPage> {
             child: ListTile(
               leading: const Icon(Icons.history),
               title: Text(tr(context, 'cleanIpResume', {'n': _saved!.pending.length})),
-              trailing: TextButton(onPressed: _clearSaved, child: Text(tr(context, 'cleanIpDiscard'))),
+              // The button under the text, which then has the whole width.
+              subtitle: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(onPressed: _clearSaved, child: Text(tr(context, 'cleanIpDiscard'))),
+              ),
               onTap: _resume,
             ),
           ),
@@ -977,9 +983,12 @@ class _CleanIpPageState extends State<CleanIpPage> {
             child: ListTile(
               leading: Icon(Icons.warning_amber_rounded, color: scheme.onTertiaryContainer),
               title: Text(tr(context, 'cleanIpBigHint'), style: TextStyle(color: scheme.onTertiaryContainer)),
-              trailing: TextButton(
-                onPressed: () => setState(() => _gentle = true),
-                child: Text(tr(context, 'cleanIpUseGentle')),
+              subtitle: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: TextButton(
+                  onPressed: () => setState(() => _gentle = true),
+                  child: Text(tr(context, 'cleanIpUseGentle')),
+                ),
               ),
             ),
           ),

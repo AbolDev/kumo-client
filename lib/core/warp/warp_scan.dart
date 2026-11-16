@@ -39,11 +39,13 @@ const warpScanLimit = 36;
 
 /// Tries ways 0 until [count] ([parallel] at a time) with [test], which returns the real delay in ms
 /// (negative when it did not answer), and gives back those that answered, the fastest first.
-/// [onProgress] gets how many tests are done and how many there are; [cancelled] stops the scan.
+/// [onResult] is told each way as its test ends (the delay, negative when it did not answer), before
+/// [onProgress], which gets how many tests are done and how many there are; [cancelled] stops the scan.
 Future<List<WarpScanItem>> scanWarp({
   required int count,
   required Future<int> Function(int index) test,
   int parallel = 3,
+  void Function(int index, int ms)? onResult,
   void Function(int done, int total)? onProgress,
   bool Function()? cancelled,
 }) async {
@@ -62,6 +64,7 @@ Future<List<WarpScanItem>> scanWarp({
         ms = -1;
       }
       if (ms >= 0) found.add(WarpScanItem(i, ms));
+      onResult?.call(i, ms);
       onProgress?.call(++done, total);
     }
   }

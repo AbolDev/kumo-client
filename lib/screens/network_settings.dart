@@ -70,7 +70,7 @@ List<Widget> networkSections(
         subtitle: Text(tr(context, 'proxyPortDesc', {'port': o.proxyPort})),
         onTap: () => _editPort(context, state),
       ),
-      SwitchListTile(
+      SwitchOption(
         value: o.keepProxy,
         onChanged: (v) => state.updateNet((o) => o.keepProxy = v, reconnect: false),
         secondary: const Icon(Icons.hub_outlined),
@@ -94,7 +94,7 @@ List<Widget> networkSections(
         ),
       flag(tr(context, 'failover'), tr(context, 'failoverDesc'), o.failover,
           (v) => o.failover = v),
-      SwitchListTile(
+      SwitchOption(
         value: o.shareLan,
         onChanged: (v) => state.updateNet((o) {
           o.shareLan = v;
@@ -973,13 +973,26 @@ class _AdsStatusTileState extends State<_AdsStatusTile> {
           text = tr(context, 'adsStatus', {'lists': s.lists, 'total': s.expected, 'domains': s.domains, 'date': when});
           if (s.baseOnly) text = '$text\n${tr(context, 'adsBaseOnly')}';
         }
+        // The button goes under the text, which then has the whole width.
         return ListTile(
           leading: Icon(Icons.fact_check_outlined, color: s?.baseOnly == true ? scheme.error : null),
           title: Text(tr(context, 'adsLists')),
-          subtitle: Text(text),
-          trailing: _busy
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : TextButton(onPressed: _update, child: Text(tr(context, 'adsUpdateNow'))),
+          subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (text.isNotEmpty) Text(text),
+            Align(
+              alignment: AlignmentDirectional.centerEnd,
+              child: _busy
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : TextButton.icon(
+                      onPressed: _update,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: Text(tr(context, 'adsUpdateNow')),
+                    ),
+            ),
+          ]),
         );
       },
     );

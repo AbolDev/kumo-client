@@ -8,6 +8,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+
+import '../widgets/option_tile.dart' show SwitchOption;
 import '../widgets/kumo_mark.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
@@ -770,7 +772,7 @@ class _ConnectCard extends StatelessWidget {
           ),
           // On the desktop the tunnel switch sits here; on the phone it is in Settings.
           if (isDesktop)
-            SwitchListTile(
+            SwitchOption(
               dense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 4),
               value: state.net.tun,
@@ -1900,37 +1902,23 @@ class _GroupHeader extends StatelessWidget {
     }
   }
 
-  /// "N works - P%": only the count is green, the progress keeps the normal color.
-  Widget _testStat(String text, ColorScheme scheme) {
-    final i = text.indexOf(' · ');
-    if (i < 0) return Text(text);
-    return Text.rich(TextSpan(children: [
-      TextSpan(
-          text: text.substring(0, i),
-          style: const TextStyle(
-              color: Colors.green, fontWeight: FontWeight.w600)),
-      TextSpan(text: text.substring(i)),
-    ]));
-  }
-
-  /// The test result and, once anything went through these free servers (the public ones or WARP), how
-  /// much (like the usage a subscription shows, but without a limit).
+  /// Once anything went through these free servers (the public ones or WARP), how much (like the usage a
+  /// subscription shows, but without a limit). The result of a test is not written here: while it runs its bar
+  /// shows the counts under the name, and once it is over the servers show their own delays.
   Widget? _freeSubtitle(BuildContext context, S t, ColorScheme scheme) {
     final isWarp = group.kind == GroupKind.warp;
-    final test = state.tests[group.id];
     return ListenableBuilder(
       listenable: Listenable.merge([state, state.traffic]),
       builder: (context, _) {
         final usage = isWarp ? state.warpUsage : state.publicUsage;
         final used = usage[0] + usage[1];
-        if (test == null && used == 0) return const SizedBox.shrink();
+        if (used == 0) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (test != null) _testStat(t.testStat(test.alive, test.percent), scheme),
             if (used > 0)
               Padding(
-                padding: EdgeInsetsDirectional.only(top: test == null ? 4 : 6, end: 8),
+                padding: const EdgeInsetsDirectional.only(top: 4, end: 8),
                 child: Semantics(
                   container: true,
                   excludeSemantics: true,

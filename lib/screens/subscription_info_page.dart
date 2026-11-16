@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../widgets/option_tile.dart' show SwitchOption;
 import 'package:flutter/services.dart';
 
 import '../l10n/extra.dart';
@@ -174,7 +176,7 @@ class SubscriptionInfoPage extends StatelessWidget {
                   _row(context, Icons.alt_route, tr(context, 'noRouting'), null,
                       subtitle: tr(context, 'noRoutingDesc'))
                 else ...[
-                  SwitchListTile(
+                  SwitchOption(
                     secondary: const Icon(Icons.alt_route),
                     title: Text(tr(context, 'applyRouting')),
                     subtitle: Text(providerWants

@@ -1,6 +1,8 @@
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+
+import '../widgets/option_tile.dart' show SwitchOption;
 import '../widgets/kumo_mark.dart';
 
 import '../l10n/extra.dart';
@@ -33,7 +35,7 @@ class FreeConnectionsPage extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Column(children: [
-        SwitchListTile(
+        SwitchOption(
           secondary: busy
               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
               : icon == null
@@ -41,7 +43,6 @@ class FreeConnectionsPage extends StatelessWidget {
                   : Icon(icon),
           title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
           subtitle: Text([description, if (status != null) status].join('\n')),
-          isThreeLine: status != null,
           value: value,
           onChanged: busy ? null : onChanged,
         ),

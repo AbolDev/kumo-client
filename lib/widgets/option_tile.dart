@@ -31,6 +31,78 @@ Widget taggedTitle(String title, {bool caution = false}) => Row(children: [
       OptionTag(caution: caution),
     ]);
 
+/// An option with a switch. The switch stands at the end of the title's line only, and the description under
+/// them takes the whole width (in a [SwitchListTile] the switch has a column of its own the height of the row,
+/// so a description wraps into many more lines). A tap anywhere on the row turns it on or off.
+class SwitchOption extends StatelessWidget {
+  const SwitchOption({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.value,
+    required this.onChanged,
+    this.secondary,
+    this.contentPadding,
+    this.dense = false,
+  });
+
+  final Widget title;
+  final Widget? subtitle;
+  final bool value;
+
+  /// Null shows the option disabled.
+  final ValueChanged<bool>? onChanged;
+
+  /// An icon (or another small widget) before the title.
+  final Widget? secondary;
+  final EdgeInsetsGeometry? contentPadding;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final enabled = onChanged != null;
+    Color faded(Color c) => enabled ? c : c.withValues(alpha: 0.38);
+    final titleStyle = (dense ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)?.copyWith(color: faded(scheme.onSurface));
+    final subtitleStyle = theme.textTheme.bodyMedium?.copyWith(color: faded(scheme.onSurfaceVariant));
+    return MergeSemantics(
+      child: InkWell(
+        onTap: enabled ? () => onChanged!(!value) : null,
+        child: Padding(
+          padding: (contentPadding ?? const EdgeInsets.symmetric(horizontal: 16))
+              .add(EdgeInsets.symmetric(vertical: dense ? 4 : 8)),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (secondary != null)
+              Padding(
+                padding: const EdgeInsetsDirectional.only(top: 4, end: 16),
+                child: IconTheme.merge(data: IconThemeData(color: faded(scheme.onSurfaceVariant)), child: secondary!),
+              ),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(child: DefaultTextStyle.merge(style: titleStyle, child: title)),
+                  const SizedBox(width: 12),
+                  Switch(
+                    value: value,
+                    onChanged: onChanged,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ]),
+                if (subtitle != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: DefaultTextStyle.merge(style: subtitleStyle, child: subtitle!),
+                  ),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 /// A description longer than this is cut to two lines under the option, with the whole text behind an
 /// information button.
 const longDescription = 90;
@@ -60,7 +132,7 @@ class InfoSwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final long = description.length > longDescription;
-    return SwitchListTile(
+    return SwitchOption(
       value: value,
       onChanged: onChanged,
       title: tag || caution ? taggedTitle(title, caution: caution) : Text(title),

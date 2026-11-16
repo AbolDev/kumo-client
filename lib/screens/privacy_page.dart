@@ -3,6 +3,8 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:flutter/material.dart';
 
+import '../widgets/option_tile.dart' show SwitchOption;
+
 import '../core/app_icon.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
@@ -224,7 +226,7 @@ class _PrivacyPageState extends State<PrivacyPage> {
               ],
             ),
             const SizedBox(height: 8),
-            SwitchListTile(
+            SwitchOption(
               key: const ValueKey('hide-switch'),
               contentPadding: EdgeInsets.zero,
               value: state.iconHidden,
@@ -242,7 +244,7 @@ class _PrivacyPageState extends State<PrivacyPage> {
           const SizedBox(height: 6),
           Text(tr(context, 'eraseDesc'), style: text.bodyMedium),
           if (_android)
-            SwitchListTile(
+            SwitchOption(
               key: const ValueKey('code-switch'),
               contentPadding: EdgeInsets.zero,
               value: state.panicCode,
