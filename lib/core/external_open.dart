@@ -52,6 +52,17 @@ class MacExternal {
   }
 }
 
+/// Commands of the command line (`kumo --connect`, `--disconnect`, `--toggle`) travel through the same inbox as
+/// an item that starts with this.
+const externalCommandPrefix = 'kumo-command:';
+
+/// The command of an inbox [item] ("connect", "disconnect" or "toggle"), or null when it is not one.
+String? externalCommandOf(String item) {
+  if (!item.startsWith(externalCommandPrefix)) return null;
+  final name = item.substring(externalCommandPrefix.length).trim();
+  return const {'connect', 'disconnect', 'toggle'}.contains(name) ? name : null;
+}
+
 /// How programs on a computer hand things to the running Kumo: a copy started with a link or a file
 /// on its command line writes it into the data folder and ends; the running copy picks it up.
 class ExternalInbox {
@@ -67,6 +78,11 @@ class ExternalInbox {
     for (final a in args) {
       if (out.length >= maxItems) break;
       final arg = a.trim();
+      final command = const {'--connect', '--disconnect', '--toggle'}.contains(arg.toLowerCase());
+      if (command) {
+        out.add('$externalCommandPrefix${arg.substring(2).toLowerCase()}');
+        continue;
+      }
       if (arg.isEmpty || arg.startsWith('--')) continue;
       if (_link.hasMatch(arg)) {
         out.add(arg);

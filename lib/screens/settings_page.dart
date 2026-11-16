@@ -17,6 +17,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/latency_tester.dart';
 import '../core/net_options.dart' show certStores, logLevels;
 import '../core/platform.dart';
+import '../core/usage_stats.dart' show formatBytes;
 import '../core/vpn_channel.dart';
 import '../l10n/strings.dart';
 import '../state/app_state.dart';
@@ -302,6 +303,15 @@ class _SettingsPageState extends State<SettingsPage> {
   /// On Windows the language follows the PC, not a phone.
   String _systemLanguage(S t) => isDesktop ? tr(context, 'languageDevice') : t.languageSystem;
 
+  /// "Off", "30 min", "512 MB", "2 GB": a value of the sleep timer (minutes) or of the daily cap (megabytes).
+  String _limitText(int v, {required bool minutes}) {
+    if (v <= 0) return tr(context, 'limitOff');
+    if (minutes) return tr(context, 'limitMinutes', {'n': v});
+    return v >= 1024 && v % 1024 == 0
+        ? tr(context, 'limitGb', {'n': v ~/ 1024})
+        : tr(context, 'limitMb', {'n': v});
+  }
+
   Widget _switch(String key, bool value, String title, String desc) => SwitchListTile(
         value: value,
         onChanged: (v) => state.setFlag(key, v),
@@ -433,6 +443,33 @@ class _SettingsPageState extends State<SettingsPage> {
       ]),
       _section(Icons.apps, t.appSettings, [
         _switch('autoConnect', state.autoConnect, t.autoConnect, t.autoConnectDesc),
+        ListTile(
+          leading: const Icon(Icons.bedtime_outlined),
+          title: Text(tr(context, 'sleepTimer')),
+          subtitle: Text(tr(context, 'sleepTimerDesc')),
+          trailing: Text(_limitText(state.sleepMinutes, minutes: true)),
+          onTap: () async {
+            final v = await pickOption<int>(context, tr(context, 'sleepTimer'), state.sleepMinutes, {
+              for (final m in {...AppState.sleepChoices, state.sleepMinutes}.toList()..sort())
+                m: _limitText(m, minutes: true),
+            });
+            if (v != null) state.setSleepMinutes(v);
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.data_usage),
+          title: Text(tr(context, 'dailyCap')),
+          subtitle: Text('${tr(context, 'dailyCapDesc')}\n'
+              '${tr(context, 'dailyCapUsed', {'n': formatBytes(state.usedToday)})}'),
+          trailing: Text(_limitText(state.dailyCapMb, minutes: false)),
+          onTap: () async {
+            final v = await pickOption<int>(context, tr(context, 'dailyCap'), state.dailyCapMb, {
+              for (final m in {...AppState.capChoices, state.dailyCapMb}.toList()..sort())
+                m: _limitText(m, minutes: false),
+            });
+            if (v != null) state.setDailyCapMb(v);
+          },
+        ),
         _switch('restartOnChange', state.restartOnChange, t.restartOnChange, t.restartOnChangeDesc),
         _switch('confirmDelete', state.confirmDelete, t.confirmDelete, t.confirmDeleteDesc),
         SwitchListTile(

@@ -130,5 +130,15 @@ void main() {
         await dir.delete(recursive: true);
       }
     });
+
+    test('command line: --connect, --disconnect and --toggle are commands, other options are not', () async {
+      final items = await ExternalInbox.fromArgs(['--minimized', '--connect', '--Disconnect', '--toggle', '--other']);
+      expect(items, ['kumo-command:connect', 'kumo-command:disconnect', 'kumo-command:toggle']);
+      expect(items.map(externalCommandOf), ['connect', 'disconnect', 'toggle']);
+      // What is not a command, or names none that is known, is not one.
+      expect(externalCommandOf(_link), isNull);
+      expect(externalCommandOf('kumo-command:format'), isNull);
+      expect(externalCommandOf('kumo-command:'), isNull);
+    });
   });
 }

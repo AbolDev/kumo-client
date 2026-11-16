@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import '../widgets/kumo_mark.dart';
 
 import '../core/net_options.dart' show fingerprints;
+import '../core/proxy_config.dart' show parseLink;
 import '../core/usage_stats.dart' show formatBytes;
 import '../core/warp/warp_profile.dart' show WarpMethod, isMasqueKind;
 import '../core/warp/warp_store.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
 import '../state/warp_controller.dart';
+import 'network_settings.dart' show pickChain;
 
 /// Cloudflare WARP: makes the account on this device, puts the server in the list, and lets the user
 /// switch to another way of connecting or fetch newer methods.
@@ -210,6 +212,28 @@ class _WarpPageState extends State<WarpPage> {
                   subtitle: Text(tr(context, 'warpPickMethodDesc')),
                   onTap: warp.busy || warp.scanning ? null : _pickMethod,
                 ),
+                // Two hops: WARP is reached through another server (the same setting as the proxy chain of the
+                // network options). The chain is for the WireGuard ways: the MASQUE ones go through Xray, which
+                // does not take it.
+                ListTile(
+                  leading: const Icon(Icons.alt_route),
+                  title: Text(tr(context, 'warpChain')),
+                  subtitle: Text(widget.state.net.chain.isEmpty
+                      ? tr(context, 'warpChainDesc')
+                      : (parseLink(widget.state.net.chain)?.name ?? tr(context, 'chainNone'))),
+                  trailing: widget.state.net.chain.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => widget.state.updateNet((o) => o.chain = ''),
+                        ),
+                  onTap: warp.busy || warp.scanning ? null : () => pickChain(context, widget.state),
+                ),
+                if (widget.state.net.chain.isNotEmpty && (warp.currentMethod ?? '').startsWith('masque'))
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(tr(context, 'warpChainMasque'), style: TextStyle(color: scheme.error)),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.fingerprint),
                   title: Text(tr(context, 'warpFingerprint')),

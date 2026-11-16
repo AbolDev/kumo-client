@@ -297,6 +297,13 @@ class _KumoAppState extends State<KumoApp>
         got.addAll(await ExternalInbox.take(DesktopVpn.instance.dataDir));
         if (Platform.isMacOS) got.addAll(await MacExternal.take());
       }
+      // The commands of the command line are carried out at once, with no question and no window.
+      for (final item in got.toList()) {
+        final command = externalCommandOf(item);
+        if (command == null) continue;
+        got.remove(item);
+        _runCommand(command);
+      }
       if (got.isEmpty) return;
       _externalQueue.addAll(got);
       if (isDesktop) {
@@ -305,6 +312,26 @@ class _KumoAppState extends State<KumoApp>
       }
       unawaited(_drainExternal());
     } catch (_) {}
+  }
+
+  /// `kumo --connect`, `--disconnect` or `--toggle`: connects with the server that was chosen (the last one),
+  /// or disconnects. Does nothing when the connection is already as asked.
+  void _runCommand(String command) {
+    if (!_state.settingsLoaded) {
+      // The app is still starting: once more in a moment.
+      Timer(const Duration(seconds: 1), () => _runCommand(command));
+      return;
+    }
+    final on = _state.connected || _state.vpn.status == VpnStatus.starting;
+    if (_state.vpn.status == VpnStatus.stopping) return;
+    switch (command) {
+      case 'connect':
+        if (!on) _state.toggle();
+      case 'disconnect':
+        if (on) _state.toggle();
+      case 'toggle':
+        _state.toggle();
+    }
   }
 
   /// Asks about each thing in turn. Nothing is added without a yes: a link in a web page or a chat

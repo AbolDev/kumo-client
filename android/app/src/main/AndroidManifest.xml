@@ -46,6 +46,14 @@
             </intent-filter>
         </activity>
 
+        <!-- What the long-press shortcuts of the launcher icon start (connect, disconnect). No screen. -->
+        <activity
+            android:name=".ShortcutActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
+
         <!-- Links of servers and subscriptions, shared text and files that other apps open with Kumo.
              It has no screen: it passes them on to KumoActivity, which asks the user first. -->
         <activity
@@ -343,7 +351,7 @@
         <activity
             android:name=".WidgetConfigActivity"
             android:exported="true"
-            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog">
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>

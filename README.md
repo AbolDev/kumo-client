@@ -62,6 +62,7 @@ The apps are not code-signed or on Google Play, so Play Protect, SmartScreen or 
 - Many protocols: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 and 2, TUIC, AnyTLS, WireGuard, SOCKS, SSH and more.
 - Privacy: kill switch, strict DNS, WebRTC leak block, ad and tracker block, IP and DNS leak tests.
 - Speed tests, live speed and usage, widgets, tray icon, Android TV, seven languages.
+- Sleep timer and daily data cap; connect or disconnect from the launcher icon on the phone (long press) and from the command line on a computer (`kumo --connect`, `--disconnect`, `--toggle`; add `--minimized` to keep the window hidden).
 
 ## How to use
 

@@ -249,6 +249,16 @@ class VpnChannel {
   static Future<void> scheduleSubUpdates(bool enabled) async =>
       _win ? null : _control.invokeMethod('scheduleSubUpdates', {'enabled': enabled});
 
+  /// Android: the sleep timer ([stopAtMs], epoch ms, 0 = none) and the daily data cap ([capLeftBytes] left for
+  /// today, < 0 = none) of the connection that runs. The VPN service holds them, so they work with the screen
+  /// closed. The desktop keeps its own in the app.
+  static Future<void> setLimits({required int stopAtMs, required int capLeftBytes}) async {
+    if (_win) return;
+    try {
+      await _control.invokeMethod('setLimits', {'stopAt': stopAtMs, 'capLeft': capLeftBytes});
+    } catch (_) {}
+  }
+
   /// Android: lets the phone warn about a subscription that is nearly out of data or time.
   static Future<void> checkUsage(
       String id, String name, int used, int total, int expire) async {

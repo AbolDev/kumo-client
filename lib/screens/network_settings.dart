@@ -303,7 +303,7 @@ List<Widget> networkSections(
                 icon: const Icon(Icons.close),
                 onPressed: () => state.updateNet((o) => o.chain = ''),
               ),
-        onTap: () => _pickChain(context, state),
+        onTap: () => pickChain(context, state),
       ),
       reset('advanced'),
     ]),
@@ -785,7 +785,8 @@ Future<void> _leakCheck(BuildContext context, AppState state) async {
   );
 }
 
-Future<void> _pickChain(BuildContext context, AppState state) async {
+/// Asks which server the traffic goes through first (the proxy chain) and sets it.
+Future<void> pickChain(BuildContext context, AppState state) async {
   final choices = [
     for (final g in state.groups)
       if (g.kind != GroupKind.collector && g.kind != GroupKind.warp)

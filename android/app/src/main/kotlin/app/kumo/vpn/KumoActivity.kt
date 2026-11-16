@@ -57,6 +57,35 @@ class KumoActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         applyTaskLook()
+        publishShortcuts()
+    }
+
+    /**
+     * The shortcuts of the launcher icon (a long press): connect with the last settings, and disconnect. They are
+     * not shown while a disguise is on (the app then must not look like a VPN), and their labels are the
+     * ones of the notification buttons, so they are in the language of the phone.
+     */
+    private fun publishShortcuts() {
+        try {
+            val named = File(filesDir, "disguise_name.txt")
+            if (named.exists() && named.readText().trim().isNotEmpty()) {
+                ShortcutManagerCompat.removeAllDynamicShortcuts(this)
+                return
+            }
+            fun shortcut(id: String, label: Int, action: String) = ShortcutInfoCompat.Builder(this, id)
+                .setShortLabel(getString(label))
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_power))
+                .setIntent(Intent(this, ShortcutActivity::class.java).setAction(action))
+                .build()
+            ShortcutManagerCompat.setDynamicShortcuts(
+                this,
+                listOf(
+                    shortcut("kumo-connect", R.string.notif_connect, ShortcutActivity.ACTION_CONNECT),
+                    shortcut("kumo-disconnect", R.string.notif_disconnect, ShortcutActivity.ACTION_DISCONNECT),
+                ),
+            )
+        } catch (_: Exception) {
+        }
     }
 
     /**
@@ -295,6 +324,15 @@ class KumoActivity : FlutterActivity() {
                             (call.argument<Number>("expire") ?: 0).toLong(),
                         )
                     }.start()
+                    result.success(null)
+                }
+                // The sleep timer and the daily data cap of the connection that runs (the service holds them, so
+                // they work with the screen closed): stopAt in epoch ms (0 = none), capLeft in bytes (< 0 = none).
+                "setLimits" -> {
+                    BoxVpnService.setLimits(
+                        (call.argument<Number>("stopAt") ?: 0).toLong(),
+                        (call.argument<Number>("capLeft") ?: -1).toLong(),
+                    )
                     result.success(null)
                 }
                 "scheduleSubUpdates" -> {

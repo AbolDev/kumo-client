@@ -128,6 +128,23 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         // close has no time limit): the next core waits for it a while before it starts.
         @Volatile private var closing: CompletableDeferred<Unit>? = null
 
+        // The limits of the connection that runs, set by the app (see setLimits): a time to disconnect at
+        // (epoch ms, 0 = none) and the data left for today (bytes; only when limitCapOn). They live here so
+        // that they hold while the app's screen is closed and its own timers are gone.
+        @Volatile private var limitStopAt = 0L
+        @Volatile private var limitCapOn = false
+        @Volatile private var limitCapLeft = 0L
+        // The totals the data left is counted from: -1 until the next sample of the core sets them.
+        @Volatile private var limitLastTotal = -1L
+
+        /** Sets (or, with stopAt 0 and capLeft < 0, clears) the sleep timer and the daily data cap. */
+        fun setLimits(stopAt: Long, capLeft: Long) {
+            limitStopAt = stopAt
+            limitCapOn = capLeft >= 0
+            limitCapLeft = if (capLeft >= 0) capLeft else 0L
+            limitLastTotal = -1L
+        }
+
         // How long a disconnect waits for the core to close before it is shown as done.
         private const val QUICK_CLOSE_MS = 1_500L
         private const val CLOSING_WAIT_MS = 1_000L
@@ -488,6 +505,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 // is using now, else the only server, else "Automatic"
                 currentName ?: (if (serverNames.size == 1) serverNames[0] else "Automatic"),
             )
+            checkLimits(message.uplinkTotal + message.downlinkTotal)
             if (!showSpeed && !showVolume) return
             val parts = ArrayList<String>()
             if (showSpeed) parts.add("↓ ${formatSpeed(message.downlink)}   ↑ ${formatSpeed(message.uplink)}")
@@ -520,6 +538,32 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         override fun updateClashMode(newMode: String) {}
 
         override fun writeConnectionEvents(events: ConnectionEvents?) {}
+    }
+
+    /** Called with the totals of the core every second: ends the connection when the sleep timer is out or the
+     *  data of today is used up. The app is told why ("timer" or "cap") through the stop reason. */
+    private fun checkLimits(total: Long) {
+        val stopAt = limitStopAt
+        if (stopAt > 0 && System.currentTimeMillis() >= stopAt) {
+            limitsReached("timer")
+            return
+        }
+        if (!limitCapOn) return
+        val last = limitLastTotal
+        limitLastTotal = total
+        if (last < 0) return
+        // A total that went down means the core was started again: what it counts is new.
+        limitCapLeft -= if (total >= last) total - last else total
+        if (limitCapLeft <= 0) limitsReached("cap")
+    }
+
+    private fun limitsReached(reason: String) {
+        // Once: the stop below clears them, but samples keep coming until the core is down.
+        limitStopAt = 0L
+        limitCapOn = false
+        Log.i(TAG, "a limit is reached: $reason")
+        stopReason = reason
+        stopVpn()
     }
 
     @Synchronized
@@ -593,6 +637,9 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     /** Runs with [lifecycle] held. [quick]: the user ends the connection, so nothing that can be
      *  left to finish in the background is waited for (see [teardown]). */
     private suspend fun shutDown(quick: Boolean = false) {
+        // The limits belong to the connection that ends: a later one (the tile, the boot) starts with none
+        // until the app sets them.
+        setLimits(0L, -1L)
         VpnBridge.closeGate(if (quick) 0 else 3_000)
         try {
             teardown(quick)

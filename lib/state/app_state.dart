@@ -298,6 +298,9 @@ class AppState extends ChangeNotifier {
     _forcedReason = null;
     if (forced != null) {
       lastDisconnect = forced;
+    } else if (s.error == 'timer' || s.error == 'cap') {
+      // The phone's VPN service ended it (the screen was closed): the sleep timer, or the data cap.
+      lastDisconnect = (key: s.error == 'timer' ? 'reasonTimer' : 'reasonCap', args: const <String, Object>{});
     } else if (s.status == VpnStatus.error) {
       final e = s.error ?? '';
       lastDisconnect = (key: 'reasonError', args: {'e': e.startsWith('ovpn:') ? _ovpnFailed(e) : e});
@@ -395,6 +398,21 @@ class AppState extends ChangeNotifier {
 
   // App settings
   bool autoConnect = false;
+
+  /// Sleep timer: the connection ends this many minutes after it is made (0 = off).
+  int sleepMinutes = 0;
+
+  /// Daily data cap in megabytes, download and upload together (0 = off). When today's data reaches it the
+  /// connection ends (a connection made after that is not cut again until tomorrow).
+  int dailyCapMb = 0;
+
+  /// When the sleep timer of the connection that runs ends (null when none).
+  DateTime? sleepEndsAt;
+  Timer? _sleepTimer;
+  bool _capHit = false;
+
+  static const sleepChoices = [0, 15, 30, 60, 120, 240];
+  static const capChoices = [0, 100, 250, 500, 1024, 2048, 5120];
   bool restartOnChange = true;
   bool confirmDelete = true;
   bool batteryAsked = false;
@@ -695,8 +713,10 @@ class AppState extends ChangeNotifier {
         if (s.status == VpnStatus.error && s.error != 'revoked') {
           final reason = (s.error ?? '').trim().isEmpty ? 'no reason given' : s.error!;
           // A server name that cannot be looked up, or an unreachable network, is not a fault of the app.
-          if (!isNetworkFailureText(reason)) CrashHub.report(StateError(reason), null,
-              kind: before == VpnStatus.starting ? 'core_start_failed' : 'core_exit', message: reason);
+          if (!isNetworkFailureText(reason)) {
+            CrashHub.report(StateError(reason), null,
+                kind: before == VpnStatus.starting ? 'core_start_failed' : 'core_exit', message: reason);
+          }
         }
       }
       _preparing = false;
@@ -720,6 +740,7 @@ class AppState extends ChangeNotifier {
         if (s.status == VpnStatus.error) buzz(strong: true);
       }
       if (s.status == VpnStatus.started && changed) {
+        _armLimits();
         if (measurePing) _measureLive();
         _misses = 0;
         _healthDown = 0;
@@ -732,6 +753,7 @@ class AppState extends ChangeNotifier {
         Future<void>.delayed(const Duration(seconds: 3), _refreshActive);
         _refreshListsSoon();
       } else if (s.status != VpnStatus.started) {
+        _disarmLimits();
         _watch?.cancel();
         _watch = null;
         _listsTimer?.cancel();
@@ -1077,6 +1099,10 @@ class AppState extends ChangeNotifier {
       collectorSource = j['collectorSource'] is String ? j['collectorSource'] as String : null;
       collector.updatedAt = (j['collectorUpdated'] as num?)?.toInt() ?? 0;
       autoConnect = flag('autoConnect', false);
+      final sm = j['sleepMinutes'];
+      sleepMinutes = sm is int && sm >= 0 && sm <= 24 * 60 ? sm : 0;
+      final cm = j['dailyCapMb'];
+      dailyCapMb = cm is int && cm >= 0 && cm <= 10 * 1024 * 1024 ? cm : 0;
       restartOnChange = flag('restartOnChange', true);
       confirmDelete = flag('confirmDelete', true);
       batteryAsked = flag('batteryAsked', false);
@@ -1157,6 +1183,8 @@ class AppState extends ChangeNotifier {
           'collectorSource': collectorSource,
           'collectorUpdated': collector.updatedAt,
           'autoConnect': autoConnect,
+          'sleepMinutes': sleepMinutes,
+          'dailyCapMb': dailyCapMb,
           'restartOnChange': restartOnChange,
           'confirmDelete': confirmDelete,
           'batteryAsked': batteryAsked,
@@ -1242,6 +1270,59 @@ class AppState extends ChangeNotifier {
     }
     _saveSettings();
     notifyListeners();
+  }
+
+  /// Sets the sleep timer (minutes, 0 = off); a connection that runs gets it from now.
+  void setSleepMinutes(int minutes) {
+    sleepMinutes = minutes < 0 ? 0 : minutes;
+    _saveSettings();
+    if (connected) _armLimits();
+    notifyListeners();
+  }
+
+  /// Sets the daily data cap (megabytes, 0 = off).
+  void setDailyCapMb(int mb) {
+    dailyCapMb = mb < 0 ? 0 : mb;
+    _saveSettings();
+    if (connected) _armLimits();
+    notifyListeners();
+  }
+
+  /// The data of today in bytes (download and upload).
+  int get usedToday {
+    final day = dayUsage[_dayKey(DateTime.now())];
+    return day == null ? 0 : day[0] + day[1];
+  }
+
+  /// A connection is up: starts its sleep timer and tells the phone's VPN service the limits (it holds them
+  /// while the screen is closed). A connection made when today's data is over the cap is let be: it was asked for.
+  void _armLimits() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    sleepEndsAt = null;
+    if (sleepMinutes > 0) {
+      sleepEndsAt = DateTime.now().add(Duration(minutes: sleepMinutes));
+      _sleepTimer = Timer(Duration(minutes: sleepMinutes), () => _limitReached('reasonTimer'));
+    }
+    final cap = dailyCapMb * 1024 * 1024;
+    _capHit = cap > 0 && usedToday >= cap;
+    VpnChannel.setLimits(
+        stopAtMs: sleepEndsAt?.millisecondsSinceEpoch ?? 0,
+        capLeftBytes: cap > 0 && !_capHit ? cap - usedToday : -1);
+  }
+
+  void _disarmLimits() {
+    _sleepTimer?.cancel();
+    _sleepTimer = null;
+    sleepEndsAt = null;
+    _capHit = false;
+  }
+
+  /// The sleep timer ran out or the data of today reached the cap: ends the connection and says why.
+  void _limitReached(String reasonKey) {
+    if (!connected) return;
+    _forcedReason = (key: reasonKey, args: const <String, Object>{});
+    unawaited(toggle());
   }
 
   /// Booting without a stored VPN permission would fail silently, so ask while the user is here.
@@ -1586,6 +1667,10 @@ class AppState extends ChangeNotifier {
     day[0] += dd;
     day[1] += du;
     day[2] += gap;
+    if (dailyCapMb > 0 && !_capHit && day[0] + day[1] >= dailyCapMb * 1024 * 1024) {
+      _capHit = true;
+      _limitReached('reasonCap');
+    }
     final name = selected?.name ?? _activeName ?? 'Automatic';
     final s = serverUsage.putIfAbsent(name, () => [0, 0, 0, 0]);
     s[0] += dd;

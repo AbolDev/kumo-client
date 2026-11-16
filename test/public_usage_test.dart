@@ -48,6 +48,17 @@ void main() {
     await s.flushUsage();
   });
 
+  test('the data of today (what the daily cap is compared with) adds download and upload', () async {
+    final s = state();
+    expect(s.usedToday, 0);
+    s.onTrafficForTest(const Traffic(0, 0, 100, 1000));
+    s.onTrafficForTest(const Traffic(0, 0, 300, 5000));
+    expect(s.usedToday, 5300);
+    // No cap is set: the data of today never ends a connection.
+    expect(s.dailyCapMb, 0);
+    await s.flushUsage();
+  });
+
   test('the counter is cleared with the rest of the usage', () {
     final s = state();
     s.publicUsage[0] = 10;
