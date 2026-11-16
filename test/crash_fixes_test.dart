@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show FlutterError;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kumo/core/desktop_vpn.dart' show stripAnsi;
+import 'package:kumo/core/desktop_vpn.dart' show isTunAdapterFailure, stripAnsi;
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/usage/crash_hub.dart';
 
@@ -113,6 +113,20 @@ void main() {
       expect(stripAnsi('\x1B[31mFATAL\x1B[0m[0000] create service: invalid public_key'),
           'FATAL[0000] create service: invalid public_key');
       expect(stripAnsi('plain [text]'), 'plain [text]');
+    });
+
+    test('a tunnel adapter that could not be made is known by the words of the core', () {
+      // Report 85 (Windows, the system's own words in Portuguese).
+      const report = 'WARN[0010] inbound/tun[tun-in]: open interface take too much time to finish!\n'
+          'FATAL[0016] start service: start inbound/tun[tun-in]: configure tun interface: '
+          '(create adapter: Não é possível criar um arquivo já existente. | open existing adapter: Elemento não encontrado.)';
+      expect(isTunAdapterFailure(report), isTrue);
+      expect(isTunAdapterFailure('start inbound/tun[tun-in]: open interface take too much time to finish!'), isTrue);
+      expect(isTunAdapterFailure('FATAL start service: configure tun interface: (create adapter: x)'), isTrue);
+      // Other failures of the core are not.
+      expect(isTunAdapterFailure('start inbound/mixed[mixed-in]: listen tcp: bind: address already in use'), isFalse);
+      expect(isTunAdapterFailure('create service: initialize outbound[3]: invalid public_key'), isFalse);
+      expect(isTunAdapterFailure(''), isFalse);
     });
   });
 }

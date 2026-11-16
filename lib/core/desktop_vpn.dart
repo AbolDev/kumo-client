@@ -17,6 +17,13 @@ import 'win_job.dart';
 import 'win_tools.dart';
 
 /// The text without the colour codes a core writes for a terminal (the "FATAL" of sing-box is red).
+/// Whether a core's start failed because the tunnel adapter could not be made (Windows, wintun): "open interface
+/// take too much time to finish" or "configure tun interface: (create adapter: ... | open existing adapter: ...)".
+/// The words of the system's own error come in the language of Windows, so only the core's words are read.
+bool isTunAdapterFailure(String text) =>
+    text.contains('open interface take too much time') ||
+    (text.contains('configure tun interface') && text.contains('adapter'));
+
 String stripAnsi(String text) => text.replaceAll(RegExp(r'\x1B\[[0-9;]*[A-Za-z]'), '');
 
 /// The VPN on the desktop: the same sing-box core as on Android, run as a child process
@@ -413,7 +420,8 @@ rm -rf "$T"
       bool killSwitch = false,
       bool keepStandby = false,
       bool holdProxy = false,
-      List<String> directPrograms = const []}) async {
+      List<String> directPrograms = const [],
+      bool tunRetry = false}) async {
     _killSwitch = killSwitch;
     _secret = apiSecret;
     final gen = ++_gen;
@@ -515,6 +523,9 @@ rm -rf "$T"
             if (_elevated && File(_coreLog).existsSync()) {
               text = File(_coreLog).readAsStringSync().trim();
             }
+            // A tunnel adapter that could not be made is tried once more below (the wait for the core's API
+            // sees that it ended and the catch of this method starts again): it is not reported yet.
+            if (!tunRetry && Platform.isWindows && isTunAdapterFailure(text)) return;
             _failed(gen, text.isEmpty ? 'sing-box stopped (exit code $code)' : text);
           }
         });
@@ -550,6 +561,23 @@ rm -rf "$T"
     } catch (e) {
       if (stale()) return;
       await _killAll();
+      // Windows: the adapter of the last tunnel may not be gone yet ("create adapter: ... already exists | open
+      // existing adapter: not found"): once more, after a moment, with nothing of the first try left running.
+      if (!tunRetry && Platform.isWindows && isTunAdapterFailure('$e')) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+        if (stale()) return;
+        return start(configJson,
+            xrayConfig: xrayConfig,
+            xrayPort: xrayPort,
+            apiPort: apiPort,
+            apiSecret: apiSecret,
+            systemProxyPort: systemProxyPort,
+            killSwitch: killSwitch,
+            keepStandby: keepStandby,
+            holdProxy: holdProxy,
+            directPrograms: directPrograms,
+            tunRetry: true);
+      }
       _emit(VpnStatus.error, '$e'.replaceFirst('Bad state: ', ''));
     }
   }
