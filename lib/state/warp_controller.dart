@@ -75,6 +75,9 @@ class WarpController extends ChangeNotifier {
   String? currentMethod;
   String? currentAddress;
   bool busy = false;
+
+  /// How far the making of a new account has come (0 to 1) while [setUp] signs up; null at other times.
+  double? setupProgress;
   bool loaded = false;
   String? error;
   WarpUpdateResult? lastUpdate;
@@ -418,7 +421,7 @@ class WarpController extends ChangeNotifier {
   }
 
   /// The user picked [config], one of the WARP servers of the list: its way is the one in use from now on (the
-  /// page shows it, "try another way" goes on from it, a rebuild keeps it).
+  /// scans and a rebuild keep it).
   void follow(ProxyConfig config) {
     final way = _ways[config];
     if (way == null) return;
@@ -447,26 +450,55 @@ class WarpController extends ChangeNotifier {
       await load();
       if (store.profile == null) throw StateError('no WARP profile is available');
       final fresh = account == null;
+      var masqueReady = masque != null;
       if (fresh) {
+        // The two sign-ups (WireGuard and MASQUE) run at the same time; the bar shows the two together.
+        setupProgress = 0;
+        var wg = 0.0, mq = 0.0;
+        final wantMasque = !inWarp && masque == null && (await combos()).any((c) => isMasqueKind(c.method.kind));
+        void report() {
+          final now = 0.9 * (wantMasque ? (wg + mq) / 2 : wg);
+          if (now > (setupProgress ?? 0)) setupProgress = now;
+          notifyListeners();
+        }
+
+        final masqueSignUp = wantMasque
+            ? registerWarpMasque(store.profile!, onProgress: (v) {
+                mq = v;
+                report();
+              }).then<WarpMasqueAccount?>((a) => a, onError: (Object _) => null)
+            : Future<WarpMasqueAccount?>.value(null);
         try {
-          account = await registerWarp(store.profile!);
+          account = await registerWarp(store.profile!, onProgress: (v) {
+            wg = v;
+            report();
+          });
         } catch (_) {
           // A newer profile may carry other piece sizes or addresses for a network that changed.
           final r = await store.update();
           if (r != WarpUpdateResult.updated) rethrow;
-          account = await registerWarp(store.profile!);
+          account = await registerWarp(store.profile!, onProgress: (v) {
+            wg = v;
+            report();
+          });
+        }
+        final made = await masqueSignUp;
+        if (made != null) {
+          masque = made;
+          masqueReady = true;
+          _masqueTried = true;
         }
       }
       enabled = true;
       // A new account starts with MASQUE over HTTP/2 (it passes where WireGuard is cut). When its sign-up
-      // does not work, the first way of the profile is used, as before.
-      if (fresh && !inWarp) {
+      // did not work, the first way of the profile is used, and MASQUE is tried again at the next start.
+      if (fresh && !inWarp && masqueReady) {
         final i = (await combos()).indexWhere((c) => c.method.id == defaultMethodId);
         if (i >= 0) choice = i;
       }
       try {
         await _apply(choose: true);
-        if (fresh && !inWarp) h2Default = true;
+        if (fresh && !inWarp && masqueReady) h2Default = true;
       } catch (_) {
         if (choice == 0) rethrow;
         choice = 0;
@@ -478,6 +510,7 @@ class WarpController extends ChangeNotifier {
       if (account == null) enabled = false;
     } finally {
       busy = false;
+      setupProgress = null;
       notifyListeners();
     }
   }
@@ -504,23 +537,6 @@ class WarpController extends ChangeNotifier {
     _state.setWarpServer(null);
     error = null;
     await _save();
-    notifyListeners();
-  }
-
-  /// Switches to the next way of reaching WARP (another method, endpoint or port).
-  Future<void> nextMethod() async {
-    if (account == null || busy) return;
-    final all = await combos();
-    if (all.isEmpty) return;
-    custom = null;
-    choice = (choice + 1) % all.length;
-    error = null;
-    try {
-      await _apply();
-      await _state.reconnectIfConnected();
-    } catch (e) {
-      error = '$e'.replaceFirst('Bad state: ', '');
-    }
     notifyListeners();
   }
 

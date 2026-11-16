@@ -274,33 +274,71 @@ List<SignUpTry> signUpTries(WarpProfile profile) => [
           for (final ip in profile.apiIps) (ip, cut.$1, cut.$2),
     ];
 
-/// Makes a WARP account for this device, reaching the service through the addresses and the piece
-/// sizes of [profile]. Tries its addresses in turn; throws [WarpRegisterException] when none answers.
-Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random}) async {
-  final (priv, pub) = newWireGuardKeys(random);
-  Object? last;
-  // The pieces are cut at random sizes, and a filter does not always lose the name in the same way:
-  // a second go with other sizes often passes where the first did not.
-  for (final (ip, size, delay) in signUpTries(profile)) {
-    final relay = await FragmentRelay.start(ip, size: size, delay: delay, random: random);
-    try {
-      final reg = await _call(relay.port, 'POST', _apiPath, {
-        'key': pub,
-        'install_id': '',
-        'fcm_token': '',
-        'tos': DateTime.now().toUtc().toIso8601String(),
-        'model': 'PC',
-        'serial_number': '',
-        'locale': 'en_US',
-      });
-      final id = reg['id'], token = reg['token'];
-      if (id is! String || token is! String || !RegExp(r'^[A-Za-z0-9-]{8,64}$').hasMatch(id)) {
-        throw WarpRegisterException('the answer has no account');
+/// The tries of [signUpTries] in waves: the ways of one wave are raced, the next wave is a second go (the
+/// pieces are cut at random sizes, and a filter does not always lose the name in the same way).
+List<List<SignUpTry>> signUpWaves(WarpProfile profile) {
+  final all = signUpTries(profile);
+  final half = all.length ~/ 2;
+  return half == 0 ? [all] : [all.sublist(0, half), all.sublist(half)];
+}
+
+/// How long the TLS handshake of one way of reaching the sign-up service may take.
+const _handshakeTimeout = Duration(seconds: 8);
+
+/// Finds a way through to the sign-up service among [wave]: the TLS handshake of every way is started at the
+/// same time, and the first that completes wins (a filter that blocks the service cuts the handshake, so a
+/// completed one means the way works). Returns the relay of that way, still open, or null when none got
+/// through. [onTried] is told how many ways have failed so far.
+Future<FragmentRelay?> _race(List<SignUpTry> wave, Random? random, void Function(int failed)? onTried) {
+  final won = Completer<FragmentRelay?>();
+  var failed = 0;
+  for (final (ip, size, delay) in wave) {
+    () async {
+      FragmentRelay? relay;
+      SecureSocket? tls;
+      try {
+        relay = await FragmentRelay.start(ip, size: size, delay: delay, random: random);
+        final plain = await Socket.connect(InternetAddress.loopbackIPv4, relay.port);
+        tls = await SecureSocket.secure(plain, host: _apiHost).timeout(_handshakeTimeout, onTimeout: () {
+          plain.destroy();
+          throw TimeoutException('handshake');
+        });
+        tls.destroy();
+        if (won.isCompleted) {
+          await relay.close();
+        } else {
+          won.complete(relay);
+        }
+      } catch (_) {
+        tls?.destroy();
+        await relay?.close();
+        failed++;
+        onTried?.call(failed);
+        if (failed == wave.length && !won.isCompleted) won.complete(null);
       }
-      final on = await _call(relay.port, 'PATCH', '$_apiPath/$id', {'warp_enabled': true}, token: token);
-      final account = _account(priv, (on['config'] ?? reg['config']));
-      if (account == null) throw WarpRegisterException('the answer is incomplete');
-      return account;
+    }();
+  }
+  return won.future;
+}
+
+/// Runs [body] through the first way of [profile] that reaches the sign-up service: wave after wave, the ways
+/// of a wave raced (see [_race]). [onProgress] goes from 0 to 0.7 while a way is looked for.
+Future<T> _throughService<T>(WarpProfile profile, Random? random, void Function(double)? onProgress,
+    Future<T> Function(int relayPort) body) async {
+  Object? last;
+  final waves = signUpWaves(profile);
+  for (var w = 0; w < waves.length; w++) {
+    final wave = waves[w];
+    onProgress?.call(0.7 * w / waves.length);
+    final relay = await _race(
+        wave, random, (failed) => onProgress?.call(0.7 * (w + failed / wave.length) / waves.length));
+    if (relay == null) {
+      last = WarpRegisterException('the sign-up service could not be reached');
+      continue;
+    }
+    onProgress?.call(0.7);
+    try {
+      return await body(relay.port);
     } catch (e) {
       last = e;
     } finally {
@@ -310,17 +348,45 @@ Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random}) async {
   throw WarpRegisterException('$last');
 }
 
+/// Makes a WARP account for this device, reaching the service through the addresses and the piece
+/// sizes of [profile]; throws [WarpRegisterException] when none answers. [onProgress] runs from 0 to 1.
+Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random, void Function(double)? onProgress}) async {
+  final (priv, pub) = newWireGuardKeys(random);
+  final account = await _throughService(profile, random, onProgress, (port) async {
+    final reg = await _call(port, 'POST', _apiPath, {
+      'key': pub,
+      'install_id': '',
+      'fcm_token': '',
+      'tos': DateTime.now().toUtc().toIso8601String(),
+      'model': 'PC',
+      'serial_number': '',
+      'locale': 'en_US',
+    });
+    onProgress?.call(0.85);
+    final id = reg['id'], token = reg['token'];
+    if (id is! String || token is! String || !RegExp(r'^[A-Za-z0-9-]{8,64}$').hasMatch(id)) {
+      throw WarpRegisterException('the answer has no account');
+    }
+    final on = await _call(port, 'PATCH', '$_apiPath/$id', {'warp_enabled': true}, token: token);
+    final account = _account(priv, (on['config'] ?? reg['config']));
+    if (account == null) throw WarpRegisterException('the answer is incomplete');
+    return account;
+  });
+  onProgress?.call(1);
+  return account;
+}
+
 /// Makes a WARP account that uses MASQUE for this device: a device is signed up with a throw-away
 /// WireGuard key (the service wants one), then its key is replaced by a P-256 one with the tunnel type
 /// `masque`. It is a different account from the WireGuard one: once a device takes a MASQUE key it no
 /// longer speaks WireGuard. [call] is for tests.
 Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
     {Random? random,
+    void Function(double)? onProgress,
     Future<Map<String, dynamic>> Function(String method, String path, Map<String, dynamic> body, {String? token})?
         call}) async {
   final (_, wgPub) = newWireGuardKeys(random);
   final keys = newP256Keys(random);
-  Object? last;
   Future<WarpMasqueAccount> run(
       Future<Map<String, dynamic>> Function(String method, String path, Map<String, dynamic> body, {String? token})
           send) async {
@@ -336,6 +402,7 @@ Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
       'tunnel_type': 'wireguard',
       'locale': 'en_US',
     });
+    onProgress?.call(0.8);
     final id = reg['id'], token = reg['token'];
     if (id is! String || token is! String || !RegExp(r'^[A-Za-z0-9-]{8,64}$').hasMatch(id)) {
       throw WarpRegisterException('the answer has no account');
@@ -345,6 +412,7 @@ Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
       'key_type': 'secp256r1',
       'tunnel_type': 'masque',
     }, token: token);
+    onProgress?.call(0.9);
     // The account is switched on as the WireGuard one is; an answer that refuses it does not stop the
     // sign-up (the service may not ask for it any more).
     try {
@@ -356,18 +424,14 @@ Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
   }
 
   if (call != null) return run(call);
-  for (final (ip, size, delay) in signUpTries(profile)) {
-    final relay = await FragmentRelay.start(ip, size: size, delay: delay, random: random);
-    try {
-      return await run((method, path, body, {String? token}) =>
-          _call(relay.port, method, path, body, token: token, clientVersion: _masqueClientVersion));
-    } catch (e) {
-      last = e;
-    } finally {
-      await relay.close();
-    }
-  }
-  throw WarpRegisterException('$last');
+  final account = await _throughService(
+      profile,
+      random,
+      onProgress,
+      (port) => run((method, path, body, {String? token}) =>
+          _call(port, method, path, body, token: token, clientVersion: _masqueClientVersion)));
+  onProgress?.call(1);
+  return account;
 }
 
 /// The account from the `config` of the service's answer, or null when something is missing. The edge key

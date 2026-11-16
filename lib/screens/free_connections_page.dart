@@ -27,6 +27,7 @@ class FreeConnectionsPage extends StatelessWidget {
     required bool busy,
     required ValueChanged<bool> onChanged,
     required VoidCallback onManage,
+    Widget? progress,
   }) {
     final scheme = Theme.of(context).colorScheme;
     return Card(
@@ -44,6 +45,7 @@ class FreeConnectionsPage extends StatelessWidget {
           value: value,
           onChanged: busy ? null : onChanged,
         ),
+        if (progress != null) progress,
         Align(
           alignment: AlignmentDirectional.centerEnd,
           child: Padding(
@@ -96,16 +98,16 @@ class FreeConnectionsPage extends StatelessWidget {
                 title: tr(context, 'warpTitle'),
                 description: tr(context, 'freeWarpDesc'),
                 status: warp.error ??
-                    (warp.enabled
-                        ? tr(context, 'warpMethod', {
-                            'method': warp.currentMethod ?? '',
-                            'address': warp.currentAddress ?? '',
-                          })
-                        : warp.account == null
-                            ? tr(context, 'freeOnWillSetUp')
-                            : null),
+                    (!warp.enabled && warp.account == null ? tr(context, 'freeOnWillSetUp') : null),
                 value: warp.enabled,
                 busy: warp.busy,
+                // The first turn-on makes the account, which can take a while.
+                progress: warp.setupProgress == null
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 4),
+                        child: WarpSetupProgress(value: warp.setupProgress!),
+                      ),
                 onChanged: (v) => v ? warp.enable() : warp.disable(),
                 onManage: () => Navigator.push(
                   context,

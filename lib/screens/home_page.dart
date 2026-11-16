@@ -1765,7 +1765,6 @@ enum _GroupAction {
   share,
   delete,
   deleteAll,
-  warpNext,
   warpOff,
 }
 
@@ -1896,8 +1895,6 @@ class _GroupHeader extends StatelessWidget {
                 actionLabel: tr(context, 'undoAction'), onAction: () => state.restoreConfigs(removed));
           }
         });
-      case _GroupAction.warpNext:
-        state.warp.nextMethod();
       case _GroupAction.warpOff:
         state.warp.disable();
     }
@@ -1916,33 +1913,21 @@ class _GroupHeader extends StatelessWidget {
     ]));
   }
 
-  /// The test result (public servers) or the way of connecting (WARP) and, once anything went through
-  /// these free servers, how much (like the usage a subscription shows, but without a limit).
+  /// The test result and, once anything went through these free servers (the public ones or WARP), how
+  /// much (like the usage a subscription shows, but without a limit).
   Widget? _freeSubtitle(BuildContext context, S t, ColorScheme scheme) {
     final isWarp = group.kind == GroupKind.warp;
-    final test = isWarp ? null : state.tests[group.id];
+    final test = state.tests[group.id];
     return ListenableBuilder(
       listenable: Listenable.merge([state, state.traffic]),
       builder: (context, _) {
         final usage = isWarp ? state.warpUsage : state.publicUsage;
         final used = usage[0] + usage[1];
-        final way = isWarp && state.warp.currentMethod != null
-            ? tr(context, 'warpMethod', {
-                'method': state.warp.currentMethod ?? '',
-                'address': state.warp.currentAddress ?? '',
-              })
-            : null;
-        if (test == null && way == null && used == 0) return const SizedBox.shrink();
+        if (test == null && used == 0) return const SizedBox.shrink();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (test != null) _testStat(t.testStat(test.alive, test.percent), scheme),
-            if (way != null)
-              Text(way,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textDirection: TextDirection.ltr,
-                  style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
             if (used > 0)
               Padding(
                 padding: EdgeInsetsDirectional.only(top: test == null ? 4 : 6, end: 8),
@@ -2043,9 +2028,6 @@ class _GroupHeader extends StatelessWidget {
                     PopupMenuItem(
                         value: _GroupAction.info,
                         child: _MenuRow(Icons.info_outline, tr(context, 'subInfo'))),
-                    PopupMenuItem(
-                        value: _GroupAction.warpNext,
-                        child: _MenuRow(Icons.swap_horiz, tr(context, 'warpTryNext'))),
                     PopupMenuItem(
                         value: _GroupAction.warpOff,
                         child: _MenuRow(Icons.power_settings_new, tr(context, 'warpTurnOff'))),

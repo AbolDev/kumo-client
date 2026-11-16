@@ -174,6 +174,12 @@ void main() {
       expect(tries[1].$1, '104.16.24.84');
       expect(tries.map((t) => t.$2).toSet(), {(5, 40), (20, 60), (50, 100)});
       expect(tries.length, 12);
+      // Raced in two waves: every cut and address once, then a second go.
+      final waves = signUpWaves(p);
+      expect(waves.length, 2);
+      expect(waves.first.length, 6);
+      expect(waves.first.map((t) => (t.$1, t.$2)).toSet().length, 6);
+      expect([...waves.first, ...waves.last], tries);
     });
 
     test('goes on when switching the account on is refused', () async {

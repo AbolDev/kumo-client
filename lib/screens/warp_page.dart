@@ -10,6 +10,29 @@ import '../state/app_state.dart';
 import '../state/warp_controller.dart';
 import 'network_settings.dart' show pickChain;
 
+/// The progress of the making of a WARP account: a bar and how far it is, with a word that it can take a while.
+class WarpSetupProgress extends StatelessWidget {
+  const WarpSetupProgress({super.key, required this.value});
+
+  /// 0 to 1.
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final percent = (value * 100).round().clamp(0, 100);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: LinearProgressIndicator(value: value <= 0 ? null : value, minHeight: 6),
+      ),
+      const SizedBox(height: 6),
+      Text(tr(context, 'warpSetupProgress', {'percent': percent}),
+          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+    ]);
+  }
+}
+
 /// Cloudflare WARP: makes the account on this device, puts the server in the list, and lets the user
 /// switch to another way of connecting or fetch newer methods.
 class WarpPage extends StatefulWidget {
@@ -118,12 +141,7 @@ class _WarpPageState extends State<WarpPage> {
                 margin: EdgeInsets.zero,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(tr(context, 'warpDesc')),
-                    const SizedBox(height: 8),
-                    Text(tr(context, 'warpBeta'),
-                        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
-                  ]),
+                  child: Text(tr(context, 'warpDesc')),
                 ),
               ),
               const SizedBox(height: 12),
@@ -134,21 +152,20 @@ class _WarpPageState extends State<WarpPage> {
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                       : const KumoMark(size: 20),
                   label: Text(tr(context, warp.busy ? 'warpSettingUp' : 'warpSetUp')),
-                )
-              else ...[
+                ),
+              // The sign-up tries several ways of reaching Cloudflare and can take a while: the bar shows it moves.
+              if (warp.setupProgress != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 4),
+                  child: WarpSetupProgress(value: warp.setupProgress!),
+                ),
+              if (warp.account != null) ...[
                 Card(
                   margin: EdgeInsets.zero,
                   child: Column(children: [
                     ListTile(
                       leading: const Icon(Icons.check_circle_outline),
                       title: Text(tr(context, 'warpReady')),
-                      subtitle: Text(
-                        tr(context, 'warpMethod', {
-                          'method': warp.currentMethod ?? '',
-                          'address': warp.currentAddress ?? '',
-                        }),
-                        textDirection: TextDirection.ltr,
-                      ),
                     ),
                     if (!chosen)
                       Align(
@@ -173,12 +190,6 @@ class _WarpPageState extends State<WarpPage> {
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                     child: Text(tr(context, 'warpWaysHint'),
                         style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
-                  ),
-                  ListTile(
-                    leading: const Icon(Icons.swap_horiz),
-                    title: Text(tr(context, 'warpTryNext')),
-                    subtitle: Text(tr(context, 'warpTryNextDesc')),
-                    onTap: warp.busy || warp.scanning ? null : warp.nextMethod,
                   ),
                   // The scan: every way of reaching WARP is tried, the fastest one that answers is used.
                   ListTile(
