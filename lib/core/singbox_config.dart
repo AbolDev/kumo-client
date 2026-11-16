@@ -32,6 +32,10 @@ Map<String, dynamic>? parseExtraJson(String text) {
   }
 }
 
+/// The key in an Xray outbound of the app's own making that holds the outbound it is dialled through (the
+/// outer tunnel of Warp-in-Warp); [buildXrayConfig] turns it into a second outbound and a `dialerProxy`.
+const xrayViaKey = '_via';
+
 /// The user name and password of the local SOCKS port that sing-box reaches Xray through.
 typedef XrayAuth = ({String user, String pass});
 
@@ -43,6 +47,11 @@ String buildXrayConfig(ProxyConfig server, int port,
   final o = options ?? NetOptions();
   final outbound =
       jsonDecode(jsonEncode(server.xrayOutbound!)) as Map<String, dynamic>;
+  // Two tunnels, one in the other (Warp-in-Warp over MASQUE or noise): the server is dialled through the
+  // outbound under `_via`, which is the one that faces the network and so takes the options below.
+  final viaRaw = outbound.remove(xrayViaKey);
+  final via = viaRaw is Map<String, dynamic> ? viaRaw : null;
+  final facing = via ?? outbound;
   final inbounds = <Map<String, dynamic>>[
     {
       'tag': 'socks-in',
@@ -63,12 +72,12 @@ String buildXrayConfig(ProxyConfig server, int port,
   ];
   final outbounds = <Map<String, dynamic>>[];
   final rules = <Map<String, dynamic>>[];
-  final settings = outbound['settings'] is Map<String, dynamic>
-      ? outbound['settings'] as Map<String, dynamic>
+  final settings = facing['settings'] is Map<String, dynamic>
+      ? facing['settings'] as Map<String, dynamic>
       : <String, dynamic>{};
   final vnext = settings['vnext'] as List?;
-  final stream = outbound['streamSettings'] is Map<String, dynamic>
-      ? outbound['streamSettings'] as Map<String, dynamic>
+  final stream = facing['streamSettings'] is Map<String, dynamic>
+      ? facing['streamSettings'] as Map<String, dynamic>
       : null;
   final security = '${stream?['security'] ?? 'none'}';
 
@@ -119,17 +128,17 @@ String buildXrayConfig(ProxyConfig server, int port,
     }
     final extra = parseExtraJson(o.extraXray);
     if (extra != null) {
-      outbound['streamSettings'] = mergeJson(stream, extra);
+      facing['streamSettings'] = mergeJson(stream, extra);
     }
   }
-  final protocol = outbound['protocol'];
+  final protocol = facing['protocol'];
   final hasFlow = vnext != null &&
       vnext.isNotEmpty &&
       ((vnext.first as Map)['users'] as List).any((u) => (u as Map)['flow'] != null);
   if (o.mux &&
       !hasFlow &&
       (protocol == 'vless' || protocol == 'vmess' || protocol == 'trojan' || protocol == 'shadowsocks')) {
-    outbound['mux'] = {
+    facing['mux'] = {
       'enabled': true,
       'concurrency': 8,
       'xudpConcurrency': 16,
@@ -174,7 +183,7 @@ String buildXrayConfig(ProxyConfig server, int port,
   }
   // A WireGuard server with noise (WARP): the tunnel's packets go to a loopback port of Xray, which
   // sends the noise and then the packets on to the real address.
-  final noise = outbound.remove('_noise');
+  final noise = facing.remove('_noise');
   final peers = settings['peers'];
   if (noise is List && noise.isNotEmpty && protocol == 'wireguard' && peers is List && peers.isNotEmpty) {
     final peer = peers.first as Map<String, dynamic>;
@@ -215,7 +224,23 @@ String buildXrayConfig(ProxyConfig server, int port,
     },
     'inbounds': inbounds,
     'outbounds': [
-      {...outbound, 'tag': 'proxy'},
+      if (via == null)
+        {...outbound, 'tag': 'proxy'}
+      else ...[
+        // The inner tunnel opens its connection through the outer one.
+        {
+          ...outbound,
+          'tag': 'proxy',
+          'streamSettings': mergeJson(
+              outbound['streamSettings'] is Map<String, dynamic>
+                  ? outbound['streamSettings'] as Map<String, dynamic>
+                  : <String, dynamic>{},
+              {
+                'sockopt': {'dialerProxy': 'via'},
+              }),
+        },
+        {...via, 'tag': 'via'},
+      ],
       ...outbounds,
     ],
     if (rules.isNotEmpty) 'routing': {'rules': rules},

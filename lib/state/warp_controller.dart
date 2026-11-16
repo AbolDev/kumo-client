@@ -10,6 +10,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../core/latency_tester.dart' show realDelay;
 import '../core/net_options.dart' show fingerprints;
 import '../core/proxy_config.dart';
+import '../core/singbox_config.dart' show xrayViaKey;
 import '../core/vpn_channel.dart';
 import '../core/warp/warp_link.dart';
 import '../core/warp/warp_scan.dart';
@@ -274,45 +275,62 @@ class WarpController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The ways Warp-in-Warp can use: plain WireGuard ones (a method with noise goes through Xray,
-  /// which does not carry one tunnel inside another).
-  List<WarpCombo> _plain(List<WarpCombo> all) =>
-      all.where((c) => c.method.kind != 'wg-noise' && !isMasqueKind(c.method.kind)).toList();
-
-  Future<ProxyConfig?> _configFor(List<WarpCombo> all) async {
-    if (account == null || all.isEmpty) return null;
-    final useTwo = inWarp && account2 != null;
-    final list = useTwo ? _plain(all) : all;
-    if (list.isEmpty) throw StateError('no plain WireGuard method in the profile for Warp-in-Warp');
-    final cu = custom;
-    // An address found by the wider scan: the method it was found with (or the best one) and that address.
-    final c = cu == null
-        ? list[choice % list.length]
-        : WarpCombo(
-            list.map((x) => x.method).where((m) => m.id == cu.method).firstOrNull ?? list.first.method,
-            WarpEndpoint(cu.ip, [cu.port]),
-            0);
-    final text = await _linkOf(c);
-    var config = parseLink(text);
-    if (config == null) return null;
-    if (useTwo) {
-      final inner = parseLink(warpLink(account2!, c.method, c.endpoint, c.portIndex, name: 'WARP inner'));
-      if (inner == null || inner.outbound.isEmpty) return null;
-      // The first account's tunnel is dialled through the second account's tunnel.
-      config = ProxyConfig(
+  /// Warp-in-Warp made the way of [outer]: the tunnel of the main account inside a tunnel that faces the
+  /// network, made by the second account (a WireGuard way) or the MASQUE one (a MASQUE way). Inside, no filter
+  /// sees the packets, so the inner tunnel is plain WireGuard; the outer one is what has to pass the filter.
+  /// Plain WireGuard outside is carried by sing-box. Noise and MASQUE only Xray carries: the whole is then an
+  /// Xray server whose inner tunnel opens its connection through the outer one (see [xrayViaKey]).
+  @visibleForTesting
+  ProxyConfig? twoLayer(WarpCombo outer, List<WarpMethod> methods, {String? outerLink}) {
+    final main = account, second = account2;
+    if (main == null) return null;
+    final name = 'WARP in WARP ${outer.method.id}';
+    final masqueWay = isMasqueKind(outer.method.kind);
+    // The address of the inner tunnel: the one of the way when it is a WireGuard one, else the first of the
+    // profile (reached through the outer tunnel, so the filter never sees it).
+    final innerEnd = masqueWay ? (profile?.endpoints.firstOrNull ?? outer.endpoint) : outer.endpoint;
+    final innerPort = masqueWay ? 0 : outer.portIndex;
+    if (outer.method.kind == 'wg-plain') {
+      if (second == null) return null;
+      final text = warpLink(main, outer.method, innerEnd, innerPort, name: name);
+      final inside = parseLink(text);
+      final under = parseLink(warpLink(second, outer.method, outer.endpoint, outer.portIndex, name: 'WARP outer'));
+      if (inside == null || under == null || under.outbound.isEmpty) return null;
+      // The main account's tunnel is dialled through the second account's tunnel.
+      return ProxyConfig(
         link: text,
-        protocol: config.protocol,
-        name: 'WARP in WARP',
-        host: config.host,
-        port: config.port,
-        outbound: config.outbound,
-        inner: [inner.outbound],
+        protocol: inside.protocol,
+        name: name,
+        host: inside.host,
+        port: inside.port,
+        outbound: inside.outbound,
+        inner: [under.outbound],
       );
     }
-    link = text;
-    currentMethod = useTwo ? '${c.method.id} x2' : c.method.id;
-    currentAddress = '${c.endpoint.ip}:${c.port}';
-    return config;
+    final plain = methods.where((m) => m.kind == 'wg-plain').firstOrNull;
+    if (plain == null) throw StateError('no plain WireGuard method in the profile for Warp-in-Warp');
+    final outerText = outerLink ??
+        (masqueWay || second == null ? null : warpLink(second, outer.method, outer.endpoint, outer.portIndex, name: name));
+    if (outerText == null) return null;
+    final outside = parseLink(outerText);
+    final inside = parseLink(warpLink(main, plain, innerEnd, innerPort, name: name));
+    final outerXray = outside?.xrayOutbound, innerXray = inside?.xrayOutbound;
+    if (outside == null || outerXray == null || innerXray == null) return null;
+    final xray = jsonDecode(jsonEncode(innerXray)) as Map<String, dynamic>;
+    // Room in each packet for the headers of the outer tunnel (WARP's tunnel is 1280 bytes).
+    final settings = xray['settings'];
+    if (settings is Map<String, dynamic>) settings['mtu'] = 1200;
+    xray[xrayViaKey] = outerXray;
+    return ProxyConfig(
+      link: outerText,
+      protocol: 'wireguard',
+      name: name,
+      host: outside.host,
+      port: outside.port,
+      outbound: const <String, dynamic>{},
+      xrayOutbound: xray,
+      xrayNote: masqueWay ? 'masque' : 'noise',
+    );
   }
 
   /// Turns Warp-in-Warp on or off. The second account is made the first time it is turned on.
@@ -329,7 +347,6 @@ class WarpController extends ChangeNotifier {
         account2 = await registerWarp(p);
       }
       inWarp = on;
-      choice = 0;
       await _apply();
       await _state.reconnectIfConnected();
     } catch (e) {
@@ -357,13 +374,12 @@ class WarpController extends ChangeNotifier {
   /// The servers of the WARP group: one per method of [all], in the order of the profile. The method in use
   /// has the way in use (its address and port, or the one of the wider scan), the others their first, best,
   /// way. The MASQUE methods need their own account: with [signUp] it is made once a run when missing, and
-  /// they are left out while there is none. With Warp-in-Warp there is only the one server.
+  /// they are left out while there is none. With Warp-in-Warp each server is two tunnels, the way of its
+  /// method outside (see [twoLayer]).
   Future<(List<ProxyConfig>, ProxyConfig?)> _serversFor(List<WarpCombo> all, {bool signUp = true}) async {
     if (account == null || all.isEmpty) return (const <ProxyConfig>[], null);
-    if (inWarp && account2 != null) {
-      final one = await _configFor(all);
-      return (one == null ? const <ProxyConfig>[] : [one], one);
-    }
+    final two = inWarp && account2 != null;
+    final methods = all.map((c) => c.method).toList();
     final cu = custom;
     final ({WarpCombo combo, int index}) now;
     if (cu == null) {
@@ -393,10 +409,17 @@ class WarpController extends ChangeNotifier {
       if (isMasqueKind(m.kind) && masque == null) continue;
       final inUse = m.id == now.combo.method.id;
       final way = inUse ? now : (combo: all[i], index: i);
-      // A MASQUE link puts the method after the name itself.
-      final text = await _linkOf(way.combo, name: isMasqueKind(m.kind) ? 'WARP' : 'WARP ${m.id}');
-      final config = parseLink(text);
+      final ProxyConfig? config;
+      if (two) {
+        // The MASQUE link of the outer tunnel (its account is the MASQUE one); a WireGuard way makes its own.
+        final outerLink = isMasqueKind(m.kind) ? await _linkOf(way.combo, name: 'WARP in WARP') : null;
+        config = twoLayer(way.combo, methods, outerLink: outerLink);
+      } else {
+        // A MASQUE link puts the method after the name itself.
+        config = parseLink(await _linkOf(way.combo, name: isMasqueKind(m.kind) ? 'WARP' : 'WARP ${m.id}'));
+      }
       if (config == null) continue;
+      final text = config.link;
       _ways[config] = way;
       servers.add(config);
       if (inUse) {
@@ -558,9 +581,9 @@ class WarpController extends ChangeNotifier {
   /// delay test, and switches to the fastest one that answered. Nothing changes when none did.
   Future<void> scan({Future<int> Function(ProxyConfig)? delay}) async {
     if (account == null || busy || scanning) return;
-    // The same list the server is made from (with Warp-in-Warp only the plain WireGuard ways).
-    final every = await combos();
-    var all = inWarp && account2 != null ? _plain(every) : every;
+    // The same list the servers are made from. With Warp-in-Warp too every way is tried on its own: it is
+    // the outer tunnel, the one the filter sees.
+    var all = await combos();
     if (all.isEmpty) return;
     // The MASQUE ways need their own account: made now (this is the one place a scan signs up), and when
     // that does not work those ways are left out of the scan.
@@ -627,8 +650,7 @@ class WarpController extends ChangeNotifier {
   Future<void> scanWide({Future<int> Function(ProxyConfig)? delay, Random? random}) async {
     final p = profile;
     if (account == null || busy || scanning || p == null) return;
-    final every = await combos();
-    final all = inWarp && account2 != null ? _plain(every) : every;
+    final all = await combos();
     if (all.isEmpty) return;
     // The wider scan looks for WireGuard endpoints: with a MASQUE way in use it takes the best WireGuard one.
     final wgOnly = all.where((c) => !isMasqueKind(c.method.kind)).toList();

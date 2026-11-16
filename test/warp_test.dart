@@ -15,6 +15,7 @@ import 'package:kumo/core/warp/warp_signature.dart';
 import 'package:kumo/core/warp/x25519.dart';
 import 'package:kumo/core/desktop_vpn.dart';
 import 'package:kumo/state/app_state.dart';
+import 'package:kumo/state/warp_controller.dart' show WarpCombo;
 
 List<int> _hex(String h) => [for (var i = 0; i < h.length; i += 2) int.parse(h.substring(i, i + 2), radix: 16)];
 
@@ -178,6 +179,42 @@ void main() {
       expect(identical(s.selected, b2), isTrue);
       expect(b2.latencyMs, 120);
       expect(a2.latencyMs, isNull);
+    });
+
+    test('Warp-in-Warp over noise: an Xray server whose plain inner tunnel dials through the outer one', () {
+      final s = on();
+      s.warp.account = _account;
+      s.warp.account2 = _account;
+      final methods = p.usable(platform: 'windows', build: 30);
+      final c = s.warp.twoLayer(WarpCombo(method, p.endpoints.first, 0), methods)!;
+      expect(c.needsXray, isTrue);
+      expect(c.name, 'WARP in WARP ${method.id}');
+      expect(c.label, 'wireguard + noise');
+      final j = jsonDecode(buildXrayConfig(c, 32000)) as Map<String, dynamic>;
+      final outs = (j['outbounds'] as List).cast<Map<String, dynamic>>();
+      final inner = outs.firstWhere((o) => o['tag'] == 'proxy');
+      final outer = outs.firstWhere((o) => o['tag'] == 'via');
+      expect(inner['protocol'], 'wireguard');
+      expect(inner['streamSettings']['sockopt']['dialerProxy'], 'via');
+      expect(inner['settings']['mtu'], 1200);
+      expect(inner['settings']['peers'][0]['endpoint'], '162.159.192.1:2408');
+      expect(inner.containsKey(xrayViaKey), isFalse);
+      // The noise belongs to the outer tunnel, the one the filter sees.
+      expect(outer['protocol'], 'wireguard');
+      expect(outer['settings']['peers'][0]['endpoint'], '127.0.0.1:32001');
+      expect(outer.containsKey('_noise'), isFalse);
+      expect(outs.any((o) => o['tag'] == 'noise-out'), isTrue);
+    });
+
+    test('Warp-in-Warp over plain WireGuard stays a sing-box server of two layers', () {
+      final s = on();
+      s.warp.account = _account;
+      s.warp.account2 = _account;
+      final methods = p.usable(platform: 'windows', build: 30);
+      final plain = methods.firstWhere((m) => m.kind == 'wg-plain');
+      final c = s.warp.twoLayer(WarpCombo(plain, p.endpoints.first, 0), methods)!;
+      expect(c.canSingBox, isTrue);
+      expect(c.inner.length, 1);
     });
 
     test('an unchosen one stays unchosen; emptying the group drops the choice of it', () {
