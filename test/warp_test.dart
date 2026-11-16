@@ -164,6 +164,22 @@ void main() {
       expect(identical(s.selected, second), isTrue);
     });
 
+    test('one server per way: the chosen one moves to the way in use, and the delays stay by name', () {
+      final s = on();
+      final a = make(0);
+      final b = parseLink(warpLink(_account, method, p.endpoints.first, 1, name: 'WARP other'))!;
+      s.setWarpServers([a, b], active: a, choose: true);
+      expect(identical(s.selected, a), isTrue);
+      b.latencyMs = 120;
+      final a2 = make(0);
+      final b2 = parseLink(warpLink(_account, method, p.endpoints.first, 1, name: 'WARP other'))!;
+      s.setWarpServers([a2, b2], active: b2);
+      expect(s.warpGroup.configs, [a2, b2]);
+      expect(identical(s.selected, b2), isTrue);
+      expect(b2.latencyMs, 120);
+      expect(a2.latencyMs, isNull);
+    });
+
     test('an unchosen one stays unchosen; emptying the group drops the choice of it', () {
       final s = on();
       final first = make(0);

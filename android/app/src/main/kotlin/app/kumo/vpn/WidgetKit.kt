@@ -31,57 +31,51 @@ object WidgetState {
 }
 
 /**
- * The colours of a widget in one look (light or dark): the card and its texts while disconnected and
- * while connected, the power button, and the small chip.
+ * The colours of a widget in one look (light or dark). The card and its texts are the same in every state: only
+ * the power button tells the state (an outlined button while disconnected, a filled one while connected).
  */
 class WidgetColors(
-    val offBg: Int, val offText: Int, val offSub: Int,
+    val bg: Int, val text: Int, val sub: Int,
     val ring: Int, val offBtn: Int, val offIcon: Int,
-    val onBg: Int, val onText: Int, val onSub: Int,
     val onBtn: Int, val onIcon: Int,
-    val chipOffBg: Int, val chipOffText: Int, val chipOnBg: Int, val chipOnText: Int,
+    val chipBg: Int, val chipText: Int,
 ) {
     companion object {
         private fun c(v: Long) = v.toInt()
 
         /** Kumo's own teal, where the system gives no colours of its own (before Android 12). */
         val TEAL_LIGHT = WidgetColors(
-            c(0xFFFFFFFF), c(0xFF2C2C2A), c(0xFF5F5E5A),
-            c(0xFF1D9E75), c(0xFFE1F5EE), c(0xFF0F6E56),
-            c(0xFF0F6E56), c(0xFFFFFFFF), c(0xFF9FE1CB),
+            c(0xFFFFFFFF), c(0xFF1C1C1A), c(0xFF5F5E5A),
+            c(0xFF1D9E75), c(0xFFE8F6F0), c(0xFF0F6E56),
+            c(0xFF1D9E75), c(0xFFFFFFFF),
             c(0xFFE1F5EE), c(0xFF085041),
-            c(0xFFEDECE6), c(0xFF444441), c(0xFF1D9E75), c(0xFFE1F5EE),
         )
         val TEAL_DARK = WidgetColors(
-            c(0xFF2F2F2D), c(0xFFF1EFE8), c(0xFFB4B2A9),
-            c(0xFF5DCAA5), c(0xFF04342C), c(0xFF9FE1CB),
-            c(0xFF9FE1CB), c(0xFF04342C), c(0xFF085041),
-            c(0xFF085041), c(0xFFE1F5EE),
-            c(0xFF444441), c(0xFFD3D1C7), c(0xFF5DCAA5), c(0xFF04342C),
+            c(0xFF1F2120), c(0xFFF1EFE8), c(0xFFB4B2A9),
+            c(0xFF5DCAA5), c(0xFF2A3431), c(0xFF9FE1CB),
+            c(0xFF5DCAA5), c(0xFF04342C),
+            c(0xFF0B4A3C), c(0xFFC8EFE0),
         )
 
-        /** Android 12 and later: the colours of the wallpaper (Material You). */
+        /** Android 12 and later: the colours of the wallpaper (Material You), on a neutral card. */
         fun dynamic(context: Context, dark: Boolean): WidgetColors? {
             if (Build.VERSION.SDK_INT < 31) return null
             return runCatching {
-                fun r(id: Int) = context.getColor(id)
                 val a = android.R.color::class.java
-                fun s(name: String) = r(a.getField(name).getInt(null))
+                fun s(name: String) = context.getColor(a.getField(name).getInt(null))
                 if (!dark) {
                     WidgetColors(
-                        s("system_neutral1_10"), s("system_neutral1_900"), s("system_neutral2_700"),
-                        s("system_accent1_600"), s("system_accent1_100"), s("system_accent1_700"),
-                        s("system_accent1_600"), s("system_accent1_0"), s("system_accent1_100"),
+                        s("system_neutral1_10"), s("system_neutral1_900"), s("system_neutral2_600"),
+                        s("system_accent1_600"), s("system_accent1_50"), s("system_accent1_600"),
+                        s("system_accent1_600"), s("system_accent1_0"),
                         s("system_accent1_100"), s("system_accent1_800"),
-                        s("system_neutral2_100"), s("system_neutral2_800"), s("system_accent1_400"), s("system_accent1_0"),
                     )
                 } else {
                     WidgetColors(
-                        s("system_neutral1_800"), s("system_neutral1_50"), s("system_neutral2_200"),
-                        s("system_accent1_300"), s("system_accent1_800"), s("system_accent1_100"),
-                        s("system_accent1_200"), s("system_accent1_900"), s("system_accent1_700"),
-                        s("system_accent1_700"), s("system_accent1_50"),
-                        s("system_neutral2_700"), s("system_neutral2_100"), s("system_accent1_300"), s("system_accent1_900"),
+                        s("system_neutral1_900"), s("system_neutral1_50"), s("system_neutral2_200"),
+                        s("system_accent1_200"), s("system_neutral1_800"), s("system_accent1_200"),
+                        s("system_accent1_200"), s("system_accent1_900"),
+                        s("system_accent1_800"), s("system_accent1_100"),
                     )
                 }
             }.getOrNull()
@@ -200,7 +194,10 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
         Configuration.UI_MODE_NIGHT_YES
     private val theme = look.theme
     private val opacity = look.opacity.coerceIn(0, 100)
-    private val clear = theme == WidgetTheme.CLEAR
+
+    // Below half the opacity the card hardly shows and the texts stand on the wallpaper: white, as the
+    // launcher writes the names of the apps.
+    private val clear = opacity < 50
 
     // The light and the dark colours: the same when the look is fixed.
     private val light: WidgetColors
@@ -226,13 +223,13 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
         }
     }
 
+    /** The card: one colour in every state, as opaque as chosen. */
     fun background() {
-        set(R.id.widget_bg, "setColorFilter") { if (on) it.onBg else it.offBg }
-        // The opacity chosen for the widget: the wallpaper shows through the card as much as it asks. The old
-        // see-through look keeps its own values (less while connected, so the state reads).
-        v.setInt(R.id.widget_bg, "setImageAlpha", if (clear) (if (on) 210 else 110) else opacity * 255 / 100)
+        set(R.id.widget_bg, "setColorFilter") { it.bg }
+        v.setInt(R.id.widget_bg, "setImageAlpha", opacity * 255 / 100)
     }
 
+    /** The power button: outlined while disconnected, filled while connected (or connecting). */
     fun button() {
         set(R.id.wg_btn_bg, "setColorFilter") { if (on) it.onBtn else it.offBtn }
         set(R.id.wg_icon, "setColorFilter") { if (on) it.onIcon else it.offIcon }
@@ -243,17 +240,17 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
     /** A main text (the name, the speeds). */
     fun main(id: Int, text: CharSequence) {
         v.setTextViewText(id, text)
-        set(id, "setTextColor") { if (clear) WHITE else if (on) it.onText else it.offText }
+        set(id, "setTextColor") { if (clear) WHITE else it.text }
     }
 
     /** A quieter text under it. */
     fun sub(id: Int, text: CharSequence) {
         v.setTextViewText(id, text)
-        set(id, "setTextColor") { if (clear) WHITE_SOFT else if (on) it.onSub else it.offSub }
+        subColor(id)
     }
 
     /** The quiet colour alone, for a view that writes its own text (the clock of the session). */
-    fun subColor(id: Int) = set(id, "setTextColor") { if (clear) WHITE_SOFT else if (on) it.onSub else it.offSub }
+    fun subColor(id: Int) = set(id, "setTextColor") { if (clear) WHITE_SOFT else it.sub }
 
     fun chip(text: CharSequence?) {
         if (text.isNullOrEmpty()) {
@@ -262,11 +259,14 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
         }
         v.setViewVisibility(R.id.wg_chip_box, View.VISIBLE)
         v.setTextViewText(R.id.wg_chip, text)
-        set(R.id.wg_chip_bg, "setColorFilter") { if (on) it.chipOnBg else it.chipOffBg }
-        set(R.id.wg_chip, "setTextColor") { if (on) it.chipOnText else it.chipOffText }
+        set(R.id.wg_chip_bg, "setColorFilter") { it.chipBg }
+        set(R.id.wg_chip, "setTextColor") { it.chipText }
     }
 
     fun hide(id: Int) = v.setViewVisibility(id, View.GONE)
+
+    /** Hidden but keeping its room, so nothing around it moves when the state changes. */
+    fun keep(id: Int) = v.setViewVisibility(id, View.INVISIBLE)
 
     fun show(id: Int) = v.setViewVisibility(id, View.VISIBLE)
 
@@ -510,10 +510,13 @@ class VpnWidgetStats : KumoWidget() {
                 session(p, v, on)
             }
             R.layout.wg_card_tall -> {
+                // The button stands in the middle: the rows under it keep their room while disconnected (written
+                // but not shown), so it does not move when the state changes.
                 p.sub(R.id.wg_sub, stateText(context, state))
-                if (on) { p.show(R.id.wg_down); p.main(R.id.wg_down, downText()) } else p.hide(R.id.wg_down)
-                showUp(upText())
-                if (on) { p.show(R.id.wg_total); p.main(R.id.wg_total, totalText()) } else p.hide(R.id.wg_total)
+                p.main(R.id.wg_down, downText())
+                p.main(R.id.wg_up, upText())
+                p.main(R.id.wg_total, totalText())
+                for (row in listOf(R.id.wg_down, R.id.wg_up, R.id.wg_total)) if (on) p.show(row) else p.keep(row)
                 session(p, v, on)
             }
             else -> {

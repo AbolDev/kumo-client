@@ -1,22 +1,22 @@
 package app.kumo.vpn
 
 import android.app.Activity
-import android.app.WallpaperManager
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
-import android.graphics.Outline
 import android.view.View
-import android.view.ViewOutlineProvider
+import android.view.WindowInsets
+import android.view.WindowManager
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.ScrollView
@@ -25,9 +25,9 @@ import android.widget.TextView
 
 /**
  * Opens when a widget is placed (on Android 12+ only if the user asks, from its long-press menu): the look of that
- * widget. A preview of the real widget at its real size sits on top (on the wallpaper when the phone lets the app
- * read it), under it the colour of the background (follow the phone, light, dark) and how opaque it is. The preview
- * follows every change; nothing is kept until Save.
+ * widget. The top of the screen shows the phone's own wallpaper (the window lets it through) with the real widget on
+ * it at its real size; a sheet under it holds the colour of the background (follow the phone, light, dark) and how
+ * opaque it is. The preview follows every change; nothing is kept until Save.
  */
 class WidgetConfigActivity : Activity() {
     private var widgetId = AppWidgetManager.INVALID_APPWIDGET_ID
@@ -37,7 +37,6 @@ class WidgetConfigActivity : Activity() {
     /** The state the preview shows (the VPN's own now, or what the user picked). */
     private var shownState = WidgetState.OFF
 
-    private lateinit var preview: FrameLayout
     private lateinit var stage: FrameLayout
     private lateinit var percent: TextView
     private val themeRows = ArrayList<Pair<RadioButton, Int>>()
@@ -47,11 +46,12 @@ class WidgetConfigActivity : Activity() {
 
     private val night: Boolean
         get() = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-    private val ink get() = if (night) 0xFFFFFFFF.toInt() else 0xFF1B1B1F.toInt()
-    private val inkSoft get() = if (night) 0xB3FFFFFF.toInt() else 0x991B1B1F.toInt()
-    private val page get() = if (night) 0xFF0B0B0E.toInt() else 0xFFF2F2F5.toInt()
-    private val panel get() = if (night) 0xFF1C1C21.toInt() else 0xFFFFFFFF.toInt()
-    private val accent get() = WidgetColors.light(this).ring
+    private val ink get() = if (night) 0xFFF2F2F5.toInt() else 0xFF1B1B1F.toInt()
+    private val inkSoft get() = if (night) 0xA6FFFFFF.toInt() else 0x8C1B1B1F.toInt()
+    private val page get() = if (night) 0xFF121214.toInt() else 0xFFF4F4F7.toInt()
+    private val panel get() = if (night) 0xFF1E1E22.toInt() else 0xFFFFFFFF.toInt()
+    private val accent get() = (if (night) WidgetColors.dark(this) else WidgetColors.light(this)).ring
+    private val onAccent get() = if (night) 0xFF101012.toInt() else 0xFFFFFFFF.toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,43 +67,50 @@ class WidgetConfigActivity : Activity() {
         // The see-through look of the first versions is now dark colours with a lower opacity.
         theme = if (saved == WidgetTheme.CLEAR) WidgetTheme.DARK else saved
         shownState = if (WidgetState.current() == WidgetState.OFF) WidgetState.OFF else WidgetState.ON
-        window.setBackgroundDrawable(ColorDrawable(page))
-        window.statusBarColor = page
-        if (night) lightStatusIcons()
 
-        val column = LinearLayout(this).apply {
+        // The wallpaper of the phone is drawn behind the window (no permission is needed for that), and the
+        // window is see-through above the sheet: the widget is previewed on the real home screen.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        edgeToEdge()
+
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(24), dp(20), dp(16))
+            // A light shade over the wallpaper so the title and the switch read on any picture.
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x59000000, 0x14000000))
         }
-        column.addView(TextView(this).apply {
+        root.addView(TextView(this).apply {
             text = getString(R.string.widget_cfg_title)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
             setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ink)
-            setPadding(dp(4), 0, 0, dp(14))
+            setTextColor(Color.WHITE)
+            setShadowLayer(dp(4).toFloat(), 0f, dp(1).toFloat(), 0x99000000.toInt())
+            setPadding(dp(24), dp(20), dp(24), 0)
         })
-        preview = FrameLayout(this).apply {
-            clipToOutline = true
-            outlineProvider = object : ViewOutlineProvider() {
-                override fun getOutline(view: View, outline: Outline) {
-                    outline.setRoundRect(0, 0, view.width, view.height, dp(20).toFloat())
-                }
-            }
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(240))
-        }
-        preview.addView(
-            ImageView(this).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                setImageDrawable(backdrop())
-            },
-            FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT),
-        )
-        // The widget is drawn on this layer, which is cleared at each change; the backdrop under it stays.
+        // The widget is drawn on this layer, which is cleared at each change.
         stage = FrameLayout(this)
-        preview.addView(stage, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        column.addView(preview)
-        column.addView(stateRow())
+        root.addView(stage, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(230)))
+        root.addView(stateRow(), LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL
+            bottomMargin = dp(18)
+        })
 
+        val sheet = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                val r = dp(28).toFloat()
+                cornerRadii = floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f)
+                setColor(page)
+            }
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(8), dp(16), dp(8))
+        }
         column.addView(sectionLabel(R.string.widget_cfg_bg))
         val colours = panelBox()
         val options = listOf(
@@ -113,82 +120,100 @@ class WidgetConfigActivity : Activity() {
         )
         for ((value, title, desc) in options) colours.addView(themeRow(value, title, desc))
         column.addView(colours)
-
         column.addView(sectionLabel(R.string.widget_cfg_opacity))
         column.addView(opacityBox())
 
-        val bar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(20), dp(8), dp(20), dp(12))
-        }
-        bar.addView(barButton(R.string.widget_cfg_cancel) { finish() })
-        bar.addView(barButton(R.string.widget_cfg_save) { save() })
-
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(ScrollView(this).apply {
+        sheet.addView(ScrollView(this).apply {
             addView(column)
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         })
-        root.addView(bar)
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), dp(8), dp(16), dp(14))
+        }
+        bar.addView(barButton(R.string.widget_cfg_cancel, filled = false) { finish() })
+        bar.addView(View(this), LinearLayout.LayoutParams(dp(12), 1))
+        bar.addView(barButton(R.string.widget_cfg_save, filled = true) { save() })
+        sheet.addView(bar)
+        root.addView(sheet, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        // The page runs under the status bar (the wallpaper shows there) and the sheet under the navigation bar:
+        // the title and the buttons are kept clear of them.
+        root.setOnApplyWindowInsetsListener { view, insets ->
+            val (top, bottom) = barsOf(insets)
+            view.setPadding(0, top, 0, 0)
+            sheet.setPadding(0, 0, 0, bottom)
+            insets
+        }
         setContentView(root)
         markThemes()
         markStates()
         renderPreview()
     }
 
-    /** The theme of the window is a light one: in the dark the icons of the status bar must be light. */
+    /** Draws the page under both bars (as Android 15 does anyway). The top of the screen is the wallpaper, so the
+     *  icons of the status bar are light; those of the navigation bar follow the sheet. */
     @Suppress("DEPRECATION")
-    private fun lightStatusIcons() {
-        val flags = window.decorView.systemUiVisibility
-        window.decorView.systemUiVisibility = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+    private fun edgeToEdge() {
+        if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false)
+        var flags = window.decorView.systemUiVisibility or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+        if (Build.VERSION.SDK_INT >= 26) {
+            flags = if (night) flags and View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR.inv() else flags or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        }
+        window.decorView.systemUiVisibility = flags
+        if (Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
     }
 
-    /** What the widget is drawn on in the preview: the wallpaper when the app may read it, else a plain gradient. */
-    private fun backdrop(): android.graphics.drawable.Drawable {
-        val wall = try {
-            WallpaperManager.getInstance(this).drawable
-        } catch (_: Throwable) {
-            null
+    /** The heights of the status bar and of the navigation bar, in pixels. */
+    @Suppress("DEPRECATION")
+    private fun barsOf(insets: WindowInsets): Pair<Int, Int> {
+        if (Build.VERSION.SDK_INT >= 30) {
+            val bars = insets.getInsets(WindowInsets.Type.systemBars())
+            return Pair(bars.top, bars.bottom)
         }
-        if (wall != null) return wall
-        return GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF16233F.toInt(), 0xFF0F5C6B.toInt(), 0xFF2B1D4A.toInt())).apply {
-            cornerRadius = dp(20).toFloat()
-        }
+        return Pair(insets.systemWindowInsetTop, insets.systemWindowInsetBottom)
     }
 
     private fun sectionLabel(text: Int) = TextView(this).apply {
         this.text = getString(text)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-        setTextColor(inkSoft)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+        setTypeface(typeface, Typeface.BOLD)
+        setTextColor(accent)
         setPadding(dp(8), dp(18), 0, dp(8))
     }
 
     private fun panelBox() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        setPadding(dp(8), dp(6), dp(8), dp(6))
+        setPadding(dp(6), dp(6), dp(6), dp(6))
         background = GradientDrawable().apply {
-            cornerRadius = dp(22).toFloat()
+            cornerRadius = dp(20).toFloat()
             setColor(panel)
         }
     }
 
-    /** "Preview as: Disconnected | Connected": the widget looks different in the two states. */
+    /** "Disconnected | Connected": a switch on a dark glass over the wallpaper, for the state of the preview. */
     private fun stateRow(): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), dp(10), 0, 0)
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(22).toFloat()
+                setColor(0x73000000)
+            }
         }
-        row.addView(TextView(this).apply {
-            text = getString(R.string.widget_cfg_state)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setTextColor(inkSoft)
-        })
         for ((value, label) in listOf(WidgetState.OFF to R.string.widget_cfg_off, WidgetState.ON to R.string.widget_cfg_on)) {
             val t = TextView(this).apply {
                 text = getString(label)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setPadding(dp(14), dp(8), dp(14), dp(8))
+                setTypeface(typeface, Typeface.BOLD)
+                gravity = Gravity.CENTER
+                minWidth = dp(110)
+                setPadding(dp(16), dp(9), dp(16), dp(9))
                 setOnClickListener {
                     shownState = value
                     markStates()
@@ -204,10 +229,10 @@ class WidgetConfigActivity : Activity() {
     private fun markStates() {
         for ((t, value) in stateLabels) {
             val chosen = value == shownState
-            t.setTextColor(if (chosen) 0xFFFFFFFF.toInt() else ink)
+            t.setTextColor(if (chosen) 0xFF1B1B1F.toInt() else Color.WHITE)
             t.background = GradientDrawable().apply {
                 cornerRadius = dp(18).toFloat()
-                setColor(if (chosen) accent else 0)
+                setColor(if (chosen) Color.WHITE else Color.TRANSPARENT)
             }
         }
     }
@@ -216,8 +241,8 @@ class WidgetConfigActivity : Activity() {
         val r = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            minimumHeight = dp(56)
+            setPadding(dp(10), dp(8), dp(12), dp(8))
+            minimumHeight = dp(54)
             isClickable = true
             setOnClickListener { chooseTheme(value) }
         }
@@ -228,11 +253,11 @@ class WidgetConfigActivity : Activity() {
         r.addView(radio)
         val texts = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, 0, 0)
+            setPadding(dp(8), 0, 0, 0)
         }
         texts.addView(TextView(this).apply {
             text = getString(title)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setTextColor(ink)
         })
         if (desc != 0) {
@@ -257,30 +282,21 @@ class WidgetConfigActivity : Activity() {
         for ((radio, value) in themeRows) radio.isChecked = value == theme
     }
 
+    /** The slider of the opacity with its value beside it. */
     private fun opacityBox(): LinearLayout {
         val box = panelBox()
-        box.setPadding(dp(18), dp(14), dp(18), dp(14))
-        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        head.addView(TextView(this).apply {
-            text = getString(R.string.widget_cfg_opacity)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-            setTextColor(ink)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        percent = TextView(this).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(inkSoft)
-            text = "$opacity%"
+        box.setPadding(dp(12), dp(14), dp(18), dp(14))
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        head.addView(percent)
-        box.addView(head)
-        // Eleven steps, 0 to 100 percent: the dots of the usual slider of the phone.
-        box.addView(SeekBar(this).apply {
+        // Eleven steps, 0 to 100 percent.
+        row.addView(SeekBar(this).apply {
             max = 10
             progress = opacity / 10
             progressTintList = ColorStateList.valueOf(accent)
             thumbTintList = ColorStateList.valueOf(accent)
-            setPadding(dp(4), dp(10), dp(4), dp(4))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
                     opacity = value * 10
@@ -293,16 +309,33 @@ class WidgetConfigActivity : Activity() {
                 override fun onStopTrackingTouch(bar: SeekBar?) {}
             })
         })
+        percent = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ink)
+            gravity = Gravity.END
+            minWidth = dp(48)
+            text = "$opacity%"
+        }
+        row.addView(percent)
+        box.addView(row)
         return box
     }
 
-    private fun barButton(text: Int, onClick: () -> Unit) = TextView(this).apply {
+    private fun barButton(text: Int, filled: Boolean, onClick: () -> Unit) = TextView(this).apply {
         this.text = getString(text)
-        setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+        setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
         setTypeface(typeface, Typeface.BOLD)
-        setTextColor(ink)
+        setTextColor(if (filled) onAccent else accent)
         gravity = Gravity.CENTER
         setPadding(0, dp(14), 0, dp(14))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(26).toFloat()
+            if (filled) setColor(accent) else {
+                setColor(Color.TRANSPARENT)
+                setStroke(dp(1), accent)
+            }
+        }
         setOnClickListener { onClick() }
         layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
     }
@@ -318,10 +351,10 @@ class WidgetConfigActivity : Activity() {
         if (w <= 0 && info != null) w = (info.minWidth / density).toInt()
         if (h <= 0 && info != null) h = (info.minHeight / density).toInt()
         val screenWidth = (resources.displayMetrics.widthPixels / density).toInt()
-        return Pair(w.coerceIn(40, screenWidth - 64), h.coerceIn(40, 220))
+        return Pair(w.coerceIn(40, screenWidth - 32), h.coerceIn(40, 210))
     }
 
-    /** Draws the real widget in the look being set, at its real size, on the backdrop. */
+    /** Draws the real widget in the look being set, at its real size, on the wallpaper. */
     private fun renderPreview() {
         stage.removeAllViews()
         try {

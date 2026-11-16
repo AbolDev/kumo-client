@@ -991,6 +991,9 @@ class AppState extends ChangeNotifier {
   Future<void> select(ProxyConfig? config) async {
     if (!canSelect) return;
     selected = identical(selected, config) ? null : config;
+    // A WARP server picked from its group is the way of connecting in use from now on.
+    final pick = selected;
+    if (pick != null && warpGroup.configs.any((c) => identical(c, pick))) warp.follow(pick);
     _save();
     notifyListeners();
     if (connected) await _reconnect();
@@ -1555,6 +1558,9 @@ class AppState extends ChangeNotifier {
           if (g.id == inGroup) ...g.configs,
       ].where((c) => c.link == link).firstOrNull ??
           all.where((c) => c.link == link).firstOrNull;
+      // A WARP server whose link changed (one server per way of connecting now, with the way in its name):
+      // the way in use is the chosen one.
+      if (selected == null && inGroup == warpGroup.id) selected = warp.config;
     } catch (_) {
       // missing or corrupt store: start fresh
     }
@@ -2270,30 +2276,45 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
-  /// Puts [config] in the WARP group (null empties it). The choice is kept when the server it replaces
-  /// was the chosen one, and [choose] makes it the chosen one.
-  void setWarpServer(ProxyConfig? config, {bool choose = false}) {
-    final old = warpGroup.configs.firstOrNull;
-    final wasChosen = old != null && identical(selected, old);
-    warpGroup.configs.clear();
-    if (config == null) {
+  /// Puts [config] alone in the WARP group (null empties it); see [setWarpServers].
+  void setWarpServer(ProxyConfig? config, {bool choose = false}) =>
+      setWarpServers(config == null ? const [] : [config], active: config, choose: choose);
+
+  /// Puts [configs] in the WARP group, one server per way of connecting (empty empties it). [active] is the way
+  /// in use: it becomes the chosen server when a WARP server was the chosen one, or with [choose]. The delay
+  /// measured of a server stays with the new one of the same name, so a rebuild does not wipe the pings.
+  void setWarpServers(List<ProxyConfig> configs, {ProxyConfig? active, bool choose = false}) {
+    final old = warpGroup.configs.toList();
+    final wasChosen = old.any((c) => identical(selected, c));
+    final delays = {for (final c in old) c.name: c.latencyMs};
+    warpGroup.configs
+      ..clear()
+      ..addAll(configs);
+    for (final c in configs) {
+      c.latencyMs ??= delays[c.name];
+    }
+    if (configs.isEmpty) {
       if (wasChosen) selected = null;
-    } else {
-      warpGroup.configs.add(config);
-      if (choose || wasChosen) selected = config;
+    } else if (choose || wasChosen) {
+      selected = active ?? configs.first;
     }
     _save();
     notifyListeners();
   }
 
-  /// Puts the WARP server in its group at the start of the app. A copy that an earlier version kept
+  /// Puts the WARP server in its group at the start of the app; see [restoreWarpServers].
+  void restoreWarpServer(ProxyConfig config) => restoreWarpServers([config]);
+
+  /// Puts the WARP servers in their group at the start of the app. A copy that an earlier version kept
   /// among the configs added by hand is taken out of there (and the choice moves to the new one).
-  void restoreWarpServer(ProxyConfig config) {
+  void restoreWarpServers(List<ProxyConfig> configs) {
+    if (configs.isEmpty) return;
     var changed = false;
-    if (warpGroup.configs.isEmpty) warpGroup.configs.add(config);
-    final shown = warpGroup.configs.first;
-    for (final old in manual.configs.where((c) => c.link == config.link).toList()) {
-      if (identical(selected, old)) selected = shown;
+    if (warpGroup.configs.isEmpty) warpGroup.configs.addAll(configs);
+    for (final old in manual.configs.where((c) => configs.any((n) => n.link == c.link)).toList()) {
+      if (identical(selected, old)) {
+        selected = warpGroup.configs.where((c) => c.link == old.link).firstOrNull ?? warpGroup.configs.first;
+      }
       manual.configs.remove(old);
       changed = true;
     }

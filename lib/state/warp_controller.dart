@@ -232,10 +232,25 @@ class WarpController extends ChangeNotifier {
   Future<void> startup() async {
     await restoreServer();
     if (account == null || !enabled) return;
+    // An account made before the MASQUE ways were in the list: their own account is asked for once a run, in
+    // the background, so that they show in the group too.
+    if (masque == null && !inWarp) unawaited(_addMasque());
     if (DateTime.now().millisecondsSinceEpoch - _checkedAt < _every.inMilliseconds) {
       return;
     }
     await updateProfile(silent: true);
+  }
+
+  Future<void> _addMasque() async {
+    if (_masqueTried || busy || scanning) return;
+    final all = await combos();
+    if (!all.any((c) => isMasqueKind(c.method.kind))) return;
+    try {
+      await _apply();
+      notifyListeners();
+    } catch (_) {
+      // tried again at the next start
+    }
   }
 
   /// The ways Warp-in-Warp can use: plain WireGuard ones (a method with noise goes through Xray,
@@ -308,15 +323,100 @@ class WarpController extends ChangeNotifier {
     }
   }
 
-  /// Puts the server for the current choice in the list, in place of the one made before.
+  /// What each WARP server of the list stands for: its way of connecting and the place of that way in
+  /// [combos] (-1 for an address of the wider scan).
+  final _ways = Expando<({WarpCombo combo, int index})>();
+
+  /// The WARP server of the way in use.
+  ProxyConfig? _active;
+
+  /// A missing MASQUE account is asked for once a run when the list is made (not at each rebuild).
+  bool _masqueTried = false;
+
+  /// The servers of the WARP group: one per method of [all], in the order of the profile. The method in use
+  /// has the way in use (its address and port, or the one of the wider scan), the others their first, best,
+  /// way. The MASQUE methods need their own account: with [signUp] it is made once a run when missing, and
+  /// they are left out while there is none. With Warp-in-Warp there is only the one server.
+  Future<(List<ProxyConfig>, ProxyConfig?)> _serversFor(List<WarpCombo> all, {bool signUp = true}) async {
+    if (account == null || all.isEmpty) return (const <ProxyConfig>[], null);
+    if (inWarp && account2 != null) {
+      final one = await _configFor(all);
+      return (one == null ? const <ProxyConfig>[] : [one], one);
+    }
+    final cu = custom;
+    final ({WarpCombo combo, int index}) now;
+    if (cu == null) {
+      final i = choice % all.length;
+      now = (combo: all[i], index: i);
+    } else {
+      final method = all.map((x) => x.method).where((m) => m.id == cu.method).firstOrNull ?? all.first.method;
+      now = (combo: WarpCombo(method, WarpEndpoint(cu.ip, [cu.port]), 0), index: -1);
+    }
+    if (isMasqueKind(now.combo.method.kind) && masque == null) {
+      if (!signUp) throw StateError('no MASQUE account yet');
+      await _ensureMasque(); // the way in use cannot be made without it: the caller reports the error
+    } else if (signUp && masque == null && !_masqueTried && all.any((c) => isMasqueKind(c.method.kind))) {
+      _masqueTried = true;
+      try {
+        await _ensureMasque();
+      } catch (_) {
+        // The MASQUE ways stay out of the list until a later run (or until one of them is picked).
+      }
+    }
+    final servers = <ProxyConfig>[];
+    ProxyConfig? active;
+    final seen = <String>{};
+    for (var i = 0; i < all.length; i++) {
+      final m = all[i].method;
+      if (!seen.add(m.id)) continue;
+      if (isMasqueKind(m.kind) && masque == null) continue;
+      final inUse = m.id == now.combo.method.id;
+      final way = inUse ? now : (combo: all[i], index: i);
+      final text = await _linkOf(way.combo, name: 'WARP ${m.id}');
+      final config = parseLink(text);
+      if (config == null) continue;
+      _ways[config] = way;
+      servers.add(config);
+      if (inUse) {
+        active = config;
+        link = text;
+      }
+    }
+    currentMethod = now.combo.method.id;
+    currentAddress = '${now.combo.endpoint.ip}:${now.combo.port}';
+    return (servers, active);
+  }
+
+  /// Puts the servers for the current choice in the list, in place of the ones made before.
   Future<void> _apply({bool choose = false}) async {
     final all = await combos();
     if (all.isEmpty) throw StateError('no method of the profile fits this version');
-    final config = await _configFor(all);
-    if (config == null) throw StateError('the profile gave a link that cannot be used');
-    _state.setWarpServer(config, choose: choose);
+    final (servers, active) = await _serversFor(all);
+    if (servers.isEmpty || active == null) throw StateError('the profile gave a link that cannot be used');
+    _active = active;
+    _state.setWarpServers(servers, active: active, choose: choose);
     await _save();
   }
+
+  /// The user picked [config], one of the WARP servers of the list: its way is the one in use from now on (the
+  /// page shows it, "try another way" goes on from it, a rebuild keeps it).
+  void follow(ProxyConfig config) {
+    final way = _ways[config];
+    if (way == null) return;
+    if (way.index >= 0) {
+      custom = null;
+      choice = way.index;
+    }
+    _active = config;
+    link = config.link;
+    currentMethod = way.combo.method.id;
+    currentAddress = '${way.combo.endpoint.ip}:${way.combo.port}';
+    unawaited(_save());
+    notifyListeners();
+  }
+
+  /// Whether one of the WARP servers is the chosen server.
+  bool get isChosen => _state.warpGroup.configs.any((c) => identical(c, _state.selected));
 
   /// Makes the account (once) and puts the server in the list, chosen.
   Future<void> setUp() async {
@@ -384,41 +484,6 @@ class WarpController extends ChangeNotifier {
     error = null;
     await _save();
     notifyListeners();
-  }
-
-  /// Every way the user can pick from, in the order of the list the link is made from (with Warp-in-Warp
-  /// only the plain WireGuard ones).
-  Future<List<WarpCombo>> choices() async {
-    final every = await combos();
-    return inWarp && account2 != null ? _plain(every) : every;
-  }
-
-  /// The place in [choices] of the way in use, or -1 when it is an address of the wider scan.
-  int currentChoice(List<WarpCombo> list) => custom != null || list.isEmpty ? -1 : choice % list.length;
-
-  /// Switches to the way at [index] of [choices] (picked by the user). A MASQUE way makes its account first.
-  Future<void> pick(int index) async {
-    if (account == null || busy || scanning) return;
-    final list = await choices();
-    if (index < 0 || index >= list.length) return;
-    busy = true;
-    error = null;
-    notifyListeners();
-    final before = (choice, custom);
-    try {
-      custom = null;
-      choice = index;
-      await _apply();
-      await _state.reconnectIfConnected();
-    } catch (e) {
-      // The way could not be set up (a MASQUE sign-up that failed): what was in use stays.
-      choice = before.$1;
-      custom = before.$2;
-      error = '$e'.replaceFirst('Bad state: ', '');
-    } finally {
-      busy = false;
-      notifyListeners();
-    }
   }
 
   /// Switches to the next way of reaching WARP (another method, endpoint or port).
@@ -624,6 +689,7 @@ class WarpController extends ChangeNotifier {
     custom = null;
     enabled = false;
     _state.setWarpServer(null);
+    _active = null;
     link = null;
     currentMethod = currentAddress = null;
     choice = 0;
@@ -634,17 +700,34 @@ class WarpController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The WARP server, when it is in the list.
-  ProxyConfig? get config => _state.warpGroup.configs.firstOrNull;
+  /// The WARP server of the way in use, when it is in the list.
+  ProxyConfig? get config {
+    final a = _active;
+    final list = _state.warpGroup.configs;
+    return a != null && list.any((c) => identical(c, a)) ? a : list.firstOrNull;
+  }
 
-  /// At the start of the app, before the choice of server is read: puts the server of the saved
-  /// account in its group (when WARP is on), so that it can be the chosen one.
+  /// At the start of the app, before the choice of server is read: puts the servers of the saved
+  /// account in their group (when WARP is on), so that one of them can be the chosen one. Nothing is signed up
+  /// here; when the list cannot be made, the saved server of the way in use is put back alone.
   Future<void> restoreServer() async {
     await load();
     final l = link;
     if (!enabled || account == null || l == null) return;
-    // With Warp-in-Warp the server has the second tunnel under it: it is made again, not read from the link.
-    final config = inWarp && account2 != null ? await _configFor(await combos()) : parseLink(l);
-    if (config != null) _state.restoreWarpServer(config);
+    var servers = const <ProxyConfig>[];
+    try {
+      final (list, active) = await _serversFor(await combos(), signUp: false);
+      servers = list;
+      _active = active;
+    } catch (_) {
+      // the saved link below
+    }
+    if (servers.isEmpty) {
+      final one = parseLink(l);
+      if (one == null) return;
+      servers = [one];
+      _active = one;
+    }
+    _state.restoreWarpServers(servers);
   }
 }

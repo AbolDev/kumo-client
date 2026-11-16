@@ -1837,10 +1837,19 @@ class _GroupHeader extends StatelessWidget {
         state.ping(group, real: false);
       case _GroupAction.cancelTest:
         if (!(state.tests[group.id]?.running ?? false)) return; // it ended while the menu was open
+        // The WARP servers are the ways of connecting: none is ever taken out of their list.
+        if (group.kind == GroupKind.warp) {
+          state.cancelPing(group, removeUntested: false);
+          return;
+        }
         _askUntested(context).then((remove) {
           if (remove != null) state.cancelPing(group, removeUntested: remove);
         });
       case _GroupAction.realDelay:
+        if (group.kind == GroupKind.warp) {
+          state.ping(group, real: true);
+          return;
+        }
         _askRemoveDead(context, state).then((remove) {
           if (remove != null) state.ping(group, real: true, removeDead: remove);
         });
@@ -2019,6 +2028,18 @@ class _GroupHeader extends StatelessWidget {
             onSelected: (a) => _onAction(context, a),
             itemBuilder: (menu) => group.kind == GroupKind.warp
                 ? [
+                    // One server per way of connecting: they are tested like any list.
+                    if (state.tests[group.id]?.running ?? false)
+                      PopupMenuItem(
+                          value: _GroupAction.cancelTest,
+                          child: _MenuRow(Icons.stop_circle_outlined, tr(context, 'cancelTest'))),
+                    PopupMenuItem(
+                        value: _GroupAction.tcping,
+                        child: _MenuRow(Icons.network_check, t.tcping)),
+                    PopupMenuItem(
+                        enabled: state.canTestReal,
+                        value: _GroupAction.realDelay,
+                        child: _MenuRow(Icons.speed, t.realDelay)),
                     PopupMenuItem(
                         value: _GroupAction.info,
                         child: _MenuRow(Icons.info_outline, tr(context, 'subInfo'))),
