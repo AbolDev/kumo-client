@@ -29,6 +29,29 @@ Future<void> openLink(String url) async {
   } catch (_) {}
 }
 
+/// The check for a newer stable release at the start of the app, begun with the app instead of once it is
+/// ready. The answer of the last check, when it names a newer version, is used at once (it is on the device);
+/// else the fresh check is waited for. A fresh check always runs, so the kept answer is new at the next start.
+/// Null when there is nothing newer or it cannot be told.
+Future<UpdateInfo?> startupUpdateCheck() async {
+  try {
+    final current = (await PackageInfo.fromPlatform()).version;
+    final fresh = checkForUpdate(current).then<UpdateInfo?>((i) => i, onError: (Object _) => null);
+    final kept = await cachedUpdate(current);
+    if (kept != null && kept.newer) return kept;
+    final found = await fresh;
+    return found != null && found.newer ? found : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Offers [info], found by [startupUpdateCheck], as the check at the start does.
+Future<void> offerUpdate(BuildContext context, UpdateInfo info) async {
+  final current = (await PackageInfo.fromPlatform()).version;
+  if (context.mounted) await _offer(context, info, current);
+}
+
 /// Looks for a newer stable release. With [silent] nothing is shown unless there is one
 /// (used when the app starts); otherwise the answer is always shown.
 Future<void> checkAndPrompt(BuildContext context, {required bool silent}) async {

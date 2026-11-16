@@ -15,7 +15,11 @@ class UpdateInfo {
       {this.notes = '',
       this.sizes = const {},
       this.digests = const {},
-      this.history = const []});
+      this.history = const [],
+      this.tag = ''});
+
+  /// The tag of the release as GitHub has it ("v1.12.2").
+  final String tag;
 
   /// File name -> SHA-256 (lower-case hex) GitHub computed for the file when it was uploaded.
   final Map<String, String> digests;
@@ -108,6 +112,28 @@ Future<String?> _tagCommit(HttpClient client, String tag) async {
 /// Whether test versions are offered too. Only set for a single check the user confirmed.
 bool includePrerelease = false;
 
+/// The file that keeps the answer of the last check of stable releases, for the next start of the app.
+const _cacheFile = 'update_check.json';
+
+/// How long a kept answer is trusted at a start: a release older than that is surely seen by a fresh check.
+const _cacheAge = Duration(days: 3);
+
+/// The answer of the last check of stable releases, when it is recent, read for [current]: shown at a start at
+/// once instead of after a check over the network. Null when there is none, it is old, or it cannot be read.
+Future<UpdateInfo?> cachedUpdate(String current) async {
+  try {
+    final text = await VpnChannel.readFile(_cacheFile);
+    if (text == null) return null;
+    final j = jsonDecode(text);
+    if (j is! Map || j['at'] is! int || j['body'] is! String) return null;
+    final at = DateTime.fromMillisecondsSinceEpoch(j['at'] as int);
+    if (DateTime.now().difference(at) > _cacheAge) return null;
+    return releaseInfo(j['body'] as String, current, prerelease: false);
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Asks GitHub for the latest stable release, or the newest release of any kind when
 /// [includePrerelease] is on. Throws when it cannot be reached or there is none.
 Future<UpdateInfo> checkForUpdate(String current) async {
@@ -122,68 +148,85 @@ Future<UpdateInfo> checkForUpdate(String current) async {
     final res = await req.close().timeout(const Duration(seconds: 12));
     final body = await res.transform(utf8.decoder).join();
     if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}');
-    final decoded = jsonDecode(body);
-    Map<String, dynamic>? picked;
-    final published = <Map<String, dynamic>>[];
-    String nameOf(Map<String, dynamic> r) =>
-        '${r['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
-    if (decoded is List) {
-      // The release with the highest version among the published ones; test versions only
-      // when asked for.
-      for (final r in decoded) {
-        if (r is! Map<String, dynamic> || r['draft'] == true) continue;
-        if (r['prerelease'] == true && !includePrerelease) continue;
-        final tag = nameOf(r);
-        if (tag.isEmpty) continue;
-        published.add(r);
-        if (picked == null || isNewer(tag, nameOf(picked))) picked = r;
-      }
-    }
-    if (picked == null) throw const FormatException('no release');
-    // Every release between this one and the newest, newest first, to show what was missed.
-    final history = <({String version, String notes})>[
-      for (final r in published)
-        if (isNewer(nameOf(r), current)) (version: nameOf(r), notes: '${r['body'] ?? ''}'),
-    ]..sort((a, b) => isNewer(a.version, b.version) ? -1 : 1);
-    final j = picked;
-    final tag = '${j['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
-    if (tag.isEmpty) throw const FormatException('no version');
-    final assets = <String, String>{
-      for (final a in (j['assets'] as List? ?? const []))
-        if (a is Map && a['name'] is String && a['browser_download_url'] is String)
-          a['name'] as String: a['browser_download_url'] as String,
-    };
-    final sizes = <String, int>{
-      for (final a in (j['assets'] as List? ?? const []))
-        if (a is Map && a['name'] is String && a['size'] is int)
-          a['name'] as String: a['size'] as int,
-    };
-    final digests = <String, String>{
-      for (final a in (j['assets'] as List? ?? const []))
-        if (a is Map && a['name'] is String && '${a['digest']}'.startsWith('sha256:'))
-          a['name'] as String: '${a['digest']}'.substring(7).toLowerCase(),
-    };
-    // The same version number, but the release was rebuilt from other code (the tag was moved):
-    // this build knows its commit, so it can tell.
-    var newer = isNewer(tag, current);
-    if (!newer && !isNewer(current, tag) && buildCommit.isNotEmpty) {
+    final prerelease = includePrerelease;
+    final info = releaseInfo(body, current, prerelease: prerelease);
+    // The answer about stable releases is kept for the next start (a check that counts test versions is not).
+    if (!prerelease) {
       try {
-        final sha = await _tagCommit(client, '${j['tag_name']}');
-        if (sha != null && sha.toLowerCase() != buildCommit.toLowerCase()) newer = true;
+        await VpnChannel.writeFile(_cacheFile, jsonEncode({'at': DateTime.now().millisecondsSinceEpoch, 'body': body}));
       } catch (_) {}
     }
-    return UpdateInfo(
-        tag,
-        '${j['html_url'] ?? 'https://github.com/$updateRepo/releases'}',
-        newer,
-        assets,
-        notes: '${j['body'] ?? ''}',
-        sizes: sizes,
-        digests: digests,
-        history: history);
+    // The same version number, but the release was rebuilt from other code (the tag was moved):
+    // this build knows its commit, so it can tell.
+    if (!info.newer && !isNewer(current, info.version) && buildCommit.isNotEmpty) {
+      try {
+        final sha = await _tagCommit(client, info.tag);
+        if (sha != null && sha.toLowerCase() != buildCommit.toLowerCase()) {
+          return UpdateInfo(info.version, info.url, true, info.assets,
+              notes: info.notes, sizes: info.sizes, digests: info.digests, history: info.history, tag: info.tag);
+        }
+      } catch (_) {}
+    }
+    return info;
   } finally {
     client.close(force: true);
   }
+}
+
+/// The release to offer in GitHub's list of releases ([body]) for the installed version [current]: the highest
+/// published one (test versions too with [prerelease]). Throws when there is none.
+UpdateInfo releaseInfo(String body, String current, {required bool prerelease}) {
+  final decoded = jsonDecode(body);
+  Map<String, dynamic>? picked;
+  final published = <Map<String, dynamic>>[];
+  String nameOf(Map<String, dynamic> r) =>
+      '${r['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
+  if (decoded is List) {
+    // The release with the highest version among the published ones; test versions only
+    // when asked for.
+    for (final r in decoded) {
+      if (r is! Map<String, dynamic> || r['draft'] == true) continue;
+      if (r['prerelease'] == true && !prerelease) continue;
+      final tag = nameOf(r);
+      if (tag.isEmpty) continue;
+      published.add(r);
+      if (picked == null || isNewer(tag, nameOf(picked))) picked = r;
+    }
+  }
+  if (picked == null) throw const FormatException('no release');
+  // Every release between this one and the newest, newest first, to show what was missed.
+  final history = <({String version, String notes})>[
+    for (final r in published)
+      if (isNewer(nameOf(r), current)) (version: nameOf(r), notes: '${r['body'] ?? ''}'),
+  ]..sort((a, b) => isNewer(a.version, b.version) ? -1 : 1);
+  final j = picked;
+  final tag = '${j['tag_name'] ?? ''}'.replaceFirst(RegExp(r'^[vV]'), '');
+  if (tag.isEmpty) throw const FormatException('no version');
+  final assets = <String, String>{
+    for (final a in (j['assets'] as List? ?? const []))
+      if (a is Map && a['name'] is String && a['browser_download_url'] is String)
+        a['name'] as String: a['browser_download_url'] as String,
+  };
+  final sizes = <String, int>{
+    for (final a in (j['assets'] as List? ?? const []))
+      if (a is Map && a['name'] is String && a['size'] is int)
+        a['name'] as String: a['size'] as int,
+  };
+  final digests = <String, String>{
+    for (final a in (j['assets'] as List? ?? const []))
+      if (a is Map && a['name'] is String && '${a['digest']}'.startsWith('sha256:'))
+        a['name'] as String: '${a['digest']}'.substring(7).toLowerCase(),
+  };
+  return UpdateInfo(
+      tag,
+      '${j['html_url'] ?? 'https://github.com/$updateRepo/releases'}',
+      isNewer(tag, current),
+      assets,
+      notes: '${j['body'] ?? ''}',
+      sizes: sizes,
+      digests: digests,
+      history: history,
+      tag: '${j['tag_name']}');
 }
 
 /// The file of [info] made for this device: its own CPU type first, then the universal one.

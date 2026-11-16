@@ -119,6 +119,9 @@ class _KumoAppState extends State<KumoApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // The check for a newer stable release starts with the app, so its answer is often in when the screen is
+    // ready (and one kept from the last start is there at once). Not in the F-Droid build.
+    final update = fdroidBuild ? null : startupUpdateCheck();
     _state.init().then((_) {
       // The icon picked in Settings. An update of the Windows app puts kumo.exe back on the
       // shortcuts, so they are checked again at each start.
@@ -130,13 +133,11 @@ class _KumoAppState extends State<KumoApp>
       _listenExternal();
       _state.noteOpen();
       _askStarLater();
-      // A newer stable release is offered when the app opens (not in the F-Droid build).
-      if (!fdroidBuild) {
-        Future<void>.delayed(const Duration(seconds: 3), () {
-          final context = _navigator.currentContext;
-          if (context != null && context.mounted && _state.onboarded) checkAndPrompt(context, silent: true);
-        });
-      }
+      // A newer stable release is offered as soon as the app is ready and the answer is in.
+      update?.then((info) {
+        final context = _navigator.currentContext;
+        if (info != null && context != null && context.mounted && _state.onboarded) offerUpdate(context, info);
+      });
       // Connect on startup (the phone does this from its boot receiver).
       if (isDesktop && _state.autoConnect && !_state.connected) {
         _state.toggle();
