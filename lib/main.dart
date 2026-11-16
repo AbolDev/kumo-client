@@ -24,6 +24,7 @@ import 'l10n/strings.dart';
 import 'screens/home_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/update_dialog.dart';
+import 'widgets/star_dialog.dart';
 import 'widgets/title_bar.dart';
 import 'state/app_state.dart';
 
@@ -388,25 +389,7 @@ class _KumoAppState extends State<KumoApp>
       final context = _navigator.currentContext;
       if (context == null || !context.mounted || !_state.starDue) return;
       if (ModalRoute.of(context)?.isCurrent == false) return;
-      final answer = await showDialog<String>(
-        context: context,
-        builder: (dialog) => AlertDialog(
-          icon: const Icon(Icons.star_rounded),
-          title: Text(tr(dialog, 'starTitle')),
-          content: Text(tr(dialog, 'starMessage')),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialog, 'never'),
-                child: Text(tr(dialog, 'starNever'))),
-            TextButton(
-                onPressed: () => Navigator.pop(dialog, 'later'),
-                child: Text(S.of(dialog).later)),
-            FilledButton(
-                onPressed: () => Navigator.pop(dialog, 'star'),
-                child: Text(tr(dialog, 'starOpen'))),
-          ],
-        ),
-      );
+      final answer = await showDialog<String>(context: context, builder: (_) => const StarDialog());
       if (answer == null) return;
       _state.answerStar(done: answer != 'later');
       if (answer == 'star') await openLink('https://github.com/AbolDev/kumo-client');
