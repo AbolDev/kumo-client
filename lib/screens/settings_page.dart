@@ -693,6 +693,13 @@ class _SettingsPageState extends State<SettingsPage> {
             MaterialPageRoute<void>(settings: const RouteSettings(name: '/ShareAppPage'), builder: (_) => const ShareAppPage()),
           ),
         ),
+        // News of the releases and help, in the project's own channel.
+        ListTile(
+          leading: const Icon(Icons.telegram),
+          title: Text(tr(context, 'telegramChannel')),
+          subtitle: const Text('t.me/Kumo_Client', textDirection: TextDirection.ltr),
+          onTap: () => openLink('https://t.me/Kumo_Client'),
+        ),
         ListTile(
           leading: const Icon(Icons.code),
           title: Text(tr(context, 'sourceCode')),
