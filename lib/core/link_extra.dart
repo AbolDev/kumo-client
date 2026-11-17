@@ -302,7 +302,11 @@ ProxyConfig? _wireguard(String link) {
     for (final p in out['peers'] as List) {
       (p as Map<String, dynamic>).remove('reserved');
     }
-    return _make(link, amneziaProtocol, _name(u, 'amneziawg ${u.host}:$port'), u.host, port, outbound: out);
+    final name = _name(u, 'amneziawg ${u.host}:$port');
+    // On the phone the core has the endpoint. On a computer kumo-awg has it, as Xray has what the core cannot do: the server is
+    // one that only a helper carries, and its endpoint is what that helper is given (see buildXrayConfig).
+    if (!amneziaInCore) return _make(link, amneziaProtocol, name, u.host, port, xray: out, xrayNote: 'awg');
+    return _make(link, amneziaProtocol, name, u.host, port, outbound: out);
   }
   final hostPort = u.host.contains(':') ? '[${u.host}]:$port' : '${u.host}:$port';
   final xray = {

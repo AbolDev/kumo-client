@@ -79,8 +79,8 @@ class ProxyConfig {
   /// A server of AmneziaWG: WireGuard with its obfuscation (see awg.dart).
   bool get isAmnezia => protocol == amneziaProtocol;
 
-  /// True when sing-box can carry this server. An AmneziaWG one only where the core has its endpoint (see [amneziaSupported]).
-  bool get canSingBox => outbound.isNotEmpty && (!isAmnezia || amneziaSupported);
+  /// True when sing-box can carry this server.
+  bool get canSingBox => outbound.isNotEmpty;
 
   /// True when sing-box would refuse this server's Reality key or short id ("invalid public_key"). One such
   /// server in a configuration stops the whole core from starting, so it is left out of the automatic group.
@@ -128,7 +128,7 @@ class ProxyConfig {
         ..domesticOnly = domesticOnly;
 
   /// Short text for lists, e.g. "vless" or "vless + xhttp".
-  String get label => needsXray ? '$protocol + $xrayNote' : protocol;
+  String get label => needsXray && !isAmnezia ? '$protocol + $xrayNote' : protocol;
 
   /// "host:port" with the host partly hidden, for lists (the real address stays in the link).
   String get maskedAddress => '${maskHost(host)}:$port';

@@ -3,6 +3,7 @@ import 'dart:io' show ZLibEncoder;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/awg.dart';
+import 'package:kumo/core/desktop_vpn.dart' show DesktopVpn;
 import 'package:kumo/core/latency_tester.dart' show delayConfigForTest;
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
@@ -21,11 +22,12 @@ const _awg = '&jc=5&jmin=30&jmax=80&s1=17&s2=29&h1=1234567891&h2=1234567892&h3=1
 Map<String, dynamic> _config(List<ProxyConfig> servers) => jsonDecode(buildSingBoxConfig(servers)) as Map<String, dynamic>;
 
 void main() {
-  final supported = amneziaSupported;
-  setUp(() => amneziaSupported = true);
-  tearDown(() => amneziaSupported = supported);
+  // The phone's core has the endpoint itself; the tests that are about a computer say otherwise.
+  final inCore = amneziaInCore;
+  setUp(() => amneziaInCore = true);
+  tearDown(() => amneziaInCore = inCore);
 
-  test('a WireGuard link with the settings of AmneziaWG is an AmneziaWG server, carried by the core of the phone only', () {
+  test('a WireGuard link with the settings of AmneziaWG is an AmneziaWG server, carried by the core of the phone', () {
     final c = parseLink(_link(extra: '$_awg&i1=${Uri.encodeComponent('<b 0xc0ffee><t><r 16>')}&reserved=1,2,3'))!;
     expect(c.protocol, 'amneziawg');
     expect(c.isAmnezia, isTrue);
@@ -41,10 +43,46 @@ void main() {
     expect(o['h1'], '1234567891');
     expect(o['i1'], '<b 0xc0ffee><t><r 16>');
     expect(((o['peers'] as List).single as Map).containsKey('reserved'), isFalse, reason: 'WARP\'s bytes are not used');
+  });
 
-    // Where the core has no such endpoint the server is not carried.
-    amneziaSupported = false;
-    expect(c.canSingBox, isFalse);
+  test('on a computer kumo-awg carries it: the core sends to its SOCKS port, as it does for Xray', () {
+    amneziaInCore = false;
+    final c = parseLink(_link(extra: '$_awg&i1=${Uri.encodeComponent('<b 0xc0ffee><t><r 16>')}'))!;
+    expect(c.protocol, 'amneziawg');
+    expect(c.isAmnezia, isTrue);
+    expect(c.canSingBox, isFalse, reason: 'the official core has no such endpoint');
+    expect(c.needsXray, isTrue, reason: 'a helper carries it, like an XHTTP server');
+    expect(c.canXray, isTrue);
+    expect(c.label, 'amneziawg');
+    expect(c.useXray('sing-box'), isTrue);
+    expect(c.xrayOutbound!['jc'], 5);
+
+    // The configuration of the helper: a SOCKS inbound with a login, and the endpoint.
+    final helper = jsonDecode(buildXrayConfig(c, 34567, auth: (user: 'u', pass: 'p'))) as Map<String, dynamic>;
+    final inbound = (helper['inbounds'] as List).single as Map;
+    expect(inbound['type'], 'socks');
+    expect(inbound['listen_port'], 34567);
+    expect((inbound['users'] as List).single, {'username': 'u', 'password': 'p'});
+    final endpoint = (helper['endpoints'] as List).single as Map;
+    expect(endpoint['type'], 'amneziawg');
+    expect(endpoint['tag'], 'proxy');
+    expect(endpoint['jc'], 5);
+    expect(endpoint['i1'], '<b 0xc0ffee><t><r 16>');
+    expect(helper['route']['final'], 'proxy');
+    expect(((helper['dns'] as Map)['servers'] as List).single['detour'], 'proxy');
+
+    // The official core goes to that port.
+    final core = jsonDecode(buildSingBoxConfig([c], xrayPort: 34567, xrayAuth: (user: 'u', pass: 'p'), viaXray: true))
+        as Map<String, dynamic>;
+    final proxy = (core['outbounds'] as List).firstWhere((o) => o['tag'] == 'proxy') as Map;
+    expect(proxy['type'], 'socks');
+    expect(proxy['server_port'], 34567);
+    expect(core['endpoints'], isNull, reason: 'the official core has no endpoint of that type');
+
+    // The desktop starts kumo-awg for a configuration of sing-box and Xray for the others.
+    expect(DesktopVpn.helperFor(buildXrayConfig(c, 34567)), 'kumo-awg');
+    final xray = parseLink('vless://11111111-1111-1111-1111-111111111111@h.example.com:443?type=xhttp&security=tls&sni=h.example.com#x')!;
+    expect(DesktopVpn.helperFor(buildXrayConfig(xray, 34568)), 'kumo-xray');
   });
 
   test('the configuration of the core has an endpoint of the type amneziawg, and a plain WireGuard server is left as it was', () {

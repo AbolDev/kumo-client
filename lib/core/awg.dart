@@ -4,7 +4,9 @@
 // added: `Jc`, `Jmin`, `Jmax`, `S1` to `S4`, `H1` to `H4`, `I1` to `I5`, and the ones of AmneziaWG 3.
 //
 // The phone's core (libbox) has an endpoint of type `amneziawg` for it (see tools/libbox_patch/amneziawg). The cores of the
-// computers are the official sing-box releases, which have none: such a server is not carried there.
+// computers are the official sing-box releases, which have none: there a program of its own, kumo-awg (sing-box built with
+// that endpoint), carries the server and the core sends what is to go through it to that program's local SOCKS port, as it
+// does for Xray (a server of AmneziaWG is then, like an XHTTP one, a server that only a helper can carry).
 
 import 'dart:convert';
 import 'dart:io' show Platform, ZLibDecoder;
@@ -12,9 +14,9 @@ import 'dart:io' show Platform, ZLibDecoder;
 /// The protocol the servers of AmneziaWG show in lists.
 const amneziaProtocol = 'amneziawg';
 
-/// Whether this build can carry AmneziaWG servers: the Android build can, the cores of the computers cannot (yet).
+/// Whether the core itself has the endpoint of AmneziaWG: the phone's does; on a computer kumo-awg is the one that has it.
 /// (A variable, so that a test can say otherwise.)
-bool amneziaSupported = Platform.isAndroid;
+bool amneziaInCore = Platform.isAndroid;
 
 /// The options of the endpoint that are AmneziaWG's, by the names the endpoint has for them.
 const awgOptionNames = {

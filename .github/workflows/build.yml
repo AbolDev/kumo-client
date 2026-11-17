@@ -306,6 +306,15 @@ jobs:
       # sing-box, Xray and the wintun driver that the app runs next to kumo.exe.
       - run: ./tools/fetch_windows_core.ps1 -Arch ${{ matrix.arch }}
 
+      # kumo-awg: sing-box with the endpoint of AmneziaWG, which carries AmneziaWG servers on a computer.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Build kumo-awg
+        shell: bash
+        run: bash tools/build_awg_core.sh windows amd64 windows/core/kumo-awg.exe
+
       - run: flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-${{ matrix.arch }} --no-pub ${{ matrix.target }}
 
       # The Visual C++ runtime next to kumo.exe (the installer and the portable zip both carry it), so that the app
@@ -380,6 +389,15 @@ jobs:
       - run: flutter pub get
 
       - run: ./tools/fetch_windows_core.ps1 -Arch arm64
+
+      # kumo-awg: sing-box with the endpoint of AmneziaWG, which carries AmneziaWG servers on a computer.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Build kumo-awg
+        shell: bash
+        run: bash tools/build_awg_core.sh windows arm64 windows/core/kumo-awg.exe
 
       # Flutter builds Windows for the machine it runs on (the --target-platform flag is refused for
       # Windows), so this is a plain build on the ARM64 runner.
@@ -481,6 +499,14 @@ jobs:
 
       # sing-box, Xray and the library NaiveProxy needs, next to the program.
       - run: bash tools/fetch_unix_core.sh linux ${{ matrix.arch }}
+
+      # kumo-awg: sing-box with the endpoint of AmneziaWG, which carries AmneziaWG servers on a computer.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Build kumo-awg
+        run: bash tools/build_awg_core.sh linux ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} linux/core/kumo-awg
 
       # The .ico files of the app icons are only read on Windows: they are left out of this build.
       - run: rm -f assets/app_icons/*.ico
@@ -591,6 +617,14 @@ jobs:
       # sing-box and Xray as universal binaries.
       - run: bash tools/fetch_unix_core.sh macos
 
+      # kumo-awg: sing-box with the endpoint of AmneziaWG, which carries AmneziaWG servers on a computer.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+      - name: Build kumo-awg
+        run: bash tools/build_awg_core.sh darwin universal macos/core/kumo-awg
+
       # The .ico files of the app icons are only read on Windows: they are left out of this build.
       - run: rm -f assets/app_icons/*.ico
       - run: flutter build macos --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-macos --no-pub
@@ -598,7 +632,7 @@ jobs:
       - name: Put the cores in the app, sign it and package it
         run: |
           app="build/macos/Build/Products/Release/Kumo.app"
-          cp macos/core/kumo-core macos/core/kumo-xray "$app/Contents/MacOS/"
+          cp macos/core/kumo-core macos/core/kumo-xray macos/core/kumo-awg "$app/Contents/MacOS/"
           codesign --force --deep --sign - "$app"
           mkdir -p dist work/universal
           ditto "$app" work/universal/Kumo.app

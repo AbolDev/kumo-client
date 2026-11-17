@@ -45,6 +45,9 @@ typedef XrayAuth = ({String user, String pass});
 String buildXrayConfig(ProxyConfig server, int port,
     {String logLevel = 'error', NetOptions? options, XrayAuth? auth}) {
   assert(server.canXray);
+  // A server of AmneziaWG on a computer: the helper is kumo-awg, sing-box with the endpoint, so its configuration is one of
+  // sing-box (a SOCKS inbound and the endpoint).
+  if (server.isAmnezia) return _awgHelperConfig(server, port, logLevel: logLevel, auth: auth);
   final o = options ?? NetOptions();
   final outbound =
       jsonDecode(jsonEncode(server.xrayOutbound!)) as Map<String, dynamic>;
@@ -779,4 +782,42 @@ String buildSingBoxConfig(
       },
   };
   return const JsonEncoder.withIndent('  ').convert(config);
+}
+
+/// The configuration of kumo-awg for [server] (an AmneziaWG one that the core of the computer cannot carry): a local SOCKS inbound
+/// on [port] (with a login when [auth] is given, so no other program can use it) and the endpoint, which every connection
+/// goes to. Names are looked up through the tunnel, at the DNS server the link names (else Cloudflare's).
+String _awgHelperConfig(ProxyConfig server, int port, {required String logLevel, XrayAuth? auth}) {
+  final endpoint = amneziaEndpoint({...server.xrayOutbound!, 'tag': 'proxy'});
+  final addresses = (endpoint['address'] as List?) ?? const [];
+  final dns = wireguardLinkDns(server.link).firstOrNull ?? '1.1.1.1';
+  return jsonEncode({
+    'log': {'level': logLevel == 'error' ? 'error' : logLevel},
+    'dns': {
+      'servers': [
+        {'type': 'udp', 'tag': 'dns', 'server': dns, 'detour': 'proxy'},
+      ],
+      'final': 'dns',
+      // A tunnel with no IPv6 address of its own cannot dial an IPv6 address: only IPv4 ones are asked for.
+      if (!addresses.any((a) => '$a'.contains(':'))) 'strategy': 'ipv4_only',
+    },
+    'inbounds': [
+      {
+        'type': 'socks',
+        'tag': 'socks-in',
+        'listen': '127.0.0.1',
+        'listen_port': port,
+        if (auth != null)
+          'users': [
+            {'username': auth.user, 'password': auth.pass},
+          ],
+      },
+    ],
+    'endpoints': [endpoint],
+    'route': {
+      'default_domain_resolver': 'dns',
+      // The endpoint is the only way out (with no outbound of its own the core makes a direct one, which is not wanted here).
+      'final': 'proxy',
+    },
+  });
 }
