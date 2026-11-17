@@ -375,6 +375,83 @@ ProxyConfig? _masque(String link) {
   return _make(link, 'masque', _name(u, 'WARP masque-$alpn'), u.host, port, xray: xray, xrayNote: 'masque $alpn');
 }
 
+/// The variables of the path of a MASQUE server that Xray fills in itself (RFC 6570 templates of RFC 9484).
+const _masquePathVariables = [
+  '{target}',
+  '{ipproto}',
+  '{?target,ipproto}',
+  '{?ipproto,target}',
+  '{&target,ipproto}',
+  '{&ipproto,target}',
+];
+
+/// `masque://user:pass@host:443?sni=..&alpn=h2&path=/.well-known/masque/ip/{target}/{ipproto}/&host=..&fp=chrome&pcs=SHA256#name`:
+/// a server that speaks MASQUE (CONNECT-IP, RFC 9484), such as the MASQUE inbound of Xray, with the login of
+/// its HTTP Basic authentication in the link (a user name or an e-mail address, written with `%40` for `@`).
+/// Only Xray carries it. `alpn` is `h2` (HTTP/2 over TCP, the default, which passes where UDP is cut) or `h3`
+/// (HTTP/3 over UDP); the certificate of the server is checked, against the chain or, with `pcs`, against the
+/// SHA-256 of the certificate (a self-signed server). Xray 26 cannot skip the check, so a link that asks for
+/// `insecure` is not accepted. Not the link of WARP (`warp-masque://`, see [_masque]).
+ProxyConfig? _masqueServer(String link) {
+  final u = Uri.parse(link);
+  final q = u.queryParameters;
+  final (user, pass) = _userPass(u.userInfo);
+  if (u.host.isEmpty || user.isEmpty || pass.isEmpty || user.contains(':')) return null;
+  final port = u.hasPort ? u.port : 443;
+  if (_truthy(q['insecure']) || _truthy(q['allowInsecure']) || _truthy(q['allow_insecure'])) return null;
+  final alpn = (q['alpn'] ?? 'h2').trim().toLowerCase() == 'h3' ? 'h3' : 'h2';
+  var serverName = (q['sni'] ?? '').trim();
+  if (serverName.isEmpty && !_isIp(u.host)) serverName = u.host;
+  // The path: only what Xray accepts, or the core would not start.
+  final path = (q['path'] ?? '').trim();
+  if (path.isNotEmpty) {
+    var rest = path;
+    for (final v in _masquePathVariables) {
+      rest = rest.replaceAll(v, '');
+    }
+    if (!path.startsWith('/') || rest.contains('{') || rest.contains('}')) return null;
+  }
+  // The name the request is made to, when it is not the address of the server.
+  final authority = (q['host'] ?? '').trim();
+  if (authority.isNotEmpty) {
+    // A name, an IPv4 address or an IPv6 one in brackets, with a port or without (written the way Xray reads it).
+    final m = RegExp(r'^(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\])(?::(\d{1,5}))?$').firstMatch(authority);
+    final authorityPort = m == null ? null : int.tryParse(m[1] ?? '1');
+    if (m == null || authorityPort == null || authorityPort < 1 || authorityPort > 65535) return null;
+  }
+  // A pinned certificate: SHA-256 in hex (with or without colons), several separated by commas.
+  final pins = [
+    for (final p in (q['pcs'] ?? q['pinSHA256'] ?? '').split(','))
+      if (p.trim().isNotEmpty) p.replaceAll(':', '').trim().toLowerCase(),
+  ];
+  if (pins.any((p) => !RegExp(r'^[0-9a-f]{64}$').hasMatch(p))) return null;
+  // Xray applies the fingerprint to the HTTP/2 hello only; over HTTP/3 it is not used.
+  final fp = alpn == 'h2' ? _fingerprint(q['fp']) : null;
+  final xray = {
+    'protocol': 'masque',
+    // The names asked through the tunnel use Xray's own default resolvers (Cloudflare's).
+    'settings': {'address': u.host, 'port': port},
+    'streamSettings': {
+      'network': 'masque',
+      'masqueSettings': {
+        'user': user,
+        'pass': pass,
+        if (path.isNotEmpty) 'path': path,
+        if (authority.isNotEmpty) 'host': authority,
+      },
+      'security': 'tls',
+      'tlsSettings': {
+        if (serverName.isNotEmpty) 'serverName': serverName,
+        'alpn': [alpn],
+        if (fp != null) 'fingerprint': fp,
+        if (pins.isNotEmpty) 'pinnedPeerCertSha256': pins.join(','),
+      },
+    },
+  };
+  return _make(link, 'masque', _name(u, 'masque ${u.host}:$port'), u.host, port,
+      xray: xray, xrayNote: alpn, pinned: pins.isNotEmpty);
+}
+
 /// The DNS servers a WireGuard link names (`dns=1.1.1.1, 8.8.8.8`): the addresses, in their order. Names and
 /// anything that is not an address are left out. Empty for a link with none, or of another kind.
 List<String> wireguardLinkDns(String link) {

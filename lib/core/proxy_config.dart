@@ -172,6 +172,7 @@ const _supportedSchemes = [
   'naive+https://',
   'naive+quic://',
   'openvpn://',
+  'masque://',
 ];
 
 /// The parameters an HTTP proxy link may carry: anything else in a query makes the address a page (a
@@ -239,9 +240,11 @@ Iterable<String> _words(String text) => text
     .map((w) => w.replaceAll(RegExp(r'''^['"(<]+|['")>]+$'''), ''))
     .where((w) => w.isNotEmpty);
 
-/// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`).
+/// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`, and
+/// `warp-masque://`, the link of Kumo's own WARP servers, ends in `masque://`).
 final _schemeStart = RegExp(
-    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|naive\+https|naive\+quic|openvpn)://)');
+    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|naive\+https|naive\+quic|openvpn)://)'
+    r'|(?<![A-Za-z0-9-])(?=masque://)');
 
 /// Parses and shuffles thousands of links off the UI thread.
 ///
@@ -330,6 +333,7 @@ ProxyConfig? parseLink(String link) {
       return _wireguard(link);
     }
     if (link.startsWith('warp-masque://')) return _masque(link);
+    if (link.startsWith('masque://')) return _masqueServer(link);
     if (link.startsWith('naive+')) return _naive(link);
     if (link.startsWith('openvpn://')) return _openvpn(link);
     // A link made from a Clash or sing-box list may be a proxy with neither a login nor an IP address; it is
