@@ -7,7 +7,7 @@
 // computers are the official sing-box releases, which have none: such a server is not carried there.
 
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, ZLibDecoder;
 
 /// The protocol the servers of AmneziaWG show in lists.
 const amneziaProtocol = 'amneziawg';
@@ -181,4 +181,64 @@ Map<String, dynamic> amneziaEndpoint(Map<String, dynamic> endpoint) {
           if (p is Map) {for (final e in p.entries) if (e.key != 'reserved') e.key: e.value} else p,
       ],
   };
+}
+
+/// The settings of AmneziaWG found among the keys of [map] (a sing-box endpoint, or the `amnezia-wg-option` of a Clash proxy),
+/// as the text a link carries them in (a flag is `true`). Only the ones that are given.
+Map<String, String> awgSettingsOf(Map map) {
+  final out = <String, String>{};
+  for (final e in map.entries) {
+    final key = '${e.key}';
+    final value = e.value;
+    if (!isAwgSetting(key) || value == null || value is Map || value is List) continue;
+    final text = value is bool ? (value ? 'true' : 'false') : '$value'.trim();
+    if (text.isNotEmpty) out[awgSettingKey(key)] = text;
+  }
+  return out;
+}
+
+/// The configurations inside the `vpn://` links of Amnezia's own app (the text it shares a server by): the link is base64 of a
+/// compressed JSON (Qt's qCompress: the size in four bytes, then zlib) that lists the containers of a server, each with its
+/// last configuration as text (WireGuard and AmneziaWG as a `.conf`, OpenVPN as a `.ovpn`, Xray as its JSON). Each is
+/// returned as text for the readers of those formats, with the name of the server (its description) as a comment above
+/// the `[Peer]` of a `.conf`, where the reader looks for a name. Empty when [text] has no such link or it is not readable.
+List<String> amneziaVpnConfigs(String text) {
+  final out = <String>[];
+  for (final m in RegExp(r'vpn://([A-Za-z0-9_\-+/=]+)').allMatches(text)) {
+    try {
+      final bytes = base64.decode(base64.normalize(m[1]!.replaceAll('-', '+').replaceAll('_', '/')));
+      List<int>? json;
+      // qCompress: four bytes of the size, then the zlib stream.
+      if (bytes.length > 5) {
+        try {
+          json = ZLibDecoder().convert(bytes.sublist(4));
+        } catch (_) {}
+      }
+      json ??= bytes;
+      final root = jsonDecode(utf8.decode(json));
+      if (root is! Map) continue;
+      final name = '${root['description'] ?? ''}'.replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+      final dns1 = '${root['dns1'] ?? ''}';
+      final dns2 = '${root['dns2'] ?? ''}';
+      final containers = root['containers'];
+      if (containers is! List) continue;
+      for (final c in containers) {
+        if (c is! Map) continue;
+        for (final part in c.values) {
+          if (part is! Map || part['last_config'] is! String) continue;
+          final inner = jsonDecode(part['last_config'] as String);
+          var config = inner is Map ? inner['config'] : null;
+          if (config is! String || config.trim().isEmpty) continue;
+          // The placeholders of the template, if any were left.
+          if (dns1.isNotEmpty) config = config.replaceAll(r'$PRIMARY_DNS', dns1);
+          if (dns2.isNotEmpty) config = config.replaceAll(r'$SECONDARY_DNS', dns2);
+          if (name.isNotEmpty && config.contains('[Peer]')) config = config.replaceFirst('[Peer]', '# $name\n[Peer]');
+          out.add(config);
+        }
+      }
+    } catch (_) {
+      // not a link of Amnezia
+    }
+  }
+  return out;
 }

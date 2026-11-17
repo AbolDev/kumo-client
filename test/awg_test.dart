@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io' show ZLibEncoder;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/awg.dart';
@@ -191,6 +192,129 @@ void main() {
     expect(awgProblem, isNull, reason: 'cleared by a read that was accepted');
     // On and off, as the file writes them.
     expect(awgOptions({'RandomTrailers': 'on', 'DisableCookies': 'off'}), {'random_trailers': true});
+  });
+  test('the links of Amnezia\'s own app (vpn://) hold the configurations of a server', () {
+    const awgConf = '[Interface]\n'
+        'PrivateKey = $_priv\nAddress = 10.8.1.2/32\nDNS = \$PRIMARY_DNS, \$SECONDARY_DNS\nMTU = 1280\n'
+        'Jc = 4\nJmin = 40\nJmax = 70\nS1 = 15\nS2 = 23\nH1 = 1234567891\nH2 = 1234567892\nH3 = 1234567893\nH4 = 1234567894\n'
+        '[Peer]\nPublicKey = $_pub\nAllowedIPs = 0.0.0.0/0, ::/0\nEndpoint = 203.0.113.7:51820\nPersistentKeepalive = 25\n';
+    const wgConf = '[Interface]\nPrivateKey = $_priv\nAddress = 10.9.0.2/32\n'
+        '[Peer]\nPublicKey = $_pub\nAllowedIPs = 0.0.0.0/0\nEndpoint = 203.0.113.8:51821\n';
+    final payload = {
+      'description': 'Home server',
+      'dns1': '1.1.1.1',
+      'dns2': '1.0.0.1',
+      'hostName': '203.0.113.7',
+      'defaultContainer': 'amnezia-awg',
+      'containers': [
+        {
+          'container': 'amnezia-awg',
+          'awg': {'last_config': jsonEncode({'config': awgConf, 'Jc': '4', 'port': '51820'}), 'port': '51820'},
+        },
+        {
+          'container': 'amnezia-wireguard',
+          'wireguard': {'last_config': jsonEncode({'config': wgConf})},
+        },
+        {'container': 'amnezia-dns'},
+      ],
+    };
+    // qCompress: the size in four bytes (big endian), then the zlib stream.
+    final json = utf8.encode(jsonEncode(payload));
+    final zipped = ZLibEncoder().convert(json);
+    final size = [(json.length >> 24) & 0xFF, (json.length >> 16) & 0xFF, (json.length >> 8) & 0xFF, json.length & 0xFF];
+    final link = 'vpn://${base64Url.encode([...size, ...zipped]).replaceAll('=', '')}';
+
+    final links = extractSubscriptionLinks(link);
+    expect(links, hasLength(2));
+    final awg = parseLink(links[0])!;
+    expect(awg.protocol, 'amneziawg');
+    expect(awg.name, 'Home server', reason: 'the description of the server names it');
+    expect(awg.outbound['jc'], 4);
+    expect(awg.outbound['h4'], '1234567894');
+    expect(wireguardLinkDns(links[0]), ['1.1.1.1', '1.0.0.1'], reason: 'the placeholders of the template are filled in');
+    expect(parseLink(links[1])!.protocol, 'wireguard');
+    // With text around it (pasted from a message), and a link that is not one of Amnezia's is let alone.
+    expect(extractSubscriptionLinks('here: $link thanks'), hasLength(2));
+    expect(extractSubscriptionLinks('vpn://not-a-link'), isEmpty);
+  });
+
+  test('the settings of AmneziaWG in Clash and sing-box subscriptions', () {
+    final clash = '''
+proxies:
+  - name: awg-clash
+    type: wireguard
+    server: 203.0.113.7
+    port: 51820
+    ip: 10.8.1.2
+    private-key: $_priv
+    public-key: $_pub
+    udp: true
+    amnezia-wg-option:
+      jc: 5
+      jmin: 30
+      jmax: 80
+      s1: 17
+      s2: 29
+      h1: 1234567891
+      h2: 1234567892
+      h3: 1234567893
+      h4: 1234567894
+      i1: "<b 0xc0ffee><t><r 16>"
+''';
+    final fromClash = extractSubscriptionLinks(clash);
+    expect(fromClash, hasLength(1));
+    final c = parseLink(fromClash.single)!;
+    expect(c.protocol, 'amneziawg');
+    expect(c.name, 'awg-clash');
+    expect(c.outbound['jc'], 5);
+    expect(c.outbound['i1'], '<b 0xc0ffee><t><r 16>');
+
+    for (final type in ['amneziawg', 'wireguard']) {
+      final singbox = jsonEncode({
+        'endpoints': [
+          {
+            'type': type,
+            'tag': 'awg-box',
+            'address': ['10.8.1.2/32'],
+            'private_key': _priv,
+            'jc': 4,
+            'jmin': 40,
+            'jmax': 70,
+            's1': 15,
+            's2': 23,
+            'h1': '1234567891',
+            'h2': '1234567892',
+            'h3': '1234567893',
+            'h4': '1234567894',
+            'random_trailers': true,
+            'peers': [
+              {'address': '203.0.113.7', 'port': 51820, 'public_key': _pub, 'allowed_ips': ['0.0.0.0/0']},
+            ],
+          },
+        ],
+      });
+      final box = extractSubscriptionLinks(singbox);
+      expect(box, hasLength(1), reason: type);
+      final s = parseLink(box.single)!;
+      expect(s.protocol, 'amneziawg', reason: type);
+      expect(s.outbound['jmax'], 70);
+      expect(s.outbound['random_trailers'], true);
+    }
+    // A WireGuard endpoint without them stays WireGuard.
+    final plain = jsonEncode({
+      'endpoints': [
+        {
+          'type': 'wireguard',
+          'tag': 'wg',
+          'address': ['10.0.0.2/32'],
+          'private_key': _priv,
+          'peers': [
+            {'address': '203.0.113.7', 'port': 51820, 'public_key': _pub, 'allowed_ips': ['0.0.0.0/0']},
+          ],
+        },
+      ],
+    });
+    expect(parseLink(extractSubscriptionLinks(plain).single)!.protocol, 'wireguard');
   });
   test('awgOptions reads the settings by any case and with or without underscores', () {
     expect(awgOptions({'JC': '4', 'Jmin': '1', 'JMAX': '2'}), {'jc': 4, 'jmin': 1, 'jmax': 2});

@@ -3,6 +3,7 @@ import 'dart:isolate';
 
 import 'package:yaml/yaml.dart';
 
+import 'awg.dart' show amneziaVpnConfigs, awgSettingsOf;
 import 'config_decryptor.dart' show xrayJsonToLinks;
 import 'ovpn/ovpn_profile.dart' show ovpnToLinks;
 import 'proxy_config.dart' show extractLinks, wireguardConfToLinks;
@@ -14,6 +15,15 @@ import 'sub_surge.dart';
 List<String> extractSubscriptionLinks(String body, {int depth = 0}) {
   final text = body.trim();
   if (text.isEmpty) return const [];
+  // The links of Amnezia's own app (`vpn://`): each configuration inside is read as the file it is.
+  if (text.contains('vpn://') && depth < 2) {
+    final configs = amneziaVpnConfigs(text);
+    if (configs.isNotEmpty) {
+      return [
+        for (final c in configs) ...extractSubscriptionLinks(c, depth: depth + 1),
+      ];
+    }
+  }
   final links = extractLinks(text);
   if (links.isNotEmpty) return links;
   // The text of a WireGuard configuration file.
@@ -164,7 +174,7 @@ List<String> _fromJson(Object? json) {
     final endpoints = v['endpoints'];
     if (endpoints is List) {
       for (final e in endpoints) {
-        if (e is Map && _s(e['type'])?.toLowerCase() == 'wireguard') {
+        if (e is Map && (_s(e['type'])?.toLowerCase() == 'wireguard' || _s(e['type'])?.toLowerCase() == 'amneziawg')) {
           final l = _singBoxWireguard(e);
           if (l != null) out.add(l);
           handled = true;
@@ -284,10 +294,12 @@ String? _wireguardLink(String server, String port, Object? name,
     Object? reserved,
     Object? mtu,
     Object? keepAlive,
-    Object? allowedIps}) {
+    Object? allowedIps,
+    Map<String, String> awg = const {}}) {
   if (privateKey == null || publicKey == null || addresses.isEmpty) return null;
   final res = reserved is List ? reserved.join(',') : _s(reserved);
   return 'wireguard://${Uri.encodeComponent(privateKey)}@${_host(server)}:$port${_query({
+        ...awg,
         'publickey': publicKey,
         'address': addresses.join(','),
         'presharedkey': preSharedKey,
@@ -390,7 +402,9 @@ String? _clashLink(Map p) {
           reserved: peer['reserved'],
           mtu: p['mtu'],
           keepAlive: p['persistent-keepalive'],
-          allowedIps: peer['allowed-ips']);
+          allowedIps: peer['allowed-ips'],
+          // Mihomo: the settings of AmneziaWG are in `amnezia-wg-option`.
+          awg: p['amnezia-wg-option'] is Map ? awgSettingsOf(p['amnezia-wg-option'] as Map) : const {});
     case 'vmess':
       final ws = p['ws-opts'] is Map ? p['ws-opts'] as Map : const {};
       final headers = ws['headers'] is Map ? ws['headers'] as Map : const {};
@@ -500,7 +514,10 @@ String? _singBoxWireguard(Map e) {
       reserved: peer['reserved'],
       mtu: e['mtu'],
       keepAlive: peer['persistent_keepalive_interval'],
-      allowedIps: peer['allowed_ips']);
+      allowedIps: peer['allowed_ips'],
+      // The settings of AmneziaWG are fields of the endpoint (an endpoint of type amneziawg, or the WireGuard one of the
+      // forks of sing-box that have them).
+      awg: awgSettingsOf(e));
 }
 
 /// One sing-box outbound; [byTag] holds the others, for one it is dialled through.
