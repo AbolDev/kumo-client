@@ -43,8 +43,8 @@ object WidgetState {
 
 /**
  * The colours of a widget in one look (light or dark). The card and its texts are the same in every state: only
- * the power button tells the state (an outlined button while disconnected, a filled one in the accent colour while
- * it connects or disconnects, a green one while connected: [okBtn] is green in every look, wallpaper colours or not).
+ * the power button tells the state (an outlined button while disconnected, an orange one while it connects or
+ * disconnects, a green one while connected: [okBtn] is green in every look, wallpaper colours or not).
  */
 class WidgetColors(
     val bg: Int, val text: Int, val sub: Int,
@@ -113,6 +113,10 @@ class WidgetColors(
         // The green of a connected widget: a deeper one on a light card, a brighter one on a dark card.
         private val GREEN_LIGHT = c(0xFF1E9E52) to c(0xFFFFFFFF)
         private val GREEN_DARK = c(0xFF4CCB7E) to c(0xFF06301A)
+
+        // The orange of a widget that connects or disconnects (the app's own is orange there too): the button and its icon.
+        val ORANGE_LIGHT = c(0xFFF57C00) to c(0xFFFFFFFF)
+        val ORANGE_DARK = c(0xFFFFB74D) to c(0xFF3A2100)
 
         /** Kumo's own teal, where the system gives no colours of its own (before Android 12). */
         val TEAL_LIGHT = WidgetColors(
@@ -640,6 +644,18 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, pr
         }
     }
 
+    /** A colour that is the same in every look but has a light and a dark value ([lightValue] for a light card, [darkValue] for
+     *  a dark one): given both on Android 12+ so the launcher switches them, else the one of the phone now. */
+    private fun busy(id: Int, lightValue: Int, darkValue: Int) {
+        val a = if (theme == WidgetTheme.DARK || theme == WidgetTheme.CLEAR) darkValue else lightValue
+        val b = if (theme == WidgetTheme.LIGHT) lightValue else darkValue
+        if (Build.VERSION.SDK_INT >= 31 && a != b) {
+            v.setColorInt(id, "setColorFilter", a, b)
+        } else {
+            v.setInt(id, "setColorFilter", if (nightNow) b else a)
+        }
+    }
+
     /**
      * The card: one colour in every state, as opaque as chosen, with the corners the user chose (the ones the layout
      * was drawn with when none was) and, when asked to be lower than the room it has, centred in it. [heightDp] is the
@@ -775,8 +791,14 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, pr
             }
             v.setInt(R.id.wg_ring, "setColorFilter", own)
         } else {
-            set(R.id.wg_btn_bg, "setColorFilter") { if (connected) it.okBtn else if (on) it.onBtn else it.offBtn }
-            set(R.id.wg_icon, "setColorFilter") { if (connected) it.okIcon else if (on) it.onIcon else it.offIcon }
+            if (on && !connected) {
+                // While it connects or disconnects the button is orange, as in the app, whatever the accent is.
+                busy(R.id.wg_btn_bg, WidgetColors.ORANGE_LIGHT.first, WidgetColors.ORANGE_DARK.first)
+                busy(R.id.wg_icon, WidgetColors.ORANGE_LIGHT.second, WidgetColors.ORANGE_DARK.second)
+            } else {
+                set(R.id.wg_btn_bg, "setColorFilter") { if (connected) it.okBtn else it.offBtn }
+                set(R.id.wg_icon, "setColorFilter") { if (connected) it.okIcon else it.offIcon }
+            }
             set(R.id.wg_ring, "setColorFilter") { it.ring }
         }
         v.setViewVisibility(R.id.wg_ring, if (on) View.GONE else View.VISIBLE)

@@ -25,6 +25,7 @@
         android:icon="@mipmap/ic_launcher_teal_night"
         android:roundIcon="@mipmap/ic_launcher_teal_night"
         android:banner="@drawable/tv_banner"
+        android:supportsRtl="true"
         android:allowBackup="false">
         <!-- The launcher entries are the activity-aliases below, one per icon in Settings. -->
         <activity
