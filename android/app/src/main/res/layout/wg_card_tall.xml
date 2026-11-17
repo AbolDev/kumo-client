@@ -9,6 +9,15 @@
     android:layoutDirection="ltr">
 
     <ImageView
+        android:id="@+id/widget_shadow"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/wg_rad_20"
+        android:tint="#00000000"
+        android:visibility="gone" />
+
+    <ImageView
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -26,6 +35,7 @@
         android:visibility="gone" />
 
     <LinearLayout
+        android:id="@+id/widget_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
@@ -41,8 +51,7 @@
             android:maxLines="2"
             android:text="Kumo"
             android:textColor="#FF2C2C2A"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:textSize="13sp" />
 
         <TextView
             android:textDirection="ltr"
@@ -108,8 +117,7 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#FF2C2C2A"
-                    android:textStyle="bold" />
+                    android:textColor="#FF2C2C2A" />
 
                 <TextView
                     android:textDirection="ltr"
@@ -121,8 +129,7 @@
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:maxLines="1"
-                    android:textColor="#FF2C2C2A"
-                    android:textStyle="bold" />
+                    android:textColor="#FF2C2C2A" />
             </LinearLayout>
         </LinearLayout>
 
@@ -142,8 +149,7 @@
                 android:includeFontPadding="false"
                 android:maxLines="1"
                 android:textColor="#FF2C2C2A"
-                android:textSize="12sp"
-                android:textStyle="bold" />
+                android:textSize="12sp" />
 
             <Chronometer
                 android:textDirection="ltr"

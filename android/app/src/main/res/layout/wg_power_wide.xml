@@ -8,6 +8,15 @@
     android:layoutDirection="ltr">
 
     <ImageView
+        android:id="@+id/widget_shadow"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/wg_rad_20"
+        android:tint="#00000000"
+        android:visibility="gone" />
+
+    <ImageView
         android:id="@+id/widget_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -25,6 +34,7 @@
         android:visibility="gone" />
 
     <LinearLayout
+        android:id="@+id/widget_content"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center_vertical"
@@ -72,7 +82,6 @@
             android:includeFontPadding="false"
             android:maxLines="1"
             android:textColor="#FF2C2C2A"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:textSize="13sp" />
     </LinearLayout>
 </FrameLayout>
