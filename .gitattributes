@@ -1,2 +1,4 @@
 # The signature of the WARP profile covers its exact bytes, so git must never change its line endings.
 docs/warp/* -text
+# Same for the list of wallets: its signature covers the exact bytes.
+docs/donate/* -text
