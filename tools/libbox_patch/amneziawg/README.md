@@ -11,7 +11,7 @@ AmneziaWG servers are reached with the unchanged reference protocol code.
   WireGuard endpoint with `jc`, `jmin`, `jmax`, `s1`..`s4`, `h1`..`h4`, `i1`..`i5` and the options of AmneziaWG 3.
 - `apply_amneziawg.sh`: copies both into a sing-box tree, registers the type in `include/registry.go` and adds the module.
 
-It was tried in the `spike/awg-glue` branch (`tools/awg_spike`) against a server of amneziawg-go in the same process and a
+It was tried in the `archive/awg-spike` tag (the old `spike/awg-glue` branch; `tools/awg_spike`) against a server of amneziawg-go in the same process and a
 program of it with a TUN device of the kernel: WireGuard, AmneziaWG 1.x, 2.0 (ranges), the signature packets, two peers,
 IPv6, and as an endpoint of sing-box read from JSON.
 
