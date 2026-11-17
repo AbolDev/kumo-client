@@ -90,6 +90,8 @@ jobs:
           export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           git clone --depth 1 --branch "v$SING_BOX" https://github.com/SagerNet/sing-box.git sb
           cp tools/libbox_patch/*.go sb/experimental/libbox/
+          # AmneziaWG: an endpoint of type "amneziawg" on the reference amneziawg-go (see tools/libbox_patch/amneziawg).
+          bash tools/libbox_patch/apply_amneziawg.sh sb
           go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
           go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
           export PATH="$(go env GOPATH)/bin:$PATH"

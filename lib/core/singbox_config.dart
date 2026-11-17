@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'awg.dart';
 import 'net_options.dart';
 import 'proxy_config.dart';
 import 'routing_rules.dart';
@@ -736,7 +737,8 @@ String buildSingBoxConfig(
     },
     'inbounds': inbounds,
     'outbounds': outbounds,
-    if (endpoints.isNotEmpty) 'endpoints': endpoints,
+    // A WireGuard endpoint with the settings of AmneziaWG is an endpoint of the type of that name.
+    if (endpoints.isNotEmpty) 'endpoints': [for (final e in endpoints) amneziaEndpoint(e)],
     'route': {
       'rules': rules,
       if ((sets.isNotEmpty && iran) || adSets.isNotEmpty || (provider?.tags.isNotEmpty ?? false))

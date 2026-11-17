@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show File, InternetAddress, Platform;
 import 'dart:isolate';
 
+import 'awg.dart';
 import 'ovpn/ovpn_profile.dart';
 import 'warp/warp_profile.dart' show WarpNoise, parseWarpNoise;
 
@@ -75,8 +76,11 @@ class ProxyConfig {
   /// True when sing-box cannot carry this server (it needs Xray).
   bool get needsXray => outbound.isEmpty && xrayOutbound != null;
 
-  /// True when sing-box can carry this server.
-  bool get canSingBox => outbound.isNotEmpty;
+  /// A server of AmneziaWG: WireGuard with its obfuscation (see awg.dart).
+  bool get isAmnezia => protocol == amneziaProtocol;
+
+  /// True when sing-box can carry this server. An AmneziaWG one only where the core has its endpoint (see [amneziaSupported]).
+  bool get canSingBox => outbound.isNotEmpty && (!isAmnezia || amneziaSupported);
 
   /// True when sing-box would refuse this server's Reality key or short id ("invalid public_key"). One such
   /// server in a configuration stops the whole core from starting, so it is left out of the automatic group.
@@ -169,6 +173,8 @@ const _supportedSchemes = [
   'ssh://',
   'wireguard://',
   'wg://',
+  'awg://',
+  'amneziawg://',
   'naive+https://',
   'naive+quic://',
   'openvpn://',
@@ -243,7 +249,7 @@ Iterable<String> _words(String text) => text
 /// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`, and
 /// `warp-masque://`, the link of Kumo's own WARP servers, ends in `masque://`).
 final _schemeStart = RegExp(
-    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|naive\+https|naive\+quic|openvpn)://)'
+    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|awg|amneziawg|naive\+https|naive\+quic|openvpn)://)'
     r'|(?<![A-Za-z0-9-])(?=masque://)');
 
 /// Parses and shuffles thousands of links off the UI thread.
@@ -329,7 +335,7 @@ ProxyConfig? parseLink(String link) {
     if (link.startsWith('hysteria://')) return _hysteria1(link);
     if (RegExp(r'^socks(5|4a|4)?://').hasMatch(link)) return _socks(link);
     if (link.startsWith('ssh://')) return _ssh(link);
-    if (link.startsWith('wireguard://') || link.startsWith('wg://')) {
+    if (RegExp(r'^(wireguard|wg|awg|amneziawg)://').hasMatch(link)) {
       return _wireguard(link);
     }
     if (link.startsWith('warp-masque://')) return _masque(link);

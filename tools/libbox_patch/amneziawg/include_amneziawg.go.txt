@@ -1,0 +1,10 @@
+package include
+
+import (
+	"github.com/sagernet/sing-box/adapter/endpoint"
+	"github.com/sagernet/sing-box/protocol/amneziawg"
+)
+
+func registerAmneziaWGEndpoint(registry *endpoint.Registry) {
+	amneziawg.RegisterEndpoint(registry)
+}

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
 
 import '../core/ad_lists.dart' show adBaseAsset;
+import '../core/awg.dart' show amneziaSupported;
 import '../core/app_icon.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
@@ -3082,6 +3083,13 @@ class AppState extends ChangeNotifier {
     if (cancelled()) return;
     if (!granted) {
       message = (t) => t.vpnPermissionDenied;
+      _preparing = false;
+      _show(VpnStatus.stopped);
+      return;
+    }
+    // An AmneziaWG server needs the endpoint of the phone's core (the computers' cores are the official ones, which have none).
+    if (!amneziaSupported && selected != null && selected!.isAmnezia) {
+      message = (t) => t.connectFailed('AmneziaWG is carried by the Android version of Kumo only (for now)');
       _preparing = false;
       _show(VpnStatus.stopped);
       return;
