@@ -1,9 +1,12 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert';
+import 'dart:io' show Directory, File, Platform;
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../core/app_log.dart';
 import '../core/usage/crash_scrub.dart' show scrubText;
@@ -126,6 +129,33 @@ class _LogsPageState extends State<LogsPage> {
   Future<void> _copy(String text) async {
     await Clipboard.setData(ClipboardData(text: text));
     if (mounted) toast(context, S.of(context).copied, kind: ToastKind.ok);
+  }
+
+  String get _fileName => 'kumo-logs-${_day(DateTime.now())}.txt';
+
+  /// Saves the lines shown, as the text of the bug report, to a file the user chooses.
+  Future<void> _saveFile(List<LogEntry> items) async {
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(await _report(items)));
+      final path = await FilePicker.platform.saveFile(fileName: _fileName, bytes: bytes, type: FileType.any);
+      if (path == null) return;
+      // On Android the picker writes the bytes itself; on the desktop it only chooses the place.
+      if (!Platform.isAndroid) await File(path).writeAsBytes(bytes);
+      if (mounted) toast(context, tr(context, 'logsSaved'), kind: ToastKind.ok);
+    } catch (e) {
+      if (mounted) toast(context, S.of(context).saveFailed(e));
+    }
+  }
+
+  /// Hands the same file to the share sheet of the phone (mail, a messenger, a cloud drive ...).
+  Future<void> _shareFile(List<LogEntry> items) async {
+    try {
+      final file = File('${Directory.systemTemp.path}/$_fileName');
+      await file.writeAsString(await _report(items));
+      await Share.shareXFiles([XFile(file.path, mimeType: 'text/plain')]);
+    } catch (e) {
+      if (mounted) toast(context, S.of(context).saveFailed(e));
+    }
   }
 
   Future<void> _confirmClear() async {
@@ -267,6 +297,31 @@ class _LogsPageState extends State<LogsPage> {
                 tooltip: t.copyLogs,
                 icon: const Icon(Icons.copy),
                 onPressed: items.isEmpty ? null : () => _copy(_plain(items)),
+              ),
+              PopupMenuButton<String>(
+                tooltip: tr(context, 'logsExport'),
+                icon: const Icon(Icons.file_download_outlined),
+                enabled: items.isNotEmpty,
+                onSelected: (v) => v == 'share' ? _shareFile(items) : _saveFile(items),
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'save',
+                    child: ListTile(
+                      leading: const Icon(Icons.save_alt),
+                      title: Text(tr(context, 'logsSaveFile')),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                  if (Platform.isAndroid || Platform.isIOS)
+                    PopupMenuItem(
+                      value: 'share',
+                      child: ListTile(
+                        leading: const Icon(Icons.ios_share),
+                        title: Text(tr(context, 'logsShareFile')),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
+                ],
               ),
               IconButton(
                 tooltip: t.clearLogs,
