@@ -79,6 +79,10 @@ class ProxyConfig {
   /// A server of AmneziaWG: WireGuard with its obfuscation (see awg.dart).
   bool get isAmnezia => protocol == amneziaProtocol;
 
+  /// An AmneziaWG server that the core cannot carry itself (a computer's): kumo-awg carries it, and the core sends what is to
+  /// go through it to that program's SOCKS port (see buildAwgGroupConfig for several of them in the automatic group).
+  bool get viaAwgHelper => isAmnezia && !amneziaInCore && xrayOutbound != null;
+
   /// True when sing-box can carry this server.
   bool get canSingBox => outbound.isNotEmpty;
 

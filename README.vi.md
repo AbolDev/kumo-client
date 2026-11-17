@@ -59,7 +59,7 @@ Không biết chọn tệp Android nào? Dùng **ARM64**, hoặc **Universal** c
 - Kết nối một chạm, tự động chọn máy chủ nhanh nhất, tự động chuyển khi máy chủ ngừng phản hồi.
 - Toàn bộ thiết bị (Android) hoặc proxy cục bộ; định tuyến theo ứng dụng, các quốc gia kết nối trực tiếp, quy tắc định tuyến của riêng bạn.
 - Máy chủ công cộng miễn phí, cấu hình và gói đăng ký của riêng bạn (liên kết, mã QR, tệp; định dạng Clash, sing-box, Xray và Surge).
-- Nhiều giao thức: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 và 2, TUIC, AnyTLS, WireGuard, SOCKS, SSH và hơn nữa.
+- Nhiều giao thức: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 và 2, TUIC, AnyTLS, WireGuard, AmneziaWG, SOCKS, SSH và hơn nữa.
 - Quyền riêng tư: kill switch, DNS nghiêm ngặt, chặn rò rỉ WebRTC, chặn quảng cáo và trình theo dõi, kiểm tra rò rỉ IP và DNS.
 - Kiểm tra tốc độ, tốc độ và dung lượng trực tiếp, widget, biểu tượng khay hệ thống, Android TV, bảy ngôn ngữ.
 

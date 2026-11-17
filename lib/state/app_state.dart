@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
 
 import '../core/ad_lists.dart' show adBaseAsset;
+import '../core/amnezia_qr.dart' show amneziaQrParts;
 import '../core/awg.dart' show awgProblem;
 import '../core/app_icon.dart';
 import '../core/backup.dart';
@@ -2464,13 +2465,29 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// What the last [importText] has to tell the user (the screen shows it): why an AmneziaWG server was refused, or how far
+  /// the series of Amnezia's QR codes has come. Null when there is nothing to say.
+  Message? importNote;
+
   /// Adds pasted or scanned text: a subscription URL, or one or more share links.
   /// Works while other downloads or tests are running.
   /// Returns a subscription that was just added and whose provider gave it no name,
   /// so the screen can ask the user for one.
   Future<ServerGroup?> importText(String text) async {
     var input = text.trim();
+    importNote = null;
     if (input.isEmpty) return null;
+    // A part of the series of QR codes Amnezia's app shows: it waits for the others; the last one makes the whole link.
+    final part = amneziaQrParts.feed(input);
+    if (part != null) {
+      final link = part.link;
+      if (link == null) {
+        importNote = (t) => trFor(t.languageCode, 'awgQrPart', {'have': part.have, 'total': part.total});
+        message = importNote;
+        return null;
+      }
+      input = link;
+    }
     // Links other clients hand out (clash://install-config?url=..., hiddify://import/..., sub://...)
     // hold the real address and sometimes a name.
     final deep = subscriptionDeepLink(input.split(RegExp(r'\s')).first);
@@ -2516,7 +2533,12 @@ class AppState extends ChangeNotifier {
         if (parsed.isEmpty) {
           // An AmneziaWG server that was refused says why (a setting the core would not start with).
           final why = awgProblem;
-          message = why == null ? (t) => t.noValidConfig : (t) => t.importFailed('AmneziaWG: $why');
+          if (why == null) {
+            message = (t) => t.noValidConfig;
+          } else {
+            importNote = (t) => t.importFailed('AmneziaWG: ${why.text(t.languageCode)}');
+            message = importNote;
+          }
           return;
         }
         _merge(manual, parsed);
@@ -2729,16 +2751,16 @@ class AppState extends ChangeNotifier {
   }
 
   /// The server(s) a connection would use: the picked one, or in automatic mode the fastest few.
-  /// Automatic mode only groups sing-box servers; the ones only Xray can carry (XHTTP, mKCP ...)
-  /// need their own Xray process, so they are used when picked by hand (or when nothing else is
-  /// available).
+  /// Automatic mode only groups sing-box servers (and the AmneziaWG ones, which kumo-awg carries on a computer, a SOCKS
+  /// port each); the ones only Xray can carry (XHTTP, mKCP ...) need their own Xray process, so they are used when
+  /// picked by hand (or when nothing else is available).
   List<ProxyConfig> _chosenServers() {
     // A server whose Reality key the core would refuse is left out: one of them stops the whole core.
     // A server the safety check found changing what passes through it is left out too.
     // A server with a pinned certificate is left out as well: only Xray checks the pin, and this group runs
     // on sing-box, which would take any certificate for it. Such a server is used when it is picked by hand.
     final plain =
-        all.where((c) => c.canSingBox && !c.badRealityKey && !isDangerous(c) && !c.pinned).toList();
+        all.where((c) => (c.canSingBox || c.viaAwgHelper) && !c.badRealityKey && !isDangerous(c) && !c.pinned).toList();
     // A server that reaches domestic sites only is not one to pick for the user.
     final alive = plain.where((c) => c.isAlive && !c.domesticOnly).toList()
       ..sort((a, b) => _rank(a).compareTo(_rank(b)));
@@ -2783,7 +2805,8 @@ class AppState extends ChangeNotifier {
       ..load(net.toJson())
       ..tun = false
       ..killSwitch = false;
-    return jsonEncode([for (final c in chosen) '${c.outbound}', o.toJson(), routing?.toJson()]);
+    // (A server a helper carries has no outbound of its own: its link tells it from the others.)
+    return jsonEncode([for (final c in chosen) c.canSingBox ? '${c.outbound}' : c.link, o.toJson(), routing?.toJson()]);
   }
 
   /// The servers the standby core runs, when it is up and they are all still in the lists.
@@ -2825,7 +2848,9 @@ class AppState extends ChangeNotifier {
               refresh: false)
           : <String, String>{};
       final viaXray = chosen.length == 1 && chosen.first.useXray(net.core);
-      final xrayPort = viaXray ? 30000 + Random().nextInt(30000) : null;
+      // (Or AmneziaWG servers in a group: kumo-awg takes the port and the ones after it.)
+      final awgGroup = _awgGroupOf(chosen);
+      final xrayPort = viaXray || awgGroup.isNotEmpty ? _helperPort(awgGroup.length) : null;
       final parts = _standbyParts(chosen, routing, sets, xrayPort, resolved: await _resolveAhead(chosen));
       // Something changed while this was being prepared.
       if (!net.keepProxy || !_idle || _preparing) return;
@@ -2838,8 +2863,9 @@ class AppState extends ChangeNotifier {
       if (ok) {
         _standbyKey = key;
         _standbyChosen = chosen;
-        _standbyXrayPort = xrayPort;
-        _standbyXrayAuth = parts.xrayAuth;
+        // (The ports of a group of AmneziaWG servers are not a SOCKS port to send the app's own requests through.)
+        _standbyXrayPort = viaXray ? xrayPort : null;
+        _standbyXrayAuth = viaXray ? parts.xrayAuth : null;
         _standbyApi = parts.api;
         _standbySecret = parts.secret;
       } else {
@@ -2993,11 +3019,14 @@ class AppState extends ChangeNotifier {
       ..tun = false
       ..killSwitch = false;
     final chain = o.chain.isEmpty ? null : parseLink(o.chain);
-    final viaXray = xrayPort != null;
+    // A port for a helper: Xray (or kumo-awg) for the one server, or kumo-awg for the AmneziaWG servers of a group.
+    final awgGroup = _awgGroupOf(chosen);
+    final viaXray = xrayPort != null && awgGroup.isEmpty;
+    final viaHelper = xrayPort != null;
     // The port of the control API is only used on the desktop; any free one will do.
     final api = 20000 + Random().nextInt(20000);
     final secret = _randomSecret();
-    final xrayAuth = viaXray ? _newXrayAuth() : null;
+    final xrayAuth = viaHelper ? _newXrayAuth() : null;
     final config = buildSingBoxConfig(resolved ?? chosen,
         xrayPort: xrayPort,
         xrayAuth: xrayAuth,
@@ -3009,10 +3038,15 @@ class AppState extends ChangeNotifier {
         chain: chain,
         viaXray: viaXray,
         routing: routing,
-        localLogin: true);
+        localLogin: true,
+        awgPort: awgGroup.isEmpty ? null : xrayPort);
     return (
       config: config,
-      xrayConfig: viaXray ? buildXrayConfig(chosen.first, xrayPort, options: o, auth: xrayAuth) : null,
+      xrayConfig: !viaHelper
+          ? null
+          : awgGroup.isNotEmpty
+              ? buildAwgGroupConfig(awgGroup, xrayPort, auth: xrayAuth)
+              : buildXrayConfig(chosen.first, xrayPort, options: o, auth: xrayAuth),
       api: api,
       secret: secret,
       xrayAuth: xrayAuth,
@@ -3104,7 +3138,7 @@ class AppState extends ChangeNotifier {
     _xrayPort = null;
     _xrayAuth = null;
     _activeName = null;
-    _groupNames = chosen.length > 1 ? [for (final c in chosen) if (c.canSingBox) c.name] : const [];
+    _groupNames = chosen.length > 1 ? [for (final c in chosen) if (c.canSingBox || c.viaAwgHelper) c.name] : const [];
     try {
       final routing = routingFor(chosen);
       // In the proxy mode the core that already runs the proxy becomes the connection: nothing is
@@ -3171,12 +3205,14 @@ class AppState extends ChangeNotifier {
       // One chosen server runs on Xray when only Xray can carry it, or when Xray is the default
       // core and can. A group of servers (automatic mode) is always sing-box.
       final viaXray = chosen.length == 1 && chosen.first.useXray(net.core);
+      // The AmneziaWG servers of a group on a computer are carried by kumo-awg: a SOCKS port each (see buildAwgGroupConfig).
+      final awgGroup = _awgGroupOf(chosen);
       // Xray's local port asks for a login of its own, so no other program here can use it.
-      final xrayAuth = viaXray ? _newXrayAuth() : null;
+      final xrayAuth = viaXray || awgGroup.isNotEmpty ? _newXrayAuth() : null;
       // The names of the chosen servers are looked up first (encrypted DNS, then the system's).
       final resolved = racedResolved ?? await _resolveAhead(chosen);
       if (cancelled()) return;
-      String config(int? xray) => buildSingBoxConfig(resolved,
+      String config(int? xray, {int? awg}) => buildSingBoxConfig(resolved,
           xrayPort: xray,
           xrayAuth: xrayAuth,
           options: net,
@@ -3187,15 +3223,37 @@ class AppState extends ChangeNotifier {
           chain: chain,
           viaXray: viaXray,
           routing: routing,
-          ovpnInterface: ovpnInterface);
+          ovpnInterface: ovpnInterface,
+          awgPort: awg);
       final proxyPort =
           isDesktop && !net.tun ? net.proxyPort : null;
-      final xrayPortNew = viaXray ? 30000 + Random().nextInt(30000) : null;
+      final xrayPortNew = viaXray ? _helperPort(0) : null;
+      final awgPortNew = awgGroup.isEmpty ? null : _helperPort(awgGroup.length);
       // The phone keeps the proxy alone after the tunnel stops; the desktop does it from here.
       final standby = !isDesktop && net.keepProxy
           ? _standbyParts(chosen, routing, sets, viaXray ? xrayPortNew : null, resolved: resolved)
           : null;
-      if (viaXray) {
+      if (awgPortNew != null) {
+        // kumo-awg has a login on its ports, which the SOCKS outbounds of the group know. (_xrayPort stays empty: the app's own
+        // requests go through the proxy like everyone's.)
+        await VpnChannel.start(
+          config(null, awg: awgPortNew),
+          serverNames: names,
+          xrayConfig: buildAwgGroupConfig(awgGroup, awgPortNew, auth: xrayAuth),
+          xrayPort: awgPortNew,
+          showSpeed: showSpeed,
+          showVolume: showVolume,
+          showName: showName,
+          apiPort: apiPort,
+          apiSecret: apiSecret,
+          systemProxyPort: proxyPort,
+          killSwitch: net.killSwitch,
+          keepStandby: standbyServers != null && net.tun,
+          holdProxy: isDesktop && net.keepProxy && !net.tun,
+          standbyConfig: standby?.config,
+          proxyPort: net.proxyPort,
+        );
+      } else if (viaXray) {
         final port = xrayPortNew!;
         _xrayPort = port;
         _xrayAuth = xrayAuth;
@@ -3245,6 +3303,14 @@ class AppState extends ChangeNotifier {
     await s.close();
     return port;
   }
+
+  /// The AmneziaWG servers of a group that kumo-awg carries (a computer's automatic group), in the order of the group; none
+  /// for one server alone (that one has the helper to itself, as an Xray one does).
+  List<ProxyConfig> _awgGroupOf(List<ProxyConfig> chosen) =>
+      chosen.length > 1 ? [for (final c in chosen) if (c.viaAwgHelper) c] : const [];
+
+  /// A port for a helper that takes [count] ports (one for [count] 0 and 1).
+  int _helperPort(int count) => 30000 + Random().nextInt(30000 - (count < 1 ? 1 : count));
 
   XrayAuth _newXrayAuth() => (user: 'k${_randomSecret().substring(0, 8)}', pass: _randomSecret());
 

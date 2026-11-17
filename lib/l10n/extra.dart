@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'extra_awg.dart';
 import 'extra_disguise.dart';
 import 'extra_langs.dart';
 import 'extra_sync.dart';
@@ -27,11 +28,12 @@ String trFor(String lang, String key, [Map<String, Object>? args]) {
 }
 
 const _extra = <String, Map<String, String>>{
-  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu},
-  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi},
-  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh},
-  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr},
+  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu, ...extraAwgRu},
+  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi, ...extraAwgVi},
+  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh, ...extraAwgZh},
+  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr, ...extraAwgAr},
   'en': {
+    ...extraAwgEn,
     ...extraMoreEn,
     ...extraPrivacyEn,
     ...extraToolsEn,
@@ -151,6 +153,7 @@ const _extra = <String, Map<String, String>>{
     'connectToggle': 'Connect / Disconnect',
   },
   'fa': {
+    ...extraAwgFa,
     ...extraMoreFa,
     ...extraPrivacyFa,
     ...extraToolsFa,

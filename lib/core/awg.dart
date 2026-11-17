@@ -11,6 +11,8 @@
 import 'dart:convert';
 import 'dart:io' show Platform, ZLibDecoder;
 
+import '../l10n/extra.dart' show trFor;
+
 /// The protocol the servers of AmneziaWG show in lists.
 const amneziaProtocol = 'amneziawg';
 
@@ -43,10 +45,24 @@ bool isAwgSetting(String key) => _optionOf.containsKey(awgSettingKey(key));
 
 /// Why the last settings that were read were not accepted (null when they were, or none were read): said to the user when an
 /// import finds nothing it can use. Set by [awgOptions].
-String? awgProblem;
+AwgProblem? awgProblem;
 
-Map<String, dynamic>? _refuse(String why) {
-  awgProblem = why;
+/// Why settings were not accepted: the key of a text (see l10n/extra_awg.dart) and what goes into it, so that it can be said
+/// in the language of the user. `toString` is the English one.
+class AwgProblem {
+  const AwgProblem(this.key, [this.args = const {}]);
+
+  final String key;
+  final Map<String, Object> args;
+
+  String text([String lang = 'en']) => trFor(lang, key, args);
+
+  @override
+  String toString() => text();
+}
+
+Map<String, dynamic>? _refuse(String key, [Map<String, Object> args = const {}]) {
+  awgProblem = AwgProblem(key, args);
   return null;
 }
 
@@ -106,43 +122,43 @@ Map<String, dynamic>? awgOptions(Map<String, String> settings) {
     switch (key) {
       case 'jc':
         final n = int.tryParse(value);
-        if (n == null || n < 0 || n > 128) return _refuse('Jc must be from 0 to 128 (it is $value)');
+        if (n == null || n < 0 || n > 128) return _refuse('awgRange', {'name': 'Jc', 'max': 128, 'value': value});
         out[key] = n;
       case 'jmin' || 'jmax':
         final n = int.tryParse(value);
-        if (n == null || n < 0 || n > 1500) return _refuse('$name must be from 0 to 1500 (it is $value)');
+        if (n == null || n < 0 || n > 1500) return _refuse('awgRange', {'name': name, 'max': 1500, 'value': value});
         out[key] = n;
       case 's1' || 's2' || 's3' || 's4':
         final n = int.tryParse(value);
-        if (n == null || n < 0 || n > 1500) return _refuse('$name must be from 0 to 1500 (it is $value)');
+        if (n == null || n < 0 || n > 1500) return _refuse('awgRange', {'name': name, 'max': 1500, 'value': value});
         out[key] = n;
       case 'h1' || 'h2' || 'h3' || 'h4':
-        if (!_validRange(value)) return _refuse('$name must be a number or a range low-high (it is $value)');
+        if (!_validRange(value)) return _refuse('awgRangeText', {'name': name, 'value': value});
         out[key] = value;
       case 'i1' || 'i2' || 'i3' || 'i4' || 'i5':
         // (A packet that looks like a QUIC one is some 1200 bytes, 2400 hex digits.)
-        if (value.length > 16384) return _refuse('$name is too long');
-        if (!_packet.hasMatch(value)) {
-          return _refuse('$name has a tag that is not known (only <b 0x..>, <r N>, <rd N>, <rc N> and <t> are) '
-              'or hex of an odd length');
-        }
+        if (value.length > 16384) return _refuse('awgTooLong', {'name': name});
+        if (!_packet.hasMatch(value)) return _refuse('awgTag', {'name': name});
         out[key] = value;
       case 'random_trailers' || 'disable_cookies':
         final flag = _flag(value);
-        if (flag == null) return _refuse('${key == 'random_trailers' ? 'RandomTrailers' : 'DisableCookies'} must be on or off (it is $value)');
+        if (flag == null) {
+          return _refuse('awgFlag',
+              {'name': key == 'random_trailers' ? 'RandomTrailers' : 'DisableCookies', 'value': value});
+        }
         if (flag) out[key] = true;
       case 'header_protection_key':
         final hex = _headerKey(value);
-        if (hex == null) return _refuse('HeaderProtectionKey is not a key of 32 bytes');
+        if (hex == null) return _refuse('awgKey');
         out[key] = hex;
       default: // the times and the padding: a number or a range
-        if (!_validRange(value)) return _refuse('$key must be a number or a range (it is $value)');
+        if (!_validRange(value)) return _refuse('awgRangeText', {'name': key, 'value': value});
         out[key] = value;
     }
   }
   final min = out['jmin'] as int?;
   final max = out['jmax'] as int?;
-  if (min != null && max != null && min > max) return _refuse('Jmin ($min) is above Jmax ($max)');
+  if (min != null && max != null && min > max) return _refuse('awgMinMax', {'min': min, 'max': max});
   // The headers are the types of the messages: no two ranges may overlap.
   final headers = <(int, int)>[];
   for (final k in const ['h1', 'h2', 'h3', 'h4']) {
@@ -153,14 +169,14 @@ Map<String, dynamic>? awgOptions(Map<String, String> settings) {
   }
   for (var i = 0; i < headers.length; i++) {
     for (var j = i + 1; j < headers.length; j++) {
-      if (headers[i].$1 <= headers[j].$2 && headers[j].$1 <= headers[i].$2) return _refuse('the headers H1 to H4 overlap');
+      if (headers[i].$1 <= headers[j].$2 && headers[j].$1 <= headers[i].$2) return _refuse('awgOverlap');
     }
   }
   // With the header protection the paddings S1 to S4 are the nonces of its cipher: none may be short.
   if (out.containsKey('header_protection_key')) {
     for (final k in const ['s1', 's2', 's3', 's4']) {
       final s = out[k] as int? ?? 0;
-      if (s < 12) return _refuse('${k.toUpperCase()} must be at least 12 with HeaderProtectionKey (it is $s)');
+      if (s < 12) return _refuse('awgShort', {'name': k.toUpperCase(), 'value': s});
     }
   }
   return out;

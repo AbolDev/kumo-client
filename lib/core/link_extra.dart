@@ -295,7 +295,7 @@ ProxyConfig? _wireguard(String link) {
   if (awg.isNotEmpty) {
     // Neither WARP's noise nor Xray carries it: only the core of the phone, as an endpoint of its own type.
     if ((q['noise'] ?? '').isNotEmpty) {
-      awgProblem = 'WARP noise cannot be used with AmneziaWG';
+      awgProblem = const AwgProblem('awgNoise');
       return null;
     }
     out.addAll(awg);

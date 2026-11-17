@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show ZLibEncoder;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/amnezia_qr.dart';
 import 'package:kumo/core/awg.dart';
 import 'package:kumo/core/desktop_vpn.dart' show DesktopVpn;
 import 'package:kumo/core/latency_tester.dart' show delayConfigForTest;
@@ -86,6 +87,45 @@ void main() {
     expect(DesktopVpn.helperFor(buildXrayConfig(c, 34567)), 'kumo-awg');
     final xray = parseLink('vless://11111111-1111-1111-1111-111111111111@h.example.com:443?type=xhttp&security=tls&sni=h.example.com#x')!;
     expect(DesktopVpn.helperFor(buildXrayConfig(xray, 34568)), 'kumo-xray');
+  });
+
+  test('on a computer the AmneziaWG servers join the automatic group, a SOCKS port of kumo-awg each', () {
+    amneziaInCore = false;
+    final a = parseLink(_link(extra: _awg))!;
+    final b = parseLink(_link(extra: _awg.replaceFirst('jc=5', 'jc=7')).replaceFirst('203.0.113.7', '203.0.113.8'))!;
+    final vless = parseLink('vless://11111111-1111-1111-1111-111111111111@h.example.com:443?security=tls&sni=h.example.com#v')!;
+    expect(a.viaAwgHelper && b.viaAwgHelper, isTrue);
+    expect(vless.viaAwgHelper, isFalse);
+    final group = [a, vless, b];
+
+    // The helper: one inbound and one endpoint for each, the ports one after the other.
+    final helper = jsonDecode(buildAwgGroupConfig([a, b], 40000, auth: (user: 'u', pass: 'p'))) as Map<String, dynamic>;
+    final inbounds = helper['inbounds'] as List;
+    expect([for (final i in inbounds) i['listen_port']], [40000, 40001]);
+    expect([for (final i in inbounds) i['tag']], ['socks-in-0', 'socks-in-1']);
+    final endpoints = helper['endpoints'] as List;
+    expect([for (final e in endpoints) e['tag']], ['awg-0', 'awg-1']);
+    expect([for (final e in endpoints) e['jc']], [5, 7]);
+    final rules = (helper['route'] as Map)['rules'] as List;
+    expect(rules, [
+      {'inbound': ['socks-in-0'], 'action': 'route', 'outbound': 'awg-0'},
+      {'inbound': ['socks-in-1'], 'action': 'route', 'outbound': 'awg-1'},
+    ]);
+    final dns = helper['dns'] as Map;
+    expect([for (final r in dns['rules'] as List) r['server']], ['dns-0', 'dns-1']);
+    expect(DesktopVpn.helperFor(jsonEncode(helper)), 'kumo-awg');
+
+    // The core: a SOCKS outbound to each in the group, next to the server it carries itself.
+    final core = jsonDecode(buildSingBoxConfig(group, xrayAuth: (user: 'u', pass: 'p'), awgPort: 40000)) as Map<String, dynamic>;
+    final outs = {for (final o in core['outbounds'] as List) o['tag']: o};
+    expect(outs['server-0']['type'], 'socks');
+    expect(outs['server-0']['server_port'], 40000);
+    expect(outs['server-1']['type'], 'vless');
+    expect(outs['server-2']['type'], 'socks');
+    expect(outs['server-2']['server_port'], 40001);
+    expect(outs['server-2']['username'], 'u');
+    expect(outs['proxy']['outbounds'], ['server-0', 'server-1', 'server-2']);
+    expect(core['endpoints'], isNull);
   });
 
   test('the configuration of the core has an endpoint of the type amneziawg, and a plain WireGuard server is left as it was', () {
@@ -196,7 +236,7 @@ void main() {
     final links = extractSubscriptionLinks(conf);
     expect(links, hasLength(1));
     final c = parseLink(links.single);
-    expect(c, isNotNull, reason: awgProblem);
+    expect(c, isNotNull, reason: '$awgProblem');
     expect(c!.name, 'my-awg-server', reason: 'the comment above [Peer] names the server');
     expect(c.protocol, 'amneziawg');
     expect(c.host, '203.0.113.9');
@@ -221,14 +261,17 @@ void main() {
 
   test('why a setting was refused is kept', () {
     expect(awgOptions({'Jc': '5', 'Jmin': '90', 'Jmax': '80'}), isNull);
-    expect(awgProblem, contains('Jmin'));
+    expect('$awgProblem', contains('Jmin'));
     expect(awgOptions({'RandomTrailers': 'perhaps'}), isNull);
-    expect(awgProblem, contains('RandomTrailers'));
+    expect('$awgProblem', contains('RandomTrailers'));
     expect(awgOptions({'HeaderProtectionKey': 'AAAA', 'S1': '20', 'S2': '20', 'S3': '20', 'S4': '20'}), isNull);
-    expect(awgProblem, contains('HeaderProtectionKey'));
+    expect('$awgProblem', contains('HeaderProtectionKey'));
     const key = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=';
     expect(awgOptions({'HeaderProtectionKey': key, 'S1': '11', 'S2': '20', 'S3': '20', 'S4': '20'}), isNull);
-    expect(awgProblem, contains('S1'));
+    expect('$awgProblem', contains('S1'));
+    // The reason is said in the language asked for.
+    expect(awgProblem!.text('fa'), contains('S1'));
+    expect(awgProblem!.text('fa'), isNot(awgProblem!.text('en')));
     expect(awgOptions({'Jc': '5'}), {'jc': 5});
     expect(awgProblem, isNull, reason: 'cleared by a read that was accepted');
     // On and off, as the file writes them.
@@ -277,6 +320,53 @@ void main() {
     // With text around it (pasted from a message), and a link that is not one of Amnezia's is let alone.
     expect(extractSubscriptionLinks('here: $link thanks'), hasLength(2));
     expect(extractSubscriptionLinks('vpn://not-a-link'), isEmpty);
+  });
+
+  test('the series of QR codes of Amnezia\'s app is put together into the link', () {
+    const conf = '[Interface]\nPrivateKey = $_priv\nAddress = 10.8.1.2/32\nJc = 4\nJmin = 40\nJmax = 70\n'
+        '[Peer]\nPublicKey = $_pub\nAllowedIPs = 0.0.0.0/0\nEndpoint = 203.0.113.7:51820\n';
+    final json = utf8.encode(jsonEncode({
+      'description': 'By QR',
+      'containers': [
+        {'container': 'amnezia-awg', 'awg': {'last_config': jsonEncode({'config': conf})}},
+      ],
+    }));
+    final zipped = ZLibEncoder().convert(json);
+    final data = [(json.length >> 24) & 0xFF, (json.length >> 16) & 0xFF, (json.length >> 8) & 0xFF, json.length & 0xFF, ...zipped];
+    // As the app writes the parts: the mark 1984, the count, the number, the length, the bytes; in base64url.
+    const size = 40;
+    final count = (data.length / size).ceil();
+    expect(count, greaterThan(3), reason: 'the test needs a series');
+    final parts = [
+      for (var i = 0; i < count; i++)
+        () {
+          final chunk = data.sublist(i * size, (i + 1) * size > data.length ? data.length : (i + 1) * size);
+          return base64Url.encode([0x07, 0xC0, count, i, 0, 0, 0, chunk.length, ...chunk]);
+        }(),
+    ];
+
+    final reader = AmneziaQrParts();
+    // Out of order, one of them twice: only the last one that is missing completes it.
+    for (final i in [2, 0, 0]) {
+      final r = reader.feed(parts[i])!;
+      expect(r.link, isNull);
+    }
+    expect(reader.feed(parts[1]), isNotNull);
+    String? link;
+    for (var i = 3; i < count; i++) {
+      link = reader.feed(parts[i])!.link;
+    }
+    expect(link, isNotNull);
+    expect(link, startsWith('vpn://'));
+    final links = extractSubscriptionLinks(link!);
+    expect(links, hasLength(1));
+    expect(parseLink(links.single)!.name, 'By QR');
+    expect(parseLink(links.single)!.outbound['jc'], 4);
+
+    // Anything else is not a part.
+    expect(reader.feed('vless://x@example.com:443'), isNull);
+    expect(reader.feed('SGVsbG8gd29ybGQgaGVsbG8='), isNull);
+    expect(reader.feed('https://example.com/sub'), isNull);
   });
 
   test('the settings of AmneziaWG in Clash and sing-box subscriptions', () {

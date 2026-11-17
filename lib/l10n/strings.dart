@@ -6,6 +6,18 @@ import 'lang_vi.dart';
 import 'lang_zh_hans.dart';
 import 'lang_zh_hant.dart';
 
+extension SLanguage on S {
+  /// The code of this language as the tables of `tr` have it (both Chinese ones are `zh`).
+  String get languageCode => switch (this) {
+        SFa() => 'fa',
+        SZhHans() || SZhHant() => 'zh',
+        SVi() => 'vi',
+        SRu() => 'ru',
+        SAr() => 'ar',
+        _ => 'en',
+      };
+}
+
 /// UI strings in English, Chinese (simplified and traditional), Vietnamese, Russian, Persian
 /// and Arabic. The language follows the phone's, English when it is none of those (see [SDelegate]).
 abstract class S {
