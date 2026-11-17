@@ -1,0 +1,85 @@
+name: Add files to a release
+
+# For a release that was published while a part of its build had failed (a download that was cut, a runner that never
+# came): once that part has been built again, this puts its files on the release from the servers of GitHub, so no file
+# has to go through anyone's own connection. It takes the files of a finished run of "Build APK" by the start of their name.
+#
+#   gh workflow run add-release-files.yml -f tag=v1.13.0 -f run_id=44147945198 -f pattern='kumo-linux*'
+#
+# With manifests set to true it also refreshes the manifests in packaging/, which the release job does after a stable release
+# (and skipped when it could not publish).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag of the release that exists (v1.13.0)
+        required: true
+      run_id:
+        description: The run of "Build APK" that holds the files
+        required: true
+      pattern:
+        description: The start of the names of the files to add (a glob)
+        required: true
+        default: 'kumo-linux*'
+      manifests:
+        description: Refresh the manifests in packaging/ too (a stable release)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ inputs.tag }}
+      PATTERN: ${{ inputs.pattern }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: ${{ inputs.pattern }}
+          path: files
+          merge-multiple: true
+
+      - name: Put them on the release
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null
+          ls -l files
+          gh release upload "$TAG" files/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets | length'
+
+  packaging:
+    if: inputs.manifests
+    needs: [add]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: main
+
+      - name: Refresh the manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: pwsh tools/packaging.ps1 -Tag "$TAG"
+
+      - name: Commit them
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packaging
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+          else
+            git commit -m "Update the package manifests for $TAG"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
