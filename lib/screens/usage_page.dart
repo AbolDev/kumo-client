@@ -4,10 +4,29 @@ import '../core/usage_stats.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
 import '../widgets/flag_name.dart';
-import 'home_page.dart' show confirmDeletion;
 
 const _downColor = Colors.green;
 const _upColor = Colors.blue;
+
+/// Asks before every day of the statistics is erased.
+Future<bool> _confirmErase(BuildContext context) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        icon: const Icon(Icons.delete_forever_outlined),
+        title: Text(tr(dialog, 'resetStatsAsk')),
+        content: Text(tr(dialog, 'resetStatsWarn')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: Text(MaterialLocalizations.of(dialog).cancelButtonLabel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialog, true),
+              child: Text(MaterialLocalizations.of(dialog).deleteButtonTooltip)),
+        ],
+      ),
+    ) ??
+    false;
 
 enum _Period { today, week, month, all }
 
@@ -57,7 +76,9 @@ class _UsagePageState extends State<UsagePage> {
             tooltip: tr(context, 'resetStats'),
             icon: const Icon(Icons.delete_outline),
             onPressed: () async {
-              if (await confirmDeletion(context, state)) {
+              // Always asked, whatever the setting for single deletions says: this erases every day at once and
+              // cannot be undone.
+              if (await _confirmErase(context)) {
                 setState(() => _picked = null);
                 state.resetUsage();
               }

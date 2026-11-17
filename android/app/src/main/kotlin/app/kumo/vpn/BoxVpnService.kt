@@ -802,6 +802,16 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 process.inputStream.bufferedReader().forEachLine {
                     Log.d("xray", it)
                     if (output.length < 2000) output.append(it).append('\n')
+                    // What Xray says goes to the log of the app too (Settings > Logs, subject "core"): when the
+                    // tunnel of a WARP or noise server stalls, its own words are the only thing that tells why.
+                    // Xray writes "2026/11/17 09:03:31.123456 [Warning] text": the time is the log's own.
+                    val level = when {
+                        it.contains("[Error]") -> 2
+                        it.contains("[Warning]") -> 3
+                        it.contains("[Debug]") -> 5
+                        else -> 4
+                    }
+                    VpnBridge.addCoreLog(level, "xray: " + it.replace(Regex("^\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}(\\.\\d+)? "), ""))
                 }
             } catch (_: Exception) {
             }

@@ -42,6 +42,7 @@ class SwitchOption extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.secondary,
+    this.titleTrailing,
     this.contentPadding,
     this.dense = false,
   });
@@ -53,8 +54,12 @@ class SwitchOption extends StatelessWidget {
   /// Null shows the option disabled.
   final ValueChanged<bool>? onChanged;
 
-  /// An icon (or another small widget) before the title.
+  /// An icon (or another small widget) before the title. In a list every row has one, so that the texts
+  /// start at the same place; it stands in the middle of the row, as in a [ListTile].
   final Widget? secondary;
+
+  /// A small widget between the title and the switch (the information button of a long description).
+  final Widget? titleTrailing;
   final EdgeInsetsGeometry? contentPadding;
   final bool dense;
 
@@ -72,16 +77,17 @@ class SwitchOption extends StatelessWidget {
         child: Padding(
           padding: (contentPadding ?? const EdgeInsets.symmetric(horizontal: 16))
               .add(EdgeInsets.symmetric(vertical: dense ? 4 : 8)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
             if (secondary != null)
               Padding(
-                padding: const EdgeInsetsDirectional.only(top: 4, end: 16),
+                padding: const EdgeInsetsDirectional.only(end: 16),
                 child: IconTheme.merge(data: IconThemeData(color: faded(scheme.onSurfaceVariant)), child: secondary!),
               ),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Expanded(child: DefaultTextStyle.merge(style: titleStyle, child: title)),
+                  if (titleTrailing != null) titleTrailing!,
                   const SizedBox(width: 12),
                   Switch(
                     value: value,
@@ -112,6 +118,7 @@ const longDescription = 90;
 class InfoSwitchTile extends StatelessWidget {
   const InfoSwitchTile({
     super.key,
+    required this.icon,
     required this.title,
     required this.description,
     required this.value,
@@ -120,6 +127,8 @@ class InfoSwitchTile extends StatelessWidget {
     this.caution = false,
   });
 
+  /// The icon before the title: every option of a list has one, the information button is not in its place.
+  final IconData icon;
   final String title;
   final String description;
   final bool value;
@@ -137,10 +146,14 @@ class InfoSwitchTile extends StatelessWidget {
       onChanged: onChanged,
       title: tag || caution ? taggedTitle(title, caution: caution) : Text(title),
       subtitle: Text(description, maxLines: long ? 2 : null, overflow: long ? TextOverflow.ellipsis : null),
-      secondary: long
+      secondary: Icon(icon),
+      titleTrailing: long
           ? IconButton(
               tooltip: tr(context, 'moreInfo'),
-              icon: const Icon(Icons.info_outline),
+              icon: const Icon(Icons.info_outline, size: 20),
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () => showInfo(context, title, description),
             )
           : null,

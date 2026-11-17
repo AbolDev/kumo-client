@@ -592,6 +592,60 @@ HKEY_LOCAL_MACHINE\HARDWARE\DESCRIPTION\System\BIOS
       await r.reporter.tick();
       expect(r.calls, isEmpty);
     });
+
+    group('its file is its own (the statistics of data used have theirs)', () {
+      final statistics = jsonEncode({
+        'days': {
+          '2026-11-01': [10, 5, 60],
+          '2026-11-02': [20, 7, 90],
+        },
+        'servers': {
+          'A': [30, 12, 150, 1],
+        },
+        'public': [0, 0],
+        'warp': [0, 0],
+        'peak': [1, 1],
+      });
+
+      test('a ping is never written into the file of the statistics, and the statistics are never read as its state', () async {
+        final r = Rig();
+        r.files[UsageReporter.legacyFile] = statistics;
+        await r.reporter.tick();
+        expect(r.calls, hasLength(1));
+        expect(r.files[UsageReporter.legacyFile], statistics, reason: 'the days are still there');
+        expect(jsonDecode(r.files[UsageReporter.file]!), containsPair('day', '2026-11-07'));
+        expect(jsonDecode(r.files[UsageReporter.file]!), isNot(contains('days')));
+      });
+
+      test('the choice a version before the split kept in the shared file moves to its own', () async {
+        final r = Rig();
+        r.files[UsageReporter.legacyFile] = jsonEncode({'enabled': false, 'opt_out_sent': true, 'fallback_id': 'f' * 64});
+        await r.reporter.load();
+        expect(r.reporter.enabled, isFalse);
+        expect(jsonDecode(r.files[UsageReporter.file]!), containsPair('enabled', false));
+        await r.reporter.tick();
+        expect(r.calls, isEmpty);
+      });
+
+      test('once it has its own file the old one is not looked at again', () async {
+        final r = Rig();
+        r.files[UsageReporter.file] = jsonEncode({'enabled': true, 'day': '2026-11-07', 'version': r.version});
+        r.files[UsageReporter.legacyFile] = jsonEncode({'enabled': false});
+        await r.reporter.load();
+        expect(r.reporter.enabled, isTrue);
+        await r.reporter.tick();
+        expect(r.calls, isEmpty, reason: 'today was sent already');
+      });
+
+      test('turning it off and on leaves the statistics alone', () async {
+        final r = Rig();
+        r.files[UsageReporter.legacyFile] = statistics;
+        await r.reporter.load();
+        await r.reporter.setEnabled(false);
+        await r.reporter.setEnabled(true);
+        expect(r.files[UsageReporter.legacyFile], statistics);
+      });
+    });
   });
 
   group('the way a ping travels', () {

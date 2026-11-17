@@ -97,6 +97,46 @@ void main() {
     expect(jsonDecode((await vpn.readFile('servers.json'))!), isA<Map>());
   });
 
+  test('one damaged day or server does not take the other statistics down', () async {
+    await vpn.writeFile(
+        'usage.json',
+        jsonEncode({
+          'days': {
+            '2026-10-24': [10, 20, 30],
+            '2026-10-25': 'broken',
+            '2026-10-26': [1, 2],
+          },
+          'servers': {
+            'A': [5, 6, 7, 8],
+            'B': ['x'],
+            'C': 99, // an older version: only the total
+          },
+          'public': [3, 4],
+          'warp': 'broken',
+          'peak': [7, 9],
+        }));
+    final state = AppState();
+    await state.loadUsageForTest();
+    expect(state.dayUsage['2026-10-24'], [10, 20, 30]);
+    expect(state.dayUsage.containsKey('2026-10-25'), isFalse);
+    expect(state.dayUsage['2026-10-26'], [1, 2, 0]);
+    expect(state.serverUsage['A'], [5, 6, 7, 8]);
+    expect(state.serverUsage.containsKey('B'), isFalse);
+    expect(state.serverUsage['C'], [0, 0, 0, 0, 99]);
+    expect(state.publicUsage, [3, 4]);
+    expect(state.warpUsage, [0, 0]);
+    expect(state.peakDown, 7);
+    expect(state.peakUp, 9);
+  });
+
+  test('a statistics file nothing can read is kept aside, not written over', () async {
+    await File(path('usage.json')).writeAsString('not json at all');
+    final state = AppState();
+    await state.loadUsageForTest();
+    expect(state.dayUsage, isEmpty);
+    expect(File(path('usage.json.broken')).readAsStringSync(), 'not json at all');
+  });
+
   test('nothing is set aside when there was no file', () async {
     final state = AppState();
     await state.loadStoredForTest();

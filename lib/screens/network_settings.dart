@@ -31,9 +31,10 @@ List<Widget> networkSections(
   final o = state.net;
   final win = isDesktop; // the desktop has no per-phone options
 
-  Widget flag(String title, String desc, bool value, void Function(bool) set,
+  Widget flag(IconData icon, String title, String desc, bool value, void Function(bool) set,
           {bool advanced = false, bool caution = false}) =>
       InfoSwitchTile(
+        icon: icon,
         title: title,
         description: desc,
         value: value,
@@ -62,7 +63,7 @@ List<Widget> networkSections(
     section(Icons.lan, tr(context, 'network'), [
       // On Windows this switch lives on the home screen.
       if (!win)
-        flag(tr(context, 'tun'), tr(context, 'tunDesc'), o.tun,
+        flag(Icons.vpn_lock_outlined, tr(context, 'tun'), tr(context, 'tunDesc'), o.tun,
             (v) => o.tun = v),
       ListTile(
         leading: const Icon(Icons.numbers),
@@ -84,7 +85,8 @@ List<Widget> networkSections(
             ? tr(context, 'proxyLoginOff')
             : tr(context, 'proxyLoginOn', {'user': o.proxyUser})),
         onTap: () => _editProxyLogin(context, state),
-      ),            flag(tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),
+      ),
+      flag(Icons.gpp_bad_outlined, tr(context, 'killSwitch'), tr(context, 'killSwitchDesc'),
           o.killSwitch, (v) => o.killSwitch = v, caution: true),
       if (!win)
         ListTile(
@@ -92,7 +94,7 @@ List<Widget> networkSections(
           title: Text(tr(context, 'vpnSettings')),
           onTap: VpnChannel.openVpnSettings,
         ),
-      flag(tr(context, 'failover'), tr(context, 'failoverDesc'), o.failover,
+      flag(Icons.change_circle_outlined, tr(context, 'failover'), tr(context, 'failoverDesc'), o.failover,
           (v) => o.failover = v),
       SwitchOption(
         value: o.shareLan,
@@ -175,13 +177,13 @@ List<Widget> networkSections(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: _DnsField(state: state),
         ),
-      flag(tr(context, 'fakeIp'), tr(context, 'fakeIpDesc'), o.fakeIp,
+      flag(Icons.masks_outlined, tr(context, 'fakeIp'), tr(context, 'fakeIpDesc'), o.fakeIp,
           (v) => o.fakeIp = v),
-      flag(tr(context, 'encryptedLookup'), tr(context, 'encryptedLookupDesc'), o.encryptedLookup,
+      flag(Icons.lock_outline, tr(context, 'encryptedLookup'), tr(context, 'encryptedLookupDesc'), o.encryptedLookup,
           (v) => o.encryptedLookup = v),
-      flag(tr(context, 'strictDns'), tr(context, 'strictDnsDesc'), o.strictDns,
+      flag(Icons.dns_outlined, tr(context, 'strictDns'), tr(context, 'strictDnsDesc'), o.strictDns,
           (v) => o.strictDns = v),
-      flag(tr(context, 'blockStun'), tr(context, 'blockStunDesc'), o.blockStun,
+      flag(Icons.videocam_off_outlined, tr(context, 'blockStun'), tr(context, 'blockStunDesc'), o.blockStun,
           (v) => o.blockStun = v),
       ListTile(
         leading: const Icon(Icons.travel_explore),
@@ -191,7 +193,7 @@ List<Widget> networkSections(
       reset('dns'),
     ]),
     section(Icons.shield_moon_outlined, tr(context, 'adsSection'), [
-      flag(tr(context, 'blockAds'), tr(context, 'blockAdsDesc'), o.blockAds,
+      flag(Icons.do_not_disturb_on_outlined, tr(context, 'blockAds'), tr(context, 'blockAdsDesc'), o.blockAds,
           (v) => o.blockAds = v),
       if (o.blockAds)
         ListTile(
@@ -209,13 +211,13 @@ List<Widget> networkSections(
         ),
       if (o.blockAds) _AdsStatusTile(state: state),
       if (o.blockAds)
-        flag(tr(context, 'blockCookieBanners'), tr(context, 'blockCookieBannersDesc'), o.blockCookieBanners,
+        flag(Icons.cookie_outlined, tr(context, 'blockCookieBanners'), tr(context, 'blockCookieBannersDesc'), o.blockCookieBanners,
             (v) => o.blockCookieBanners = v),
       if (o.blockAds)
-        flag(tr(context, 'blockAffiliate'), tr(context, 'blockAffiliateDesc'), o.blockAffiliate,
+        flag(Icons.link_off, tr(context, 'blockAffiliate'), tr(context, 'blockAffiliateDesc'), o.blockAffiliate,
             (v) => o.blockAffiliate = v),
       if (o.blockAds && o.adsLevel != 'standard')
-        flag(tr(context, 'blockPublicDoh'), tr(context, 'blockPublicDohDesc'), o.blockPublicDoh,
+        flag(Icons.https_outlined, tr(context, 'blockPublicDoh'), tr(context, 'blockPublicDohDesc'), o.blockPublicDoh,
             (v) => o.blockPublicDoh = v),
       if (o.blockAds)
         ListTile(
@@ -227,11 +229,11 @@ List<Widget> networkSections(
       reset('ads'),
     ]),
     section(Icons.tune, tr(context, 'advanced'), [
-      flag(tr(context, 'tlsFragment'), tr(context, 'tlsFragmentDesc'),
+      flag(Icons.content_cut, tr(context, 'tlsFragment'), tr(context, 'tlsFragmentDesc'),
           o.tlsFragment, (v) => o.tlsFragment = v),
-      flag(tr(context, 'tlsRecordFragment'), tr(context, 'tlsRecordFragmentDesc'),
+      flag(Icons.call_split, tr(context, 'tlsRecordFragment'), tr(context, 'tlsRecordFragmentDesc'),
           o.tlsRecordFragment, (v) => o.tlsRecordFragment = v),
-      flag(tr(context, 'mux'), tr(context, 'muxDesc'), o.mux,
+      flag(Icons.merge_type, tr(context, 'mux'), tr(context, 'muxDesc'), o.mux,
           (v) => o.mux = v),
       if (o.mux)
         ListTile(
@@ -244,9 +246,9 @@ List<Widget> networkSections(
             if (v != null) await state.updateNet((o) => o.muxProtocol = v);
           },
         ),
-      flag(tr(context, 'tcpFastOpen'), tr(context, 'tcpFastOpenDesc'), o.tcpFastOpen,
+      flag(Icons.bolt, tr(context, 'tcpFastOpen'), tr(context, 'tcpFastOpenDesc'), o.tcpFastOpen,
           (v) => o.tcpFastOpen = v),
-      flag(tr(context, 'tcpMultiPath'), tr(context, 'tcpMultiPathDesc'), o.tcpMultiPath,
+      flag(Icons.timeline, tr(context, 'tcpMultiPath'), tr(context, 'tcpMultiPathDesc'), o.tcpMultiPath,
           (v) => o.tcpMultiPath = v),
       ListTile(
         leading: const Icon(Icons.timer_outlined),

@@ -231,7 +231,9 @@ class AppState extends ChangeNotifier {
         final text = (coreLogLine(m[3]!) ?? '').replaceFirst(RegExp(r'^\d+\|'), '');
         if (text.isEmpty || text == last) continue;
         last = text;
-        if (written >= 150) {
+        // A burst is cut short, but never the warnings and the errors in it: at the debug level the lines of
+        // every connection would push out the one line that says what went wrong.
+        if (written >= 150 && int.parse(m[2]!) > 3) {
           left++;
           continue;
         }
@@ -1576,6 +1578,10 @@ class AppState extends ChangeNotifier {
   @visibleForTesting
   bool get storeLockedForTest => _storeLocked;
 
+  /// Reads the saved statistics of data used, as the start of the app does.
+  @visibleForTesting
+  Future<void> loadUsageForTest() => _loadUsage();
+
   CoreApi? get api => apiPort == null || apiSecret == null
       ? null
       : CoreApi(apiPort!, apiSecret!);
@@ -1724,47 +1730,76 @@ class AppState extends ChangeNotifier {
   /// Saves the usage now (the app is being left or closed), not at the next half minute.
   Future<void> flushUsage() => _usageDirty ? _writeUsage() : Future.value();
 
-  /// Adds what the phone's VPN service counted while the app's screen was closed.
+  /// What the phone's VPN service counted while the app was closed and handed over, until it is saved with the
+  /// statistics: the service forgets it at the hand-over, so a failure or a kill in between would lose those days.
+  static const _takenUsageFile = 'usage_pending_taken.json';
+
+  /// Adds what the phone's VPN service counted while the app's screen was closed. Returns false when [raw] cannot be
+  /// read as that (nothing is added then).
+  bool _addPending(String raw) {
+    final Map<String, dynamic> j;
+    try {
+      j = jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return false;
+    }
+    List<int> numbers(Object? v, int length) => [
+          for (var i = 0; i < length; i++) (v is List && i < v.length && v[i] is num) ? (v[i] as num).toInt() : 0,
+        ];
+    (j['days'] as Map?)?.forEach((k, v) {
+      final add = numbers(v, 3);
+      final day = dayUsage.putIfAbsent('$k', () => [0, 0, 0]);
+      for (var i = 0; i < 3; i++) {
+        day[i] += add[i];
+      }
+    });
+    (j['servers'] as Map?)?.forEach((k, v) {
+      final add = numbers(v, 4);
+      final s = serverUsage.putIfAbsent('$k', () => [0, 0, 0, 0]);
+      for (var i = 0; i < 3; i++) {
+        s[i] += add[i];
+      }
+      if (add[3] > s[3]) s[3] = add[3];
+      if (_isPublic('$k')) {
+        publicUsage[0] += add[0];
+        publicUsage[1] += add[1];
+      } else if (_isWarp('$k')) {
+        warpUsage[0] += add[0];
+        warpUsage[1] += add[1];
+      }
+    });
+    _usageDirty = true;
+    return true;
+  }
+
   Future<void> _mergePendingUsage() async {
     if (!Platform.isAndroid) return;
     try {
+      // What an earlier start took and did not finish saving comes first.
+      final left = await VpnChannel.readFile(_takenUsageFile);
+      if (left != null) {
+        if (_addPending(left)) await _writeUsage();
+        await VpnChannel.deleteFile(_takenUsageFile);
+      }
       final raw = await VpnChannel.takeUsage();
       if (raw == null) return;
-      final j = jsonDecode(raw) as Map<String, dynamic>;
-      List<int> numbers(Object? v, int length) => [
-            for (var i = 0; i < length; i++) (v is List && i < v.length) ? (v[i] as num).toInt() : 0,
-          ];
-      (j['days'] as Map?)?.forEach((k, v) {
-        final add = numbers(v, 3);
-        final day = dayUsage.putIfAbsent('$k', () => [0, 0, 0]);
-        for (var i = 0; i < 3; i++) {
-          day[i] += add[i];
-        }
-      });
-      (j['servers'] as Map?)?.forEach((k, v) {
-        final add = numbers(v, 4);
-        final s = serverUsage.putIfAbsent('$k', () => [0, 0, 0, 0]);
-        for (var i = 0; i < 3; i++) {
-          s[i] += add[i];
-        }
-        if (add[3] > s[3]) s[3] = add[3];
-        if (_isPublic('$k')) {
-          publicUsage[0] += add[0];
-          publicUsage[1] += add[1];
-        } else if (_isWarp('$k')) {
-          warpUsage[0] += add[0];
-          warpUsage[1] += add[1];
-        }
-      });
-      _usageDirty = true;
-      await _writeUsage();
+      await VpnChannel.writeFile(_takenUsageFile, raw);
+      if (_addPending(raw)) await _writeUsage();
+      await VpnChannel.deleteFile(_takenUsageFile);
     } catch (_) {
-      // nothing to add
+      // nothing to add (what was taken stays in its file for the next start)
     }
   }
 
   Future<void> _loadUsage() async {
     final read = await _readJson(_usageFile);
+    if (read.broken) {
+      // Neither the file nor its copy can be read: it is set aside (kept as usage.json.broken), not written over
+      // by the next save as if it were new.
+      try {
+        await VpnChannel.moveAside(_usageFile);
+      } catch (_) {}
+    }
     final j = read.data;
     if (j != null) {
       try {
@@ -1773,48 +1808,57 @@ class AppState extends ChangeNotifier {
           peakDown = (peak[0] as num).toInt();
           peakUp = (peak[1] as num).toInt();
         }
-        _readUsage(j);
       } catch (_) {
-        // no statistics yet
+        // no peak yet
       }
+      _readUsage(j);
     }
     await _mergePendingUsage();
   }
 
+  /// Reads the saved statistics, each entry on its own: one that is damaged is left out and the others stay (they
+  /// used to be dropped with it, and the next save wrote what was left over the file).
   void _readUsage(Map<String, dynamic> j) {
-    try {
-      final pub = j['public'];
-      if (pub is List && pub.length == 2) {
-        publicUsage[0] = (pub[0] as num).toInt();
-        publicUsage[1] = (pub[1] as num).toInt();
-      }
-      final warpSaved = j['warp'];
-      if (warpSaved is List && warpSaved.length == 2) {
-        warpUsage[0] = (warpSaved[0] as num).toInt();
-        warpUsage[1] = (warpSaved[1] as num).toInt();
-      }
-      (j['days'] as Map?)?.forEach((k, v) {
-        final l = (v as List).map((e) => (e as num).toInt()).toList();
-        if (l.length >= 2) dayUsage['$k'] = [l[0], l[1], l.length > 2 ? l[2] : 0];
-      });
-      (j['servers'] as Map?)?.forEach((k, v) {
-        if (v is num) {
-          // Saved by an older version: only the total is known.
-          serverUsage['$k'] = [0, 0, 0, 0, v.toInt()];
-        } else if (v is List) {
-          final l = v.map((e) => (e as num).toInt()).toList();
-          while (l.length < 4) {
-            l.add(0);
-          }
-          serverUsage['$k'] = l;
+    void pair(Object? v, List<int> into) {
+      try {
+        if (v is List && v.length == 2) {
+          into[0] = (v[0] as num).toInt();
+          into[1] = (v[1] as num).toInt();
         }
-      });
-      // Keep about a year and a half; older days only make the file longer.
-      final old = _dayKey(DateTime.now().subtract(const Duration(days: 550)));
-      dayUsage.removeWhere((k, _) => k.compareTo(old) < 0);
-    } catch (_) {
-      // no statistics yet
+      } catch (_) {}
     }
+
+    pair(j['public'], publicUsage);
+    pair(j['warp'], warpUsage);
+    final days = j['days'];
+    if (days is Map) {
+      days.forEach((k, v) {
+        try {
+          final l = (v as List).map((e) => (e as num).toInt()).toList();
+          if (l.length >= 2) dayUsage['$k'] = [l[0], l[1], l.length > 2 ? l[2] : 0];
+        } catch (_) {}
+      });
+    }
+    final servers = j['servers'];
+    if (servers is Map) {
+      servers.forEach((k, v) {
+        try {
+          if (v is num) {
+            // Saved by an older version: only the total is known.
+            serverUsage['$k'] = [0, 0, 0, 0, v.toInt()];
+          } else if (v is List) {
+            final l = v.map((e) => (e as num).toInt()).toList();
+            while (l.length < 4) {
+              l.add(0);
+            }
+            serverUsage['$k'] = l;
+          }
+        } catch (_) {}
+      });
+    }
+    // Keep about a year and a half; older days only make the file longer.
+    final old = _dayKey(DateTime.now().subtract(const Duration(days: 550)));
+    dayUsage.removeWhere((k, _) => k.compareTo(old) < 0);
   }
 
   void resetUsage() {

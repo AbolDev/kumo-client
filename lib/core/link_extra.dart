@@ -372,7 +372,7 @@ ProxyConfig? _masque(String link) {
       },
     },
   };
-  return _make(link, 'masque', _name(u, 'WARP masque-$alpn'), u.host, port, xray: xray, xrayNote: 'masque $alpn');
+  return _make(link, 'masque', _name(u, 'WARP masque-$alpn'), u.host, port, xray: xray, xrayNote: alpn);
 }
 
 /// The variables of the path of a MASQUE server that Xray fills in itself (RFC 6570 templates of RFC 9484).

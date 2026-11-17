@@ -312,7 +312,8 @@ class _SettingsPageState extends State<SettingsPage> {
         : tr(context, 'limitMb', {'n': v});
   }
 
-  Widget _switch(String key, bool value, String title, String desc) => SwitchOption(
+  Widget _switch(IconData icon, String key, bool value, String title, String desc) => SwitchOption(
+        secondary: Icon(icon),
         value: value,
         onChanged: (v) => state.setFlag(key, v),
         title: Text(title),
@@ -418,8 +419,8 @@ class _SettingsPageState extends State<SettingsPage> {
     };
     final flat = [
       _section(Icons.rss_feed, t.subSettings, [
-        _switch('autoUpdateSubs', state.autoUpdateSubs, t.autoUpdateSubs, t.autoUpdateSubsDesc),
-        _switch('updateOnStartup', state.updateOnStartup, t.updateOnStartup, t.updateOnStartupDesc),
+        _switch(Icons.sync, 'autoUpdateSubs', state.autoUpdateSubs, t.autoUpdateSubs, t.autoUpdateSubsDesc),
+        _switch(Icons.rocket_launch_outlined, 'updateOnStartup', state.updateOnStartup, t.updateOnStartup, t.updateOnStartupDesc),
         ListTile(
           leading: const Icon(Icons.timer_outlined),
           title: Text(tr(context, 'defaultInterval')),
@@ -434,15 +435,15 @@ class _SettingsPageState extends State<SettingsPage> {
             if (v != null) state.setSubInterval(v);
           },
         ),
-        _switch('measurePing', state.measurePing, tr(context, 'measurePing'),
+        _switch(Icons.network_ping, 'measurePing', state.measurePing, tr(context, 'measurePing'),
             tr(context, 'measurePingDesc')),
-        _switch('usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
+        _switch(Icons.notifications_active_outlined, 'usageAlerts', state.usageAlerts, tr(context, 'usageAlerts'),
             tr(context, 'usageAlertsDesc')),
-        _switch('allowInsecure', state.allowInsecure, t.allowInsecure, t.allowInsecureDesc),
-        _switch('showCollector', state.showCollector, t.showCollector, t.showCollectorDesc),
+        _switch(Icons.gpp_maybe_outlined, 'allowInsecure', state.allowInsecure, t.allowInsecure, t.allowInsecureDesc),
+        _switch(Icons.public, 'showCollector', state.showCollector, t.showCollector, t.showCollectorDesc),
       ]),
       _section(Icons.apps, t.appSettings, [
-        _switch('autoConnect', state.autoConnect, t.autoConnect, t.autoConnectDesc),
+        _switch(Icons.power_settings_new, 'autoConnect', state.autoConnect, t.autoConnect, t.autoConnectDesc),
         ListTile(
           leading: const Icon(Icons.bedtime_outlined),
           title: Text(tr(context, 'sleepTimer')),
@@ -470,9 +471,10 @@ class _SettingsPageState extends State<SettingsPage> {
             if (v != null) state.setDailyCapMb(v);
           },
         ),
-        _switch('restartOnChange', state.restartOnChange, t.restartOnChange, t.restartOnChangeDesc),
-        _switch('confirmDelete', state.confirmDelete, t.confirmDelete, t.confirmDeleteDesc),
+        _switch(Icons.restart_alt, 'restartOnChange', state.restartOnChange, t.restartOnChange, t.restartOnChangeDesc),
+        _switch(Icons.help_outline, 'confirmDelete', state.confirmDelete, t.confirmDelete, t.confirmDeleteDesc),
         SwitchOption(
+          secondary: const Icon(Icons.bar_chart),
           value: state.usage.enabled,
           onChanged: (v) => state.usage.setEnabled(v),
           title: Text(tr(context, 'usageStats')),
@@ -522,11 +524,13 @@ class _SettingsPageState extends State<SettingsPage> {
       if (isDesktop)
         _section(Icons.desktop_windows, tr(context, Platform.isWindows ? 'windows' : 'desktop'), [
           SwitchOption(
+            secondary: const Icon(Icons.minimize),
             value: state.net.minimizeToTray,
             onChanged: (v) => state.updateNet((o) => o.minimizeToTray = v, reconnect: false),
             title: Text(tr(context, 'minimizeToTray')),
           ),
           SwitchOption(
+            secondary: const Icon(Icons.play_circle_outline),
             value: state.net.startWithWindows,
             onChanged: (v) async {
               // The switch follows what really happened, not what was asked.
@@ -597,16 +601,16 @@ class _SettingsPageState extends State<SettingsPage> {
             state.setThemeColor,
           ),
         ),
-        _switch('blackTheme', state.blackTheme, tr(context, 'blackTheme'), tr(context, 'blackThemeDesc')),
-        if (Platform.isAndroid) _switch('haptics', state.haptics, tr(context, 'haptics'), tr(context, 'hapticsDesc')),
+        _switch(Icons.contrast, 'blackTheme', state.blackTheme, tr(context, 'blackTheme'), tr(context, 'blackThemeDesc')),
+        if (Platform.isAndroid) _switch(Icons.vibration, 'haptics', state.haptics, tr(context, 'haptics'), tr(context, 'hapticsDesc')),
         const Divider(height: 1),
-        _switch(
+        _switch(Icons.speed, 
             'showSpeed', state.showSpeed, tr(context, 'notifSpeed'), tr(context, 'notifSpeedDesc')),
-        _switch('showVolume', state.showVolume, tr(context, 'notifVolume'),
+        _switch(Icons.data_usage, 'showVolume', state.showVolume, tr(context, 'notifVolume'),
             tr(context, 'notifVolumeDesc')),
-        _switch('showName', state.showName, tr(context, 'notifName'), tr(context, 'notifNameDesc')),
+        _switch(Icons.badge_outlined, 'showName', state.showName, tr(context, 'notifName'), tr(context, 'notifNameDesc')),
         if (Platform.isAndroid)
-          _switch('idleNotification', state.idleNotification, tr(context, 'notifIdle'),
+          _switch(Icons.notifications_none, 'idleNotification', state.idleNotification, tr(context, 'notifIdle'),
               tr(context, 'notifIdleDesc')),
       ]),
       _section(Icons.monitor_heart_outlined, tr(context, 'liveConnections'), [

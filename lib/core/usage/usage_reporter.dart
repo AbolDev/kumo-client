@@ -42,7 +42,15 @@ class UsageReporter {
   })  : _now = now ?? DateTime.now,
         _random = random ?? Random.secure();
 
-  static const file = 'usage.json';
+  /// Where the state of the count is kept (the choice, the day of the last ping, the version, the country, the
+  /// fallback id): a file of its own.
+  static const file = 'usage_ping.json';
+
+  /// The file the earlier versions (1.12.0 to 1.12.2 beta 14) kept this state in, which is also the file of the
+  /// statistics of data used: each wrote over the other, so the statistics lost their days and this state, the
+  /// choice to send nothing among it, was lost with every save of the statistics. It is only read, once, to move
+  /// what it still holds to [file]; it is never written here.
+  static const legacyFile = 'usage.json';
 
   final Future<String?> Function(String name) read;
   final Future<void> Function(String name, String content) write;
@@ -108,16 +116,25 @@ class UsageReporter {
 
   Future<void> _read() async {
     try {
-      final text = await read(file);
+      var text = await read(file);
+      var moved = false;
+      if (text == null) {
+        // Not there yet: what an earlier version kept in the file of the statistics moves here, when it is there.
+        text = await read(legacyFile);
+        moved = true;
+      }
       if (text == null) return;
       final j = jsonDecode(text);
       if (j is! Map) return;
+      // The old file usually holds the statistics alone (they wrote over this state): then there is nothing to move.
+      if (moved && !const ['enabled', 'day', 'version', 'opt_out_sent', 'country', 'fallback_id'].any(j.containsKey)) return;
       if (j['enabled'] is bool) _enabled = j['enabled'] as bool;
       _day = j['day'] is String ? j['day'] as String : null;
       _version = j['version'] is String ? j['version'] as String : null;
       _optOutSent = j['opt_out_sent'] == true;
       _country = isCountry(j['country'] as String?) ? j['country'] as String : null;
       _fallbackId = j['fallback_id'] is String ? j['fallback_id'] as String : null;
+      if (moved) await _save();
     } catch (_) {}
   }
 

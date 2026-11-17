@@ -171,9 +171,15 @@ class HomePage extends StatelessWidget {
                   child: _MenuRow(Icons.network_check, tr(context, 'menuTcpingAll')),
                 ),
                 PopupMenuItem(
-                  enabled: state.canTestReal,
-                  value: () => state.pingAll(real: true),
-                  child: _MenuRow(Icons.speed, tr(context, 'menuRealDelayAll')),
+                  value: () {
+                    if (state.canTestReal) {
+                      state.pingAll(real: true);
+                    } else {
+                      toast(context, S.of(context).realDelayNeedsDisconnect);
+                    }
+                  },
+                  child: _RealDelayRow(
+                      state: state, label: tr(context, 'menuRealDelayAll'), can: () => state.canTestReal),
                 ),
                 PopupMenuItem(
                   value: state.clearTestResults,
@@ -557,6 +563,23 @@ class _MenuRow extends StatelessWidget {
         const SizedBox(width: 12),
         Flexible(child: Text(label))
       ]);
+}
+
+/// The "Real delay" row of a menu. It is dimmed while the delay cannot be taken (a connection is up) and follows the
+/// connection while the menu is open, so it wakes up when a disconnect ends; the item itself is never switched off,
+/// because a menu keeps the state it had when it was opened. A tap that cannot be served says why.
+class _RealDelayRow extends StatelessWidget {
+  const _RealDelayRow({required this.state, required this.label, required this.can});
+
+  final AppState state;
+  final String label;
+  final bool Function() can;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: state,
+        builder: (_, __) => Opacity(opacity: can() ? 1 : 0.38, child: _MenuRow(Icons.speed, label)),
+      );
 }
 
 class _ConnectCard extends StatelessWidget {
@@ -1847,6 +1870,11 @@ class _GroupHeader extends StatelessWidget {
           if (remove != null) state.cancelPing(group, removeUntested: remove);
         });
       case _GroupAction.realDelay:
+        // The menu may have been opened while a connection was up: what can be done is decided now.
+        if (!state.canTestReal) {
+          toast(context, S.of(context).realDelayNeedsDisconnect);
+          return;
+        }
         if (group.kind == GroupKind.warp) {
           state.ping(group, real: true);
           return;
@@ -2010,9 +2038,8 @@ class _GroupHeader extends StatelessWidget {
                         value: _GroupAction.tcping,
                         child: _MenuRow(Icons.network_check, t.tcping)),
                     PopupMenuItem(
-                        enabled: state.canTestReal,
                         value: _GroupAction.realDelay,
-                        child: _MenuRow(Icons.speed, t.realDelay)),
+                        child: _RealDelayRow(state: state, label: t.realDelay, can: () => state.canTestReal)),
                     PopupMenuItem(
                         value: _GroupAction.info,
                         child: _MenuRow(Icons.info_outline, tr(context, 'subInfo'))),
@@ -2034,9 +2061,8 @@ class _GroupHeader extends StatelessWidget {
                   value: _GroupAction.tcping,
                   child: _MenuRow(Icons.network_check, t.tcping)),
               PopupMenuItem(
-                  enabled: state.canTestReal,
                   value: _GroupAction.realDelay,
-                  child: _MenuRow(Icons.speed, t.realDelay)),
+                  child: _RealDelayRow(state: state, label: t.realDelay, can: () => state.canTestReal)),
               if (group.kind != GroupKind.manual && group.kind != GroupKind.cleanIp)
                 // One item that follows the update while the menu is open: "Cancel update" turns back
                 // into "Refresh" when the update ends. What a tap does is decided when it is tapped.
@@ -2440,9 +2466,9 @@ class _ConfigTile extends StatelessWidget {
                         value: _ConfigAction.tcping,
                         child: _MenuRow(Icons.network_check, t.tcping)),
                     PopupMenuItem(
-                        enabled: state.canTestReal,
                         value: _ConfigAction.realDelay,
-                        child: _MenuRow(Icons.speed, t.realDelay)),
+                        child: _RealDelayRow(
+                            state: state, label: t.realDelay, can: () => state.canTestNow(config, real: true))),
                     PopupMenuItem(
                         key: const ValueKey('menu-safety'),
                         value: _ConfigAction.safety,
