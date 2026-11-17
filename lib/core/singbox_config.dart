@@ -795,7 +795,10 @@ String _awgHelperConfig(ProxyConfig server, int port, {required String logLevel,
     'log': {'level': logLevel == 'error' ? 'error' : logLevel},
     'dns': {
       'servers': [
+        // The names of the sites are asked through the tunnel; the name of the server itself cannot be (the tunnel is not up
+        // yet, and it is what is being dialled), so it is asked the system's resolver.
         {'type': 'udp', 'tag': 'dns', 'server': dns, 'detour': 'proxy'},
+        {'type': 'local', 'tag': 'dns-local'},
       ],
       'final': 'dns',
       // A tunnel with no IPv6 address of its own cannot dial an IPv6 address: only IPv4 ones are asked for.
@@ -815,7 +818,7 @@ String _awgHelperConfig(ProxyConfig server, int port, {required String logLevel,
     ],
     'endpoints': [endpoint],
     'route': {
-      'default_domain_resolver': 'dns',
+      'default_domain_resolver': 'dns-local',
       // The endpoint is the only way out (with no outbound of its own the core makes a direct one, which is not wanted here).
       'final': 'proxy',
     },

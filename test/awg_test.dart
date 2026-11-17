@@ -69,7 +69,10 @@ void main() {
     expect(endpoint['jc'], 5);
     expect(endpoint['i1'], '<b 0xc0ffee><t><r 16>');
     expect(helper['route']['final'], 'proxy');
-    expect(((helper['dns'] as Map)['servers'] as List).single['detour'], 'proxy');
+    final dnsServers = (helper['dns'] as Map)['servers'] as List;
+    expect(dnsServers.firstWhere((s) => s['tag'] == 'dns')['detour'], 'proxy', reason: 'the names of the sites go through the tunnel');
+    expect(helper['route']['default_domain_resolver'], 'dns-local', reason: 'the name of the server does not');
+    expect(dnsServers.firstWhere((s) => s['tag'] == 'dns-local')['type'], 'local');
 
     // The official core goes to that port.
     final core = jsonDecode(buildSingBoxConfig([c], xrayPort: 34567, xrayAuth: (user: 'u', pass: 'p'), viaXray: true))
