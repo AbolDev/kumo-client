@@ -17,7 +17,10 @@ cp "$here/amneziawg/include_amneziawg.go.txt" "$sb/include/amneziawg.go"
 
 # The registry of endpoints knows the new type.
 if ! grep -q registerAmneziaWGEndpoint "$sb/include/registry.go"; then
-  sed -i 's/^\([[:space:]]*\)registerWireGuardEndpoint(registry)$/&\n\1registerAmneziaWGEndpoint(registry)/' "$sb/include/registry.go"
+  # (awk and not sed -i: the sed of macOS wants a suffix after -i and has no \n in a replacement.)
+  awk '{ print } /^[[:space:]]*registerWireGuardEndpoint\(registry\)$/ { match($0, /^[[:space:]]*/); print substr($0, 1, RLENGTH) "registerAmneziaWGEndpoint(registry)" }' \
+    "$sb/include/registry.go" > "$sb/include/registry.go.new"
+  mv "$sb/include/registry.go.new" "$sb/include/registry.go"
   grep -q registerAmneziaWGEndpoint "$sb/include/registry.go" || { echo "could not register the endpoint in include/registry.go" >&2; exit 1; }
 fi
 
