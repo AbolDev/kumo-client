@@ -59,7 +59,7 @@ The apps are not code-signed or on Google Play, so Play Protect, SmartScreen or 
 - One-tap connect, automatic fastest server, automatic switch when a server stops answering.
 - Whole device (Android) or local proxy; per-app routing, direct countries, your own routing rules.
 - Free public servers, your own configs and subscriptions (links, QR codes, files; Clash, sing-box, Xray and Surge formats).
-- Many protocols: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 and 2, TUIC, AnyTLS, WireGuard, SOCKS, SSH and more.
+- Many protocols: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 and 2, TUIC, AnyTLS, WireGuard, AmneziaWG, SOCKS, SSH and more.
 - Privacy: kill switch, strict DNS, WebRTC leak block, ad and tracker block, IP and DNS leak tests.
 - Speed tests, live speed and usage, widgets, tray icon, Android TV, seven languages.
 - Sleep timer and daily data cap; connect or disconnect from the launcher icon on the phone (long press) and from the command line on a computer (`kumo --connect`, `--disconnect`, `--toggle`; add `--minimized` to keep the window hidden).

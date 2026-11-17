@@ -2490,6 +2490,9 @@ class _ConfigTile extends StatelessWidget {
 /// no name gets one from the user.
 Future<void> importTextAndAsk(BuildContext context, AppState state, String text) async {
   final group = await state.importText(text);
+  // (Why an AmneziaWG server was refused; how far the series of Amnezia's QR codes has come.)
+  final note = state.importNote;
+  if (note != null && context.mounted) toast(context, note(S.of(context)));
   if (group == null || !context.mounted) return;
   // The name the provider or the link gave is filled in; with none, the field is empty (the
   // address is not shown as a hint).

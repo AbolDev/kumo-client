@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io' show File, InternetAddress, Platform;
 import 'dart:isolate';
 
+import 'awg.dart';
 import 'ovpn/ovpn_profile.dart';
 import 'warp/warp_profile.dart' show WarpNoise, parseWarpNoise;
 
@@ -75,6 +76,13 @@ class ProxyConfig {
   /// True when sing-box cannot carry this server (it needs Xray).
   bool get needsXray => outbound.isEmpty && xrayOutbound != null;
 
+  /// A server of AmneziaWG: WireGuard with its obfuscation (see awg.dart).
+  bool get isAmnezia => protocol == amneziaProtocol;
+
+  /// An AmneziaWG server that the core cannot carry itself (a computer's): kumo-awg carries it, and the core sends what is to
+  /// go through it to that program's SOCKS port (see buildAwgGroupConfig for several of them in the automatic group).
+  bool get viaAwgHelper => isAmnezia && !amneziaInCore && xrayOutbound != null;
+
   /// True when sing-box can carry this server.
   bool get canSingBox => outbound.isNotEmpty;
 
@@ -124,7 +132,7 @@ class ProxyConfig {
         ..domesticOnly = domesticOnly;
 
   /// Short text for lists, e.g. "vless" or "vless + xhttp".
-  String get label => needsXray ? '$protocol + $xrayNote' : protocol;
+  String get label => needsXray && !isAmnezia ? '$protocol + $xrayNote' : protocol;
 
   /// "host:port" with the host partly hidden, for lists (the real address stays in the link).
   String get maskedAddress => '${maskHost(host)}:$port';
@@ -169,6 +177,8 @@ const _supportedSchemes = [
   'ssh://',
   'wireguard://',
   'wg://',
+  'awg://',
+  'amneziawg://',
   'naive+https://',
   'naive+quic://',
   'openvpn://',
@@ -243,7 +253,7 @@ Iterable<String> _words(String text) => text
 /// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`, and
 /// `warp-masque://`, the link of Kumo's own WARP servers, ends in `masque://`).
 final _schemeStart = RegExp(
-    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|naive\+https|naive\+quic|openvpn)://)'
+    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|awg|amneziawg|naive\+https|naive\+quic|openvpn)://)'
     r'|(?<![A-Za-z0-9-])(?=masque://)');
 
 /// Parses and shuffles thousands of links off the UI thread.
@@ -329,7 +339,7 @@ ProxyConfig? parseLink(String link) {
     if (link.startsWith('hysteria://')) return _hysteria1(link);
     if (RegExp(r'^socks(5|4a|4)?://').hasMatch(link)) return _socks(link);
     if (link.startsWith('ssh://')) return _ssh(link);
-    if (link.startsWith('wireguard://') || link.startsWith('wg://')) {
+    if (RegExp(r'^(wireguard|wg|awg|amneziawg)://').hasMatch(link)) {
       return _wireguard(link);
     }
     if (link.startsWith('warp-masque://')) return _masque(link);

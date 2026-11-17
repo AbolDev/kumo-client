@@ -24,8 +24,10 @@ export GOTOOLCHAIN=local
 export ANDROID_NDK_HOME="$NDK"
 go version
 
-# ---- libbox.aar: sing-box for Android, with this project's patch
+# ---- libbox.aar: sing-box for Android, with this project's patch (and the endpoint of AmneziaWG)
 cp "$APP"/tools/libbox_patch/*.go "$SB/experimental/libbox/"
+# AmneziaWG: the endpoint of that type, on the amneziawg-go source (the Go modules come from the network, as sing-box's own do)
+bash "$APP/tools/libbox_patch/apply_amneziawg.sh" "$SB"
 go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
 go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
 export PATH="$(go env GOPATH)/bin:$PATH"

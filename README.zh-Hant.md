@@ -59,7 +59,7 @@ Kumo 是一款免費、開源的 VPN 用戶端，支援 Android、Windows、macO
 - 一鍵連線，自動選擇最快的伺服器，伺服器無回應時自動切換。
 - 整台裝置（Android）或本機代理；依應用程式分流、直連國家、自訂路由規則。
 - 免費公共伺服器，你自己的設定和訂閱（連結、QR 碼、檔案；Clash、sing-box、Xray 和 Surge 格式）。
-- 多種協定：VLESS、VMess、Trojan、Shadowsocks、Hysteria 1 和 2、TUIC、AnyTLS、WireGuard、SOCKS、SSH 等。
+- 多種協定：VLESS、VMess、Trojan、Shadowsocks、Hysteria 1 和 2、TUIC、AnyTLS、WireGuard、AmneziaWG、SOCKS、SSH 等。
 - 隱私：kill switch、嚴格 DNS、阻擋 WebRTC 洩漏、封鎖廣告和追蹤器、IP 和 DNS 洩漏測試。
 - 測速、即時速度和流量、小工具、系統匣圖示、Android TV、七種語言。
 

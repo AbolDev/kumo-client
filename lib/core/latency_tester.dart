@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import 'awg.dart' show amneziaEndpoint;
 import 'desktop_vpn.dart' show DesktopVpn;
 import 'ovpn/ovpn_probe.dart';
 import 'net_options.dart' show NetOptions;
@@ -69,7 +70,7 @@ Duration healthTimeout(int? liveDelayMs) {
 }
 
 /// Protocols that run over UDP: a TCP connect to their port always fails, so they skip that stage.
-const udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard'};
+const udpProtocols = {'hysteria2', 'tuic', 'hysteria', 'wireguard', 'amneziawg'};
 
 /// Minimal sing-box config holding only [c] (and the layers it is dialled through), used by the
 /// throw-away test core. WireGuard is an endpoint there, everything else an outbound.
@@ -115,8 +116,8 @@ String _delayConfig(List<Map<String, dynamic>> layers, {Map<String, String>? hos
       ],
     if (wireguard)
       'endpoints': [
-        {...layers.first, 'tag': 'proxy', if (two) 'detour': 'proxy-l1'},
-        if (two) {...layers[1], 'tag': 'proxy-l1'},
+        amneziaEndpoint({...layers.first, 'tag': 'proxy', if (two) 'detour': 'proxy-l1'}),
+        if (two) amneziaEndpoint({...layers[1], 'tag': 'proxy-l1'}),
       ],
     'route': {
       'default_domain_resolver': 'dns',
@@ -172,7 +173,7 @@ Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options, St
   // A server whose link carries a final mask is measured the way it is used: through Xray.
   if (!c.canSingBox || (c.preferXray && c.canXray)) {
     if (!c.canXray) return -1;
-    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), page,
+    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), page, awg: c.isAmnezia,
         timeoutMs: timeout.inMilliseconds);
   }
   var layers = await _resolvedLayers(c);

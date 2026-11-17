@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../core/amnezia_qr.dart';
+import '../l10n/extra.dart' show tr;
 import '../l10n/strings.dart';
 import 'share_sheet.dart';
 
@@ -31,9 +33,19 @@ class _ScanPageState extends State<ScanPage> {
         .whereType<String>()
         .firstOrNull;
     if (value == null || _done) return;
+    // Amnezia's app shows a server as a series of codes: the camera stays on until the last part has been read.
+    final part = amneziaQrParts.feed(value);
+    if (part != null && part.link == null) {
+      final text = tr(context, 'awgQrPart', {'have': part.have, 'total': part.total});
+      if (text != _partText) setState(() => _partText = text);
+      return;
+    }
     _done = true;
-    Navigator.pop(context, value);
+    Navigator.pop(context, part?.link ?? value);
   }
+
+  /// What is said under the frame while the parts of a series are being read.
+  String? _partText;
 
   Future<void> _pickFromGallery() async {
     final t = S.of(context);
@@ -80,7 +92,7 @@ class _ScanPageState extends State<ScanPage> {
                 right: 24,
                 top: window.bottom + 20,
                 child: Text(
-                  t.scanHint,
+                  _partText ?? t.scanHint,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                       color: Colors.white,

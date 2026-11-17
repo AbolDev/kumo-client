@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../core/awg.dart' show awgOptions, awgProblem, awgSettingKey, isAwgSetting;
 import '../core/clean_ip.dart' show withCleanIp;
 import '../core/extra_options.dart' show fragmentFinalMask;
 import '../core/link_fields.dart';
@@ -38,6 +39,20 @@ const _choices = <String, List<String>>{
 const _antiKeys = ['fp', 'alpn', 'fm', 'cipherSuites'];
 const _antiSchemes = {'vless', 'vmess', 'trojan'};
 
+/// The servers of WireGuard, which can be AmneziaWG ones: the settings of that have a section of their own in the form
+/// (named as a link writes them), with a field each even when the link has none, so that a plain one can be made obfuscated.
+const _wgSchemes = {'wireguard', 'awg', 'amneziawg'};
+const _awgFields = <String, String>{
+  'jc': 'Jc', 'jmin': 'Jmin', 'jmax': 'Jmax', //
+  's1': 'S1', 's2': 'S2', 's3': 'S3', 's4': 'S4',
+  'h1': 'H1', 'h2': 'H2', 'h3': 'H3', 'h4': 'H4',
+  'i1': 'I1', 'i2': 'I2', 'i3': 'I3', 'i4': 'I4', 'i5': 'I5',
+  'randomtrailers': 'RandomTrailers', 'disablecookies': 'DisableCookies',
+  'headerprotectionkey': 'HeaderProtectionKey', 'contentpaddingaddition': 'ContentPaddingAddition',
+  'rekeyaftertime': 'RekeyAfterTime', 'rekeytimeout': 'RekeyTimeout', 'rejectaftertime': 'RejectAfterTime',
+  'keepalivetimeout': 'KeepaliveTimeout', 'maxhandshakeattempts': 'MaxHandshakeAttempts',
+};
+
 /// Edits a config with a form instead of the raw link. Pops with the new link,
 /// or with null when cancelled.
 class EditConfigPage extends StatefulWidget {
@@ -61,6 +76,16 @@ class _EditConfigPageState extends State<EditConfigPage> {
     // The four have a field even when the link has none of them (an empty one is left out of the link).
     if (f != null && _antiSchemes.contains(f.scheme)) {
       for (final k in _antiKeys) {
+        f.params.putIfAbsent(k, () => '');
+      }
+    }
+    if (f != null && _wgSchemes.contains(f.scheme)) {
+      // A link may write a setting in any case (`Jc`, `random_trailers`); the form has them under one name each.
+      final all = Map.of(f.params);
+      f.params
+        ..clear()
+        ..addEntries(all.entries.map((e) => MapEntry(isAwgSetting(e.key) ? awgSettingKey(e.key) : e.key, e.value)));
+      for (final k in _awgFields.keys) {
         f.params.putIfAbsent(k, () => '');
       }
     }
@@ -104,9 +129,16 @@ class _EditConfigPageState extends State<EditConfigPage> {
         return;
       }
     }
+    if (_wgSchemes.contains(f.scheme)) {
+      // The core would not start with a setting it cannot read: say which one, in the user's language.
+      if (awgOptions({for (final k in _awgFields.keys) k: f.params[k] ?? ''}) == null) {
+        setState(() => _error = awgProblem?.text(t.languageCode) ?? t.invalidConfig);
+        return;
+      }
+    }
     final link = f.build();
     if (parseLink(link) == null) {
-      setState(() => _error = t.invalidConfig);
+      setState(() => _error = (_wgSchemes.contains(f.scheme) ? awgProblem?.text(t.languageCode) : null) ?? t.invalidConfig);
       return;
     }
     Navigator.pop(context, link);
@@ -225,6 +257,38 @@ class _EditConfigPageState extends State<EditConfigPage> {
     );
   }
 
+  /// The settings of AmneziaWG (empty ones are left out of the link). Closed unless the server already has one.
+  Widget _awgSection(S t, LinkFields f) {
+    final open = _awgFields.keys.any((k) => (f.params[k] ?? '').isNotEmpty);
+    Widget field(String key, {int lines = 1}) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TextField(
+            key: ValueKey('awg:$key'),
+            controller: _c('p:$key', f.params[key] ?? ''),
+            minLines: lines,
+            maxLines: lines == 1 ? 1 : lines + 3,
+            textDirection: TextDirection.ltr,
+            style: lines == 1 ? null : const TextStyle(fontFamily: 'monospace', fontSize: 13),
+            decoration: InputDecoration(labelText: _awgFields[key], border: const OutlineInputBorder()),
+          ),
+        );
+    return Card(
+      margin: const EdgeInsets.only(top: 4, bottom: 12),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        initiallyExpanded: open,
+        shape: const Border(),
+        collapsedShape: const Border(),
+        title: Text(tr(context, 'awgTitle')),
+        subtitle: Text(tr(context, 'awgDesc')),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+        children: [
+          for (final k in _awgFields.keys) field(k, lines: k.startsWith('i') && k.length == 2 ? 2 : 1),
+        ],
+      ),
+    );
+  }
+
   Widget _param(S t, String key, String value) {
     final options = _choices[key];
     if (options == null) return _field('p:$key', t.fieldLabel(key), value);
@@ -281,9 +345,9 @@ class _EditConfigPageState extends State<EditConfigPage> {
                     keyboard: TextInputType.number),
                 _field(
                     'secret',
-                    t.fieldLabel(f.scheme == 'vless' || f.scheme == 'vmess'
-                        ? 'uuid'
-                        : 'password'),
+                    _wgSchemes.contains(f.scheme)
+                        ? tr(context, 'awgPrivateKey')
+                        : t.fieldLabel(f.scheme == 'vless' || f.scheme == 'vmess' ? 'uuid' : 'password'),
                     f.secret),
                 if (f.params.isNotEmpty) ...[
                   Padding(
@@ -292,9 +356,12 @@ class _EditConfigPageState extends State<EditConfigPage> {
                         style: Theme.of(context).textTheme.titleSmall),
                   ),
                   for (final e in f.params.entries)
-                    if (!(_antiSchemes.contains(f.scheme) && _antiKeys.contains(e.key))) _param(t, e.key, e.value),
+                    if (!(_antiSchemes.contains(f.scheme) && _antiKeys.contains(e.key)) &&
+                        !(_wgSchemes.contains(f.scheme) && _awgFields.containsKey(e.key)))
+                      _param(t, e.key, e.value),
                 ],
                 if (_antiSchemes.contains(f.scheme)) _antiFilter(t, f),
+                if (_wgSchemes.contains(f.scheme)) _awgSection(t, f),
                 if (_error != null)
                   Text(_error!,
                       style: TextStyle(

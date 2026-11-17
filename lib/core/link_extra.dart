@@ -252,7 +252,7 @@ List<int>? _reserved(String? v) {
 /// `wireguard://PRIVATE_KEY@host:port?publickey=..&address=10.0.0.2/32,fd00::2/128&mtu=1280&reserved=1,2,3#name`.
 /// sing-box runs it as an endpoint; Xray as a WireGuard outbound.
 ProxyConfig? _wireguard(String link) {
-  final u = Uri.parse(link.replaceFirst(RegExp(r'^wg://'), 'wireguard://'));
+  final u = Uri.parse(link.replaceFirst(RegExp(r'^(wg|awg|amneziawg)://'), 'wireguard://'));
   final q = u.queryParameters;
   final priv = (q['privatekey'] ?? q['private_key'] ?? _decode(u.userInfo)).trim();
   final pub = (q['publickey'] ?? q['public_key'] ?? q['peer_public_key'] ?? '').trim();
@@ -272,6 +272,9 @@ ProxyConfig? _wireguard(String link) {
   final mtu = int.tryParse(q['mtu'] ?? '');
   final psk = (q['presharedkey'] ?? q['psk'] ?? '').trim();
   final keepAlive = int.tryParse(q['keepalive'] ?? q['persistentkeepalive'] ?? '');
+  // AmneziaWG: the settings of its obfuscation beside the ones of WireGuard (a setting that is not valid refuses the link).
+  final awg = awgOptions(q);
+  if (awg == null) return null;
   final out = <String, dynamic>{
     'type': 'wireguard',
     'address': addresses,
@@ -289,6 +292,22 @@ ProxyConfig? _wireguard(String link) {
       },
     ],
   };
+  if (awg.isNotEmpty) {
+    // Neither WARP's noise nor Xray carries it: only the core of the phone, as an endpoint of its own type.
+    if ((q['noise'] ?? '').isNotEmpty) {
+      awgProblem = const AwgProblem('awgNoise');
+      return null;
+    }
+    out.addAll(awg);
+    for (final p in out['peers'] as List) {
+      (p as Map<String, dynamic>).remove('reserved');
+    }
+    final name = _name(u, 'amneziawg ${u.host}:$port');
+    // On the phone the core has the endpoint. On a computer kumo-awg has it, as Xray has what the core cannot do: the server is
+    // one that only a helper carries, and its endpoint is what that helper is given (see buildXrayConfig).
+    if (!amneziaInCore) return _make(link, amneziaProtocol, name, u.host, port, xray: out, xrayNote: 'awg');
+    return _make(link, amneziaProtocol, name, u.host, port, outbound: out);
+  }
   final hostPort = u.host.contains(':') ? '[${u.host}]:$port' : '${u.host}:$port';
   final xray = {
     'protocol': 'wireguard',
@@ -455,9 +474,9 @@ ProxyConfig? _masqueServer(String link) {
 /// The DNS servers a WireGuard link names (`dns=1.1.1.1, 8.8.8.8`): the addresses, in their order. Names and
 /// anything that is not an address are left out. Empty for a link with none, or of another kind.
 List<String> wireguardLinkDns(String link) {
-  if (!link.startsWith('wireguard://') && !link.startsWith('wg://')) return const [];
+  if (!RegExp(r'^(wireguard|wg|awg|amneziawg)://').hasMatch(link)) return const [];
   try {
-    final q = Uri.parse(link.replaceFirst(RegExp(r'^wg://'), 'wireguard://')).queryParameters;
+    final q = Uri.parse(link.replaceFirst(RegExp(r'^(wg|awg|amneziawg)://'), 'wireguard://')).queryParameters;
     return [
       for (final part in (q['dns'] ?? '').split(RegExp(r'[,\s]+')))
         if (InternetAddress.tryParse(part.trim()) != null) part.trim(),
@@ -467,19 +486,27 @@ List<String> wireguardLinkDns(String link) {
   }
 }
 
-/// Turns the text of a WireGuard `.conf` file into `wireguard://` links (one per [Peer]).
+/// Turns the text of a WireGuard `.conf` file (or one of AmneziaWG, which has more keys in [Interface]) into
+/// `wireguard://` links (one per [Peer]).
 List<String> wireguardConfToLinks(String text) {
   if (!text.contains('[Interface]') || !text.contains('[Peer]')) return const [];
   final iface = <String, String>{};
   final peers = <Map<String, String>>[];
   Map<String, String>? current;
+  String? comment;
   for (final raw in text.split(RegExp(r'[\r\n]+'))) {
+    // A comment on a line of its own, just above a [Peer], names that server.
+    if (raw.trimLeft().startsWith('#')) {
+      comment = raw.trimLeft().substring(1).trim();
+      continue;
+    }
     final line = raw.split('#').first.trim();
     if (line.isEmpty) continue;
     if (line.toLowerCase() == '[interface]') {
       current = iface;
     } else if (line.toLowerCase() == '[peer]') {
-      current = <String, String>{};
+      current = <String, String>{if (comment != null && comment.isNotEmpty) '#name': comment};
+      comment = null;
       peers.add(current);
     } else if (line.contains('=') && current != null) {
       final i = line.indexOf('=');
@@ -505,12 +532,16 @@ List<String> wireguardConfToLinks(String text) {
       if ((p['persistentkeepalive'] ?? '').isNotEmpty) 'keepalive': p['persistentkeepalive']!,
       if ((p['reserved'] ?? iface['reserved'] ?? '').isNotEmpty)
         'reserved': (p['reserved'] ?? iface['reserved'])!.replaceAll(' ', ''),
+      // AmneziaWG: the settings of the obfuscation, as the configuration writes them (a signature packet keeps its spaces).
+      for (final e in iface.entries)
+        if (isAwgSetting(e.key) && e.value.isNotEmpty) e.key: e.value,
     };
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
         .join('&');
+    final name = p['#name'] ?? 'WireGuard $host';
     out.add('wireguard://${Uri.encodeComponent(iface['privatekey']!)}@$host:$port'
-        '?$query#${Uri.encodeComponent('WireGuard $host')}');
+        '?$query#${Uri.encodeComponent(name)}');
   }
   return out;
 }

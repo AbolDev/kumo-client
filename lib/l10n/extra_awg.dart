@@ -1,0 +1,103 @@
+// Texts of AmneziaWG: why a server was not accepted, and the section of the edit page.
+
+const extraAwgEn = <String, String>{
+  'awgRange': '{name} must be from 0 to {max} (it is {value})',
+  'awgRangeText': '{name} must be a number or a range low-high (it is {value})',
+  'awgTooLong': '{name} is too long',
+  'awgTag': '{name} has a tag that is not known (only <b 0x..>, <r N>, <rd N>, <rc N> and <t> are) or hex of an odd length',
+  'awgFlag': '{name} must be on or off (it is {value})',
+  'awgKey': 'HeaderProtectionKey is not a key of 32 bytes',
+  'awgMinMax': 'Jmin ({min}) is above Jmax ({max})',
+  'awgOverlap': 'The headers H1 to H4 overlap',
+  'awgShort': '{name} must be at least 12 with HeaderProtectionKey (it is {value})',
+  'awgNoise': 'WARP noise cannot be used with AmneziaWG',
+  'awgTitle': 'AmneziaWG settings',
+  'awgDesc': 'Obfuscation of the WireGuard packets. Leave them empty for plain WireGuard.',
+  'awgPrivateKey': 'Private key',
+  'awgQrPart': 'Part {have} of {total} of the QR code of Amnezia read. Show the next one.',
+};
+
+const extraAwgFa = <String, String>{
+  'awgRange': '{name} باید بین 0 تا {max} باشد (الان {value} است)',
+  'awgRangeText': '{name} باید یک عدد یا بازه‌ای مثل low-high باشد (الان {value} است)',
+  'awgTooLong': '{name} بیش از حد طولانی است',
+  'awgTag': '{name} برچسب ناشناخته دارد (فقط <b 0x..>، <r N>، <rd N>، <rc N> و <t> پذیرفته می‌شوند) یا هگزش تعداد فرد رقم دارد',
+  'awgFlag': '{name} باید on یا off باشد (الان {value} است)',
+  'awgKey': 'HeaderProtectionKey یک کلید ۳۲ بایتی نیست',
+  'awgMinMax': 'Jmin ({min}) از Jmax ({max}) بزرگ‌تر است',
+  'awgOverlap': 'بازه‌های H1 تا H4 هم‌پوشانی دارند',
+  'awgShort': '{name} با HeaderProtectionKey باید حداقل 12 باشد (الان {value} است)',
+  'awgNoise': 'نویز WARP با AmneziaWG قابل استفاده نیست',
+  'awgTitle': 'تنظیمات AmneziaWG',
+  'awgDesc': 'مبهم‌سازی بسته‌های WireGuard. برای WireGuard ساده خالی بگذارید.',
+  'awgPrivateKey': 'کلید خصوصی',
+  'awgQrPart': 'بخش {have} از {total} کد QR امنزیا خوانده شد. بخش بعدی را نشان بدهید.',
+};
+
+const extraAwgRu = <String, String>{
+  'awgRange': '{name} должно быть от 0 до {max} (сейчас {value})',
+  'awgRangeText': '{name} должно быть числом или диапазоном low-high (сейчас {value})',
+  'awgTooLong': '{name} слишком длинное',
+  'awgTag': 'В {name} неизвестный тег (допустимы только <b 0x..>, <r N>, <rd N>, <rc N> и <t>) или hex нечётной длины',
+  'awgFlag': '{name} должно быть on или off (сейчас {value})',
+  'awgKey': 'HeaderProtectionKey — не ключ из 32 байт',
+  'awgMinMax': 'Jmin ({min}) больше Jmax ({max})',
+  'awgOverlap': 'Диапазоны H1–H4 пересекаются',
+  'awgShort': '{name} с HeaderProtectionKey должно быть не меньше 12 (сейчас {value})',
+  'awgNoise': 'Шум WARP нельзя использовать с AmneziaWG',
+  'awgTitle': 'Настройки AmneziaWG',
+  'awgDesc': 'Маскировка пакетов WireGuard. Для обычного WireGuard оставьте пустым.',
+  'awgPrivateKey': 'Закрытый ключ',
+  'awgQrPart': 'Прочитана часть {have} из {total} QR-кода Amnezia. Покажите следующую.',
+};
+
+const extraAwgVi = <String, String>{
+  'awgRange': '{name} phải từ 0 đến {max} (hiện là {value})',
+  'awgRangeText': '{name} phải là một số hoặc một khoảng low-high (hiện là {value})',
+  'awgTooLong': '{name} quá dài',
+  'awgTag': '{name} có thẻ không hợp lệ (chỉ nhận <b 0x..>, <r N>, <rd N>, <rc N> và <t>) hoặc chuỗi hex có độ dài lẻ',
+  'awgFlag': '{name} phải là on hoặc off (hiện là {value})',
+  'awgKey': 'HeaderProtectionKey không phải khóa 32 byte',
+  'awgMinMax': 'Jmin ({min}) lớn hơn Jmax ({max})',
+  'awgOverlap': 'Các khoảng H1 đến H4 bị chồng lấn',
+  'awgShort': '{name} phải từ 12 trở lên khi dùng HeaderProtectionKey (hiện là {value})',
+  'awgNoise': 'Không thể dùng nhiễu WARP với AmneziaWG',
+  'awgTitle': 'Cài đặt AmneziaWG',
+  'awgDesc': 'Làm rối các gói WireGuard. Để trống nếu dùng WireGuard thường.',
+  'awgPrivateKey': 'Khóa riêng tư',
+  'awgQrPart': 'Đã đọc phần {have} trên {total} của mã QR Amnezia. Hãy quét phần tiếp theo.',
+};
+
+const extraAwgZh = <String, String>{
+  'awgRange': '{name} 必须在 0 到 {max} 之间（当前为 {value}）',
+  'awgRangeText': '{name} 必须是数字或 low-high 形式的范围（当前为 {value}）',
+  'awgTooLong': '{name} 太长',
+  'awgTag': '{name} 含有未知标签（只接受 <b 0x..>、<r N>、<rd N>、<rc N> 和 <t>），或十六进制位数为奇数',
+  'awgFlag': '{name} 必须是 on 或 off（当前为 {value}）',
+  'awgKey': 'HeaderProtectionKey 不是 32 字节的密钥',
+  'awgMinMax': 'Jmin（{min}）大于 Jmax（{max}）',
+  'awgOverlap': 'H1 到 H4 的范围有重叠',
+  'awgShort': '使用 HeaderProtectionKey 时，{name} 至少为 12（当前为 {value}）',
+  'awgNoise': 'WARP 噪声不能与 AmneziaWG 一起使用',
+  'awgTitle': 'AmneziaWG 设置',
+  'awgDesc': '混淆 WireGuard 数据包。普通 WireGuard 请留空。',
+  'awgPrivateKey': '私钥',
+  'awgQrPart': '已读取 Amnezia 二维码的第 {have} 部分（共 {total} 部分），请出示下一个。',
+};
+
+const extraAwgAr = <String, String>{
+  'awgRange': 'يجب أن يكون {name} بين 0 و{max} (القيمة الحالية {value})',
+  'awgRangeText': 'يجب أن يكون {name} رقمًا أو نطاقًا بصيغة low-high (القيمة الحالية {value})',
+  'awgTooLong': '{name} طويل جدًا',
+  'awgTag': 'يحتوي {name} على وسم غير معروف (المسموح فقط <b 0x..> و<r N> و<rd N> و<rc N> و<t>) أو على hex بعدد فردي من الخانات',
+  'awgFlag': 'يجب أن يكون {name} on أو off (القيمة الحالية {value})',
+  'awgKey': 'HeaderProtectionKey ليس مفتاحًا من 32 بايت',
+  'awgMinMax': 'Jmin ({min}) أكبر من Jmax ({max})',
+  'awgOverlap': 'نطاقات H1 إلى H4 متداخلة',
+  'awgShort': 'يجب ألا يقل {name} عن 12 مع HeaderProtectionKey (القيمة الحالية {value})',
+  'awgNoise': 'لا يمكن استخدام ضوضاء WARP مع AmneziaWG',
+  'awgTitle': 'إعدادات AmneziaWG',
+  'awgDesc': 'تعمية حزم WireGuard. اتركها فارغة لاستخدام WireGuard العادي.',
+  'awgPrivateKey': 'المفتاح الخاص',
+  'awgQrPart': 'تمت قراءة الجزء {have} من {total} من رمز QR الخاص بـ Amnezia. اعرض الجزء التالي.',
+};

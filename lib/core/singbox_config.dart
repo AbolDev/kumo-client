@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'awg.dart';
 import 'net_options.dart';
 import 'proxy_config.dart';
 import 'routing_rules.dart';
@@ -44,6 +45,9 @@ typedef XrayAuth = ({String user, String pass});
 String buildXrayConfig(ProxyConfig server, int port,
     {String logLevel = 'error', NetOptions? options, XrayAuth? auth}) {
   assert(server.canXray);
+  // A server of AmneziaWG on a computer: the helper is kumo-awg, sing-box with the endpoint, so its configuration is one of
+  // sing-box (a SOCKS inbound and the endpoint).
+  if (server.isAmnezia) return _awgHelperConfig([server], port, logLevel: logLevel, auth: auth);
   final o = options ?? NetOptions();
   final outbound =
       jsonDecode(jsonEncode(server.xrayOutbound!)) as Map<String, dynamic>;
@@ -453,8 +457,12 @@ String buildSingBoxConfig(
   bool localLogin = false,
   XrayAuth? xrayAuth,
   String? ovpnInterface,
+  int? awgPort,
 }) {
   assert(servers.isNotEmpty);
+  // The AmneziaWG servers of a group on a computer are carried by kumo-awg, one SOCKS port each from [awgPort] on, in the
+  // order they have here (the order buildAwgGroupConfig is given them in).
+  final awgServers = [for (final s in servers) if (s.viaAwgHelper) s];
   final o = options ?? NetOptions();
   final useChain = chain != null && !chain.needsXray && chain.outbound['type'] != 'wireguard';
   final detour = useChain ? 'chain-entry' : null;
@@ -465,6 +473,17 @@ String buildSingBoxConfig(
 
   /// Adds one server (and the layers it is dialled through) under [tag].
   void addServer(ProxyConfig s, String tag) {
+    if (s.viaAwgHelper) {
+      outbounds.add({
+        'type': 'socks',
+        'tag': tag,
+        'server': '127.0.0.1',
+        'server_port': awgPort! + awgServers.indexWhere((x) => identical(x, s)),
+        'version': '5',
+        if (xrayAuth != null) ...{'username': xrayAuth.user, 'password': xrayAuth.pass},
+      });
+      return;
+    }
     final layers = [s.outbound, ...s.inner];
     if (layers.first['type'] == 'wireguard') {
       // WireGuard is an endpoint in sing-box, usable like an outbound by its tag. A second WireGuard
@@ -512,7 +531,7 @@ String buildSingBoxConfig(
     final tags = <String>[];
     var n = 0;
     for (final s in servers) {
-      if (!s.canSingBox) continue;
+      if (!s.canSingBox && !(s.viaAwgHelper && awgPort != null)) continue;
       final tag = 'server-${n++}';
       tags.add(tag);
       addServer(s, tag);
@@ -736,7 +755,8 @@ String buildSingBoxConfig(
     },
     'inbounds': inbounds,
     'outbounds': outbounds,
-    if (endpoints.isNotEmpty) 'endpoints': endpoints,
+    // A WireGuard endpoint with the settings of AmneziaWG is an endpoint of the type of that name.
+    if (endpoints.isNotEmpty) 'endpoints': [for (final e in endpoints) amneziaEndpoint(e)],
     'route': {
       'rules': rules,
       if ((sets.isNotEmpty && iran) || adSets.isNotEmpty || (provider?.tags.isNotEmpty ?? false))
@@ -777,4 +797,77 @@ String buildSingBoxConfig(
       },
   };
   return const JsonEncoder.withIndent('  ').convert(config);
+}
+
+/// The configuration of kumo-awg for [server] (an AmneziaWG one that the core of the computer cannot carry): a local SOCKS inbound
+/// on [port] (with a login when [auth] is given, so no other program can use it) and the endpoint, which every connection
+/// goes to. Names are looked up through the tunnel, at the DNS server the link names (else Cloudflare's).
+String _awgHelperConfig(List<ProxyConfig> servers, int port, {required String logLevel, XrayAuth? auth}) {
+  // Several servers (the automatic group): one SOCKS inbound each, on [port] and the ones after it, and each inbound goes to its
+  // own endpoint (and asks its own DNS server through it). One server keeps the names a single one always had.
+  final many = servers.length > 1;
+  String endpointTag(int i) => many ? 'awg-$i' : 'proxy';
+  String inboundTag(int i) => many ? 'socks-in-$i' : 'socks-in';
+  final endpoints = <Map<String, dynamic>>[
+    for (var i = 0; i < servers.length; i++) amneziaEndpoint({...servers[i].xrayOutbound!, 'tag': endpointTag(i)}),
+  ];
+  // A tunnel with no IPv6 address of its own cannot dial an IPv6 address: only IPv4 ones are asked for.
+  bool hasV6(int i) => ((endpoints[i]['address'] as List?) ?? const []).any((a) => '$a'.contains(':'));
+  String dnsOf(int i) => wireguardLinkDns(servers[i].link).firstOrNull ?? '1.1.1.1';
+  return jsonEncode({
+    'log': {'level': logLevel == 'error' ? 'error' : logLevel},
+    'dns': {
+      'servers': [
+        // The names of the sites are asked through the tunnel; the name of the server itself cannot be (the tunnel is not up
+        // yet, and it is what is being dialled), so it is asked the system's resolver.
+        for (var i = 0; i < servers.length; i++)
+          {'type': 'udp', 'tag': many ? 'dns-$i' : 'dns', 'server': dnsOf(i), 'detour': endpointTag(i)},
+        {'type': 'local', 'tag': 'dns-local'},
+      ],
+      'final': many ? 'dns-0' : 'dns',
+      if (many)
+        'rules': [
+          for (var i = 0; i < servers.length; i++)
+            {
+              'inbound': [inboundTag(i)],
+              'action': 'route',
+              'server': 'dns-$i',
+              if (!hasV6(i)) 'strategy': 'ipv4_only',
+            },
+        ],
+      if (!many && !hasV6(0)) 'strategy': 'ipv4_only',
+    },
+    'inbounds': [
+      for (var i = 0; i < servers.length; i++)
+        {
+          'type': 'socks',
+          'tag': inboundTag(i),
+          'listen': '127.0.0.1',
+          'listen_port': port + i,
+          if (auth != null)
+            'users': [
+              {'username': auth.user, 'password': auth.pass},
+            ],
+        },
+    ],
+    'endpoints': endpoints,
+    'route': {
+      'default_domain_resolver': 'dns-local',
+      if (many)
+        'rules': [
+          for (var i = 0; i < servers.length; i++)
+            {'inbound': [inboundTag(i)], 'action': 'route', 'outbound': endpointTag(i)},
+        ],
+      // The endpoints are the only way out (with no outbound of its own the core makes a direct one, which is not wanted here).
+      'final': endpointTag(0),
+    },
+  });
+}
+
+/// The configuration of kumo-awg for the AmneziaWG servers [servers] in the automatic group of a computer: a SOCKS inbound for each,
+/// on [port] for the first and the ports after it for the others (the core's group has a SOCKS outbound to each of them, see the
+/// `awgPort` of [buildSingBoxConfig]).
+String buildAwgGroupConfig(List<ProxyConfig> servers, int port, {String logLevel = 'error', XrayAuth? auth}) {
+  assert(servers.isNotEmpty && servers.every((s) => s.viaAwgHelper));
+  return _awgHelperConfig(servers, port, logLevel: logLevel, auth: auth);
 }
