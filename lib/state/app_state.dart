@@ -715,7 +715,8 @@ class AppState extends ChangeNotifier {
         if (s.status == VpnStatus.error && s.error != 'revoked') {
           final reason = (s.error ?? '').trim().isEmpty ? 'no reason given' : s.error!;
           // A server name that cannot be looked up, or an unreachable network, is not a fault of the app.
-          if (!isNetworkFailureText(reason)) {
+          // Nor is a failure the user was told about in words (OpenVPN's login refused, a blocked handshake).
+          if (!isNetworkFailureText(reason) && !isExpectedCoreFailure(reason)) {
             CrashHub.report(StateError(reason), null,
                 kind: before == VpnStatus.starting ? 'core_start_failed' : 'core_exit', message: reason);
           }

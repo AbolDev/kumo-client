@@ -16,7 +16,6 @@ import 'win_dpapi.dart';
 import 'win_job.dart';
 import 'win_tools.dart';
 
-/// The text without the colour codes a core writes for a terminal (the "FATAL" of sing-box is red).
 /// Whether a core's start failed because the tunnel adapter could not be made (Windows, wintun): "open interface
 /// take too much time to finish" or "configure tun interface: (create adapter: ... | open existing adapter: ...)".
 /// The words of the system's own error come in the language of Windows, so only the core's words are read.
@@ -24,6 +23,7 @@ bool isTunAdapterFailure(String text) =>
     text.contains('open interface take too much time') ||
     (text.contains('configure tun interface') && text.contains('adapter'));
 
+/// The text without the colour codes a core writes for a terminal (the "FATAL" of sing-box is red).
 String stripAnsi(String text) => text.replaceAll(RegExp(r'\x1B\[[0-9;]*[A-Za-z]'), '');
 
 /// The VPN on the desktop: the same sing-box core as on Android, run as a child process

@@ -84,6 +84,27 @@ void main() {
       expect(isNetworkFailureText('unknown method: x'), isFalse);
     });
 
+    test('an error that came only as text is still known as the network\'s', () {
+      // What another isolate hands over is the text of the error, not the error.
+      expect(isNetworkErrorText('SocketException: Connection reset by peer (OS Error: Connection reset by peer, errno = 104), address = h.example, port = 1'), isTrue);
+      expect(isNetworkErrorText('  TimeoutException after 0:00:08.000000: Future not completed'), isTrue);
+      expect(isNetworkErrorText('Unable to resolve host "x.example": No address associated with hostname'), isTrue);
+      expect(isNetworkErrorText('Bad state: no element'), isFalse);
+      expect(isNetworkErrorText('FormatException: not json'), isFalse);
+    });
+
+    test('a connection the user was told the reason of is not a crash report', () {
+      // Report 93 (Android): the OpenVPN server refused the login.
+      expect(isExpectedCoreFailure('ovpn:auth'), isTrue);
+      expect(isExpectedCoreFailure('ovpn:handshake|blocked'), isTrue);
+      expect(isExpectedCoreFailure('ovpn:timeout|TLS: Initial packet'), isTrue);
+      expect(isExpectedCoreFailure('ovpn:permission'), isTrue);
+      // A program that stopped for no known reason is one.
+      expect(isExpectedCoreFailure('ovpn:exited|exit code 1'), isFalse);
+      expect(isExpectedCoreFailure('ovpn:nobinary'), isFalse);
+      expect(isExpectedCoreFailure('create service: initialize outbound[3]: invalid public_key'), isFalse);
+    });
+
     test('a Shadowsocks cipher is given to sing-box by the name it knows', () {
       String? methodOf(String link) => parseLink(link)?.outbound['method'] as String?;
       final user = base64Url.encode(utf8.encode('chacha20-poly1305:pw')).replaceAll('=', '');

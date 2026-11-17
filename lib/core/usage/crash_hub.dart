@@ -34,6 +34,32 @@ bool isNetworkFailureText(String text) {
   return marks.any(t.contains);
 }
 
+/// True when an error that arrived only as text (one from another isolate, or a message a handler printed) is
+/// one of the network's: it names a socket, timeout, handshake or HTTP error, or what [isNetworkFailureText]
+/// reads. The object is not there to ask [isNetworkError], so the beginning of its text is.
+bool isNetworkErrorText(String text) {
+  final t = text.trimLeft();
+  const names = [
+    'SocketException',
+    'TimeoutException',
+    'HandshakeException',
+    'TlsException',
+    'HttpException',
+    'WebSocketException',
+  ];
+  return names.any(t.startsWith) || isNetworkFailureText(text);
+}
+
+/// True when a connection ended in a way the user is told about in plain words and can act on, which is no
+/// fault of the app: the OpenVPN server refused the user name and password, the secure handshake never finished
+/// (a network that blocks OpenVPN), or it did not connect in time, or the system's VPN permission was refused.
+/// (`ovpn:kind` or `ovpn:kind|detail`, as the phone's service says it.)
+bool isExpectedCoreFailure(String reason) {
+  final r = reason.trim();
+  const kinds = ['ovpn:auth', 'ovpn:handshake', 'ovpn:timeout', 'ovpn:permission'];
+  return kinds.any((k) => r == k || r.startsWith('$k|'));
+}
+
 /// The name of what was thrown. A release build renames the classes ("yq"), so the ones worth telling
 /// apart are named here by what they are; the rest keep the name the build gave them.
 String errorKind(Object error) {
@@ -77,6 +103,8 @@ class CrashHub {
     } catch (_) {
       text = 'unprintable error';
     }
+    // An error that came as text (from another isolate) can still be the network's.
+    if (isNetworkErrorText(text)) return;
     s.record(kind: kind ?? errorKind(error), message: text, stack: stack, fatal: fatal);
   }
 }

@@ -241,6 +241,9 @@ class OvpnRunner {
     }
 
     final done = Completer<String>();
+    // The program can end before anybody waits for [done] (while the port is still being opened): its error
+    // is then thrown from there, and must not also reach the app's handlers as an error nobody caught.
+    unawaited(done.future.then<void>((_) {}, onError: (Object _) {}));
     void fail(OvpnConnectException e) {
       if (!done.isCompleted) done.completeError(e);
     }

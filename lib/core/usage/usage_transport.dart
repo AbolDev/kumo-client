@@ -53,6 +53,10 @@ Future<int?> sendUsagePing(UsageEndpoint endpoint, Map<String, Object> body, Pin
 }
 
 Future<int?> _post(SecureSocket tls, String host, List<int> payload, String path) async {
+  // A connection that is reset while the request is written (the VPN going up or down does it) ends the
+  // socket's "done" with an error; nobody else listens to it, so it would reach the app's error handlers
+  // as an error nobody caught ("Connection reset by peer, address = ..., port = ...").
+  unawaited(tls.done.then<void>((_) {}, onError: (Object _) {}));
   try {
     tls.add([
       ...utf8.encode('POST $path HTTP/1.1\r\nHost: $host\r\n'
