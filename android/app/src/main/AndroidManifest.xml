@@ -348,6 +348,18 @@
                 android:resource="@xml/widget_info_stats" />
         </receiver>
 
+        <receiver
+            android:name=".VpnWidgetStrip"
+            android:label="@string/widget_name_strip"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info_strip" />
+        </receiver>
+
         <activity
             android:name=".WidgetConfigActivity"
             android:exported="true"

@@ -147,4 +147,14 @@
     <string name="widget_cfg_language">زبان ویجت</string>
     <string name="widget_lang_follow">مطابق برنامه</string>
     <string name="widget_hint_language">زبان عبارت‌های روی ویجت (مثلاً حالت‌ها). به‌صورت پیش‌فرض همان زبان برنامه.</string>
+    <string name="widget_pick_swatches">نمونه‌ها</string>
+    <string name="widget_pick_spectrum">طیف</string>
+    <string name="widget_pick_hex">هگز</string>
+    <string name="widget_pick_red">قرمز</string>
+    <string name="widget_pick_green">سبز</string>
+    <string name="widget_pick_blue">آبی</string>
+    <string name="widget_pick_recent">رنگ‌های اخیر</string>
+    <string name="widget_pick_done">انجام شد</string>
+    <string name="widget_name_strip">نوار وضعیت Kumo</string>
+    <string name="widget_desc_strip">سرعت لحظه‌ای، حجم نشست و دکمهٔ اتصال در یک ردیف.</string>
 </resources>

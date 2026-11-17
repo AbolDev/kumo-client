@@ -147,4 +147,14 @@
     <string name="widget_cfg_language">Язык виджета</string>
     <string name="widget_lang_follow">Как в приложении</string>
     <string name="widget_hint_language">Язык надписей на виджете (например, состояний). По умолчанию — язык приложения.</string>
+    <string name="widget_pick_swatches">Образцы</string>
+    <string name="widget_pick_spectrum">Спектр</string>
+    <string name="widget_pick_hex">HEX</string>
+    <string name="widget_pick_red">Красный</string>
+    <string name="widget_pick_green">Зелёный</string>
+    <string name="widget_pick_blue">Синий</string>
+    <string name="widget_pick_recent">Недавние цвета</string>
+    <string name="widget_pick_done">Готово</string>
+    <string name="widget_name_strip">Kumo — полоса состояния</string>
+    <string name="widget_desc_strip">Скорость, трафик сеанса и кнопка питания в одной строке.</string>
 </resources>

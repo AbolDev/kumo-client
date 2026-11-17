@@ -147,4 +147,14 @@
     <string name="widget_cfg_language">Language of the widget</string>
     <string name="widget_lang_follow">Follow the app</string>
     <string name="widget_hint_language">The language of the words on the widget (for example the states). By default the language of the app.</string>
+    <string name="widget_pick_swatches">Swatches</string>
+    <string name="widget_pick_spectrum">Spectrum</string>
+    <string name="widget_pick_hex">Hex</string>
+    <string name="widget_pick_red">Red</string>
+    <string name="widget_pick_green">Green</string>
+    <string name="widget_pick_blue">Blue</string>
+    <string name="widget_pick_recent">Recently used colours</string>
+    <string name="widget_pick_done">Done</string>
+    <string name="widget_name_strip">Kumo status bar</string>
+    <string name="widget_desc_strip">Live speed, the data of the session and a power button in one row.</string>
 </resources>

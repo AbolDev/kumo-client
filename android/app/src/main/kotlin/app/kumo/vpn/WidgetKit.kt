@@ -322,7 +322,7 @@ object WidgetTheme {
     /** The ids of every placed widget of Kumo. */
     fun placedIds(context: Context): IntArray {
         val manager = AppWidgetManager.getInstance(context)
-        return listOf(VpnWidget::class.java, VpnWidgetIcon::class.java, VpnWidgetStats::class.java)
+        return listOf(VpnWidget::class.java, VpnWidgetIcon::class.java, VpnWidgetStats::class.java, VpnWidgetStrip::class.java)
             .flatMap { manager.getAppWidgetIds(ComponentName(context, it)).toList() }
             .toIntArray()
     }
@@ -934,7 +934,8 @@ abstract class KumoWidget : AppWidgetProvider() {
     companion object {
         const val ACTION_TOGGLE = "app.kumo.vpn.WIDGET_TOGGLE"
 
-        private val kinds: List<() -> KumoWidget> = listOf({ VpnWidget() }, { VpnWidgetIcon() }, { VpnWidgetStats() })
+        private val kinds: List<() -> KumoWidget> =
+            listOf({ VpnWidget() }, { VpnWidgetIcon() }, { VpnWidgetStats() }, { VpnWidgetStrip() })
 
         private fun openApp(context: Context) {
             context.startActivity(Intent(context, KumoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -1025,7 +1026,7 @@ abstract class KumoWidget : AppWidgetProvider() {
         fun refreshAll(context: Context) = redraw(context, kinds.map { it() })
 
         /** Redraws the widgets that show live numbers. */
-        fun refreshLive(context: Context) = redraw(context, listOf(VpnWidget(), VpnWidgetStats()))
+        fun refreshLive(context: Context) = redraw(context, listOf(VpnWidget(), VpnWidgetStats(), VpnWidgetStrip()))
 
         /** The widget [id] drawn in [look] at the size the launcher gave it, for the preview of the settings (null when it is gone). */
         fun preview(context: Context, id: Int, look: WidgetLook, widthDp: Int = 0, heightDp: Int = 0): RemoteViews? {
@@ -1059,7 +1060,7 @@ abstract class KumoWidget : AppWidgetProvider() {
             val manager = AppWidgetManager.getInstance(context)
             val look = WidgetLook(WidgetTheme.AUTO, 100, WidgetState.ON)
             // The widget, its width and height in dp when placed (the cells of the launcher's grid).
-            val sizes = listOf(Triple(VpnWidget(), 180, 56), Triple(VpnWidgetIcon(), 56, 56), Triple(VpnWidgetStats(), 180, 180))
+            val sizes = listOf(Triple(VpnWidget(), 180, 56), Triple(VpnWidgetIcon(), 56, 56), Triple(VpnWidgetStats(), 180, 180), Triple(VpnWidgetStrip(), 250, 60))
             for ((provider, w, h) in sizes) {
                 val options = Bundle().apply {
                     putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, w)
@@ -1300,4 +1301,13 @@ class VpnWidgetStats : KumoWidget() {
         toggleOn(context, v, R.id.wg_button)
         return v
     }
+}
+
+/**
+ * The status card as a bar of three cells by one, which the list of widgets offers beside the one of two by two. It is the
+ * same widget, drawn by the room it is given (a bar with the speeds, the data used and the time): the user may resize it.
+ */
+class VpnWidgetStrip : KumoWidget() {
+    override fun build(context: Context, id: Int, options: Bundle?, custom: WidgetLook?): RemoteViews =
+        VpnWidgetStats().build(context, id, options, custom)
 }

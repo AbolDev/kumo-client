@@ -147,4 +147,14 @@
     <string name="widget_cfg_language">小组件语言</string>
     <string name="widget_lang_follow">跟随应用</string>
     <string name="widget_hint_language">小组件上文字（如各状态）的语言。默认与应用的语言相同。</string>
+    <string name="widget_pick_swatches">色板</string>
+    <string name="widget_pick_spectrum">光谱</string>
+    <string name="widget_pick_hex">十六进制</string>
+    <string name="widget_pick_red">红</string>
+    <string name="widget_pick_green">绿</string>
+    <string name="widget_pick_blue">蓝</string>
+    <string name="widget_pick_recent">最近使用的颜色</string>
+    <string name="widget_pick_done">完成</string>
+    <string name="widget_name_strip">Kumo 状态条</string>
+    <string name="widget_desc_strip">实时速度、本次会话流量和电源按钮，排成一行。</string>
 </resources>

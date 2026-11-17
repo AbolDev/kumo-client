@@ -147,4 +147,14 @@
     <string name="widget_cfg_language">Ngôn ngữ của tiện ích</string>
     <string name="widget_lang_follow">Theo ứng dụng</string>
     <string name="widget_hint_language">Ngôn ngữ của chữ trên tiện ích (ví dụ các trạng thái). Mặc định là ngôn ngữ của ứng dụng.</string>
+    <string name="widget_pick_swatches">Bảng màu</string>
+    <string name="widget_pick_spectrum">Quang phổ</string>
+    <string name="widget_pick_hex">Hex</string>
+    <string name="widget_pick_red">Đỏ</string>
+    <string name="widget_pick_green">Xanh lá</string>
+    <string name="widget_pick_blue">Xanh dương</string>
+    <string name="widget_pick_recent">Màu dùng gần đây</string>
+    <string name="widget_pick_done">Xong</string>
+    <string name="widget_name_strip">Kumo — thanh trạng thái</string>
+    <string name="widget_desc_strip">Tốc độ trực tiếp, dữ liệu phiên và nút nguồn trên một hàng.</string>
 </resources>

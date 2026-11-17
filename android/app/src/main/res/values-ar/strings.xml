@@ -147,4 +147,14 @@
     <string name="widget_cfg_language">لغة الأداة</string>
     <string name="widget_lang_follow">حسب التطبيق</string>
     <string name="widget_hint_language">لغة النصوص على الأداة (مثل الحالات). الافتراضي لغة التطبيق.</string>
+    <string name="widget_pick_swatches">العينات</string>
+    <string name="widget_pick_spectrum">الطيف</string>
+    <string name="widget_pick_hex">سداسي</string>
+    <string name="widget_pick_red">أحمر</string>
+    <string name="widget_pick_green">أخضر</string>
+    <string name="widget_pick_blue">أزرق</string>
+    <string name="widget_pick_recent">الألوان المستخدمة مؤخرًا</string>
+    <string name="widget_pick_done">تم</string>
+    <string name="widget_name_strip">شريط حالة Kumo</string>
+    <string name="widget_desc_strip">السرعة الحالية وبيانات الجلسة وزر التشغيل في صف واحد.</string>
 </resources>

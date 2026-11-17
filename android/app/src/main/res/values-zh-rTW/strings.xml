@@ -147,4 +147,14 @@
     <string name="widget_cfg_language">小工具語言</string>
     <string name="widget_lang_follow">跟隨應用程式</string>
     <string name="widget_hint_language">小工具上文字（如各狀態）的語言。預設與應用程式的語言相同。</string>
+    <string name="widget_pick_swatches">色票</string>
+    <string name="widget_pick_spectrum">光譜</string>
+    <string name="widget_pick_hex">十六進位</string>
+    <string name="widget_pick_red">紅</string>
+    <string name="widget_pick_green">綠</string>
+    <string name="widget_pick_blue">藍</string>
+    <string name="widget_pick_recent">最近使用的顏色</string>
+    <string name="widget_pick_done">完成</string>
+    <string name="widget_name_strip">Kumo 狀態列</string>
+    <string name="widget_desc_strip">即時速度、本次連線流量與電源按鈕，排成一行。</string>
 </resources>

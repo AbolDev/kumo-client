@@ -482,7 +482,7 @@ class WidgetConfigActivity : Activity() {
 
     private fun askName() {
         val input = dialogText(getString(R.string.widget_saved_name), "")
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, dialogTheme)
             .setTitle(R.string.widget_saved_save)
             .setView(wrapDialog(input))
             .setPositiveButton(android.R.string.ok) { _, _ ->
@@ -499,7 +499,7 @@ class WidgetConfigActivity : Activity() {
 
     private fun askApplyAll() {
         val count = WidgetTheme.placedIds(this).size
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, dialogTheme)
             .setMessage(getString(R.string.widget_apply_all_ask, count))
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 val done = WidgetTheme.applyToAll(this, look)
@@ -569,6 +569,7 @@ class WidgetConfigActivity : Activity() {
             val own = value == -1
             val disc = TextView(this).apply {
                 gravity = Gravity.CENTER
+                includeFontPadding = false
                 text = if (own) "+" else ""
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
                 setTextColor(Color.WHITE)
@@ -599,12 +600,12 @@ class WidgetConfigActivity : Activity() {
                         renderPreview()
                     }
                 }
-                layoutParams = LinearLayout.LayoutParams(0, dp(38), 1f).apply {
-                    marginStart = dp(3)
-                    marginEnd = dp(3)
-                }
             }
-            row.addView(disc)
+            // The disc keeps its own size in a cell that takes its share of the row, so that it stays a circle.
+            row.addView(FrameLayout(this).apply {
+                addView(disc, FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER))
+                layoutParams = LinearLayout.LayoutParams(0, dp(46), 1f)
+            })
             discs.add(Pair(disc, value))
         }
         mark()
@@ -664,99 +665,21 @@ class WidgetConfigActivity : Activity() {
         return panelBox().also { it.addView(row) }
     }
 
-    private val palette = intArrayOf(
-        0xFFD93025.toInt(), 0xFFE8710A.toInt(), 0xFFF9AB00.toInt(), 0xFF1E9E52.toInt(), 0xFF00897B.toInt(), 0xFF00ACC1.toInt(),
-        0xFF1A73E8.toInt(), 0xFF3F51B5.toInt(), 0xFF7B3FE4.toInt(), 0xFFC2185B.toInt(), 0xFF6D4C41.toInt(), 0xFF607D8B.toInt(),
-        0xFFFFFFFF.toInt(), 0xFFF1EFE8.toInt(), 0xFFB0B0B5.toInt(), 0xFF6B6B70.toInt(), 0xFF2A2A2E.toInt(), 0xFF000000.toInt(),
-    )
-
-    /** A colour picker: a palette and a field for a hex code. "Automatic" gives 0 (the look own). */
+    /** The colour picker, drawn in the colours of this page (dark when it is). "Automatic" gives 0 (the look own). */
     private fun pickColour(start: Int, onPick: (Int) -> Unit) {
-        var chosen = start
-        val hex = EditText(this).apply {
-            hint = "#RRGGBB"
-            setTextColor(0xFF1B1B1F.toInt())
-            setHintTextColor(0x661B1B1F)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-            filters = arrayOf(InputFilter.LengthFilter(7))
-            isSingleLine = true
-            if (start != 0) setText(String.format("#%06X", start and 0xFFFFFF))
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        }
-        val preview = View(this).apply {
-            background = GradientDrawable().apply {
-                setShape(GradientDrawable.OVAL)
-                setStroke(dp(1), 0x661B1B1F)
-                setColor(if (start != 0) start else Color.TRANSPARENT)
-            }
-            layoutParams = LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(12) }
-        }
-        fun show(c: Int) {
-            (preview.background as GradientDrawable).setColor(if (c != 0) c else Color.TRANSPARENT)
-        }
-        var typing = true
-        hex.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-
-            override fun afterTextChanged(s: Editable?) {
-                if (!typing) return
-                val t = s.toString().trim().removePrefix("#")
-                if (t.length == 6) t.toIntOrNull(16)?.let {
-                    chosen = it or 0xFF000000.toInt()
-                    show(chosen)
-                }
-            }
-        })
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
-        }
-        for (rowColours in palette.toList().chunked(6)) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-                ).apply { bottomMargin = dp(8) }
-            }
-            for (c in rowColours) {
-                row.addView(View(this).apply {
-                    background = GradientDrawable().apply {
-                        setShape(GradientDrawable.OVAL)
-                        setColor(c)
-                        setStroke(dp(1), 0x331B1B1F)
-                    }
-                    setOnClickListener {
-                        chosen = c
-                        typing = false
-                        hex.setText(String.format("#%06X", c and 0xFFFFFF))
-                        typing = true
-                        show(c)
-                    }
-                    layoutParams = LinearLayout.LayoutParams(0, dp(40), 1f).apply {
-                        marginStart = dp(3)
-                        marginEnd = dp(3)
-                    }
-                })
-            }
-            content.addView(row)
-        }
-        val field = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        field.addView(hex)
-        field.addView(preview)
-        content.addView(field)
-        AlertDialog.Builder(this)
-            .setTitle(R.string.widget_pick_title)
-            .setView(content)
-            .setPositiveButton(android.R.string.ok) { _, _ -> onPick(if (chosen != 0) chosen or 0xFF000000.toInt() else 0) }
-            .setNeutralButton(R.string.widget_pick_auto) { _, _ -> onPick(0) }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+        ColourPickerDialog(
+            this,
+            PickerTheme(
+                surface = if (night) 0xFF2E2E32.toInt() else 0xFFFFFFFF.toInt(), ink = ink, inkSoft = inkSoft,
+                accent = accent, onAccent = onAccent, chip = if (night) 0x33FFFFFF else 0x14000000,
+            ),
+            start, onPick,
+        ).show()
     }
+
+    /** The dialogs of the page follow the phone: dark when it is dark. */
+    private val dialogTheme: Int
+        get() = if (night) android.R.style.Theme_DeviceDefault_Dialog_Alert else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
 
     // ---- Tab: the card ------------------------------------------------------------------------------------------
 
@@ -933,7 +856,7 @@ class WidgetConfigActivity : Activity() {
             setTextColor(inkSoft)
         })
         row.setOnClickListener {
-            AlertDialog.Builder(this)
+            AlertDialog.Builder(this, dialogTheme)
                 .setTitle(R.string.widget_cfg_language)
                 .setSingleChoiceItems(codes.map { nameOf(it) }.toTypedArray(), codes.indexOf(look.lang).coerceAtLeast(0)) { dialog, which ->
                     look.lang = codes[which]
@@ -1269,8 +1192,8 @@ class WidgetConfigActivity : Activity() {
     /** A field of a dialog (the dialog is light whatever the phone is). */
     private fun dialogText(hintText: String, value: String) = EditText(this).apply {
         hint = hintText
-        setTextColor(0xFF1B1B1F.toInt())
-        setHintTextColor(0x661B1B1F)
+        setTextColor(ink)
+        setHintTextColor(inkSoft)
         isSingleLine = true
         filters = arrayOf(InputFilter.LengthFilter(WidgetTheme.MAX_TEXT))
         setText(value)
