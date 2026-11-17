@@ -15,6 +15,15 @@
         android:src="@drawable/wg_r20"
         android:tint="#FFFFFFFF" />
 
+    <ImageView
+        android:id="@+id/widget_border"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/wg_bd_20_1"
+        android:tint="#FFFFFFFF"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"

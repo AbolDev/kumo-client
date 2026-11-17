@@ -16,7 +16,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
+import android.widget.CheckBox
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.ScrollView
@@ -48,7 +50,19 @@ class WidgetConfigActivity : Activity() {
 
     /** The side of the power button in the layouts that have it beside the texts. */
     private var side = WidgetTheme.LEFT
-    private val sideRows = ArrayList<Pair<RadioButton, Int>>()
+
+    /** The accent colour (0: the look own), whether the connected button follows it, the shape of the button, what the
+     *  widget shows, its border, the unit of the speeds and what a tap does. */
+    private var accentPick = 0
+    private var okColor = WidgetTheme.OK_GREEN
+    private var shape = WidgetTheme.SHAPE_CIRCLE
+    private var show = WidgetTheme.SHOW_ALL
+    private var border = 0
+    private var borderColor = WidgetTheme.BORDER_ACCENT
+    private var bits = false
+    private var tap = WidgetTheme.TAP_OPEN
+
+    private lateinit var column: LinearLayout
 
     /** The state the preview shows (the VPN's own now, or what the user picked). */
     private var shownState = WidgetState.OFF
@@ -83,6 +97,16 @@ class WidgetConfigActivity : Activity() {
         button = WidgetTheme.button(this, widgetId)
         font = WidgetTheme.font(this, widgetId)
         side = WidgetTheme.side(this, widgetId)
+        WidgetTheme.extras(this, widgetId).let {
+            accentPick = it.accent
+            okColor = it.okColor
+            shape = it.shape
+            show = it.show
+            border = it.border
+            borderColor = it.borderColor
+            bits = it.bits
+            tap = it.tap
+        }
         WidgetTheme.radius(this, widgetId).let {
             if (it >= 0) {
                 radius = it
@@ -132,34 +156,11 @@ class WidgetConfigActivity : Activity() {
                 setColor(page)
             }
         }
-        val column = LinearLayout(this).apply {
+        column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(8), dp(16), dp(8))
         }
-        column.addView(sectionLabel(R.string.widget_cfg_bg))
-        val colours = panelBox()
-        val options = listOf(
-            Triple(WidgetTheme.AUTO, R.string.widget_theme_auto, R.string.widget_theme_auto_desc),
-            Triple(WidgetTheme.LIGHT, R.string.widget_theme_light, 0),
-            Triple(WidgetTheme.DARK, R.string.widget_theme_dark, 0),
-        )
-        for ((value, title, desc) in options) colours.addView(themeRow(value, title, desc))
-        column.addView(colours)
-        column.addView(sectionLabel(R.string.widget_cfg_opacity))
-        column.addView(opacityBox())
-        column.addView(sectionLabel(R.string.widget_cfg_radius))
-        column.addView(radiusBox())
-        column.addView(sectionLabel(R.string.widget_cfg_height))
-        column.addView(heightBox())
-        // A view is resized from a widget on Android 12+ only: older phones keep the size of the button.
-        if (WidgetTheme.canSizeButton) {
-            column.addView(sectionLabel(R.string.widget_cfg_button))
-            column.addView(buttonBox())
-        }
-        column.addView(sectionLabel(R.string.widget_cfg_font))
-        column.addView(fontBox())
-        column.addView(sectionLabel(R.string.widget_cfg_side))
-        column.addView(sideBox())
+        fillColumn()
 
         sheet.addView(ScrollView(this).apply {
             addView(column)
@@ -365,6 +366,272 @@ class WidgetConfigActivity : Activity() {
         return box
     }
 
+    /** The sections of the sheet, one after the other (again after a preset changed the values). */
+    private fun fillColumn() {
+        column.addView(sectionLabel(R.string.widget_cfg_presets))
+        column.addView(presetBar())
+        column.addView(sectionLabel(R.string.widget_cfg_bg))
+        val colours = panelBox()
+        val options = listOf(
+            Triple(WidgetTheme.AUTO, R.string.widget_theme_auto, R.string.widget_theme_auto_desc),
+            Triple(WidgetTheme.LIGHT, R.string.widget_theme_light, 0),
+            Triple(WidgetTheme.DARK, R.string.widget_theme_dark, 0),
+        )
+        for ((value, title, desc) in options) colours.addView(themeRow(value, title, desc))
+        column.addView(colours)
+        column.addView(sectionLabel(R.string.widget_cfg_opacity))
+        column.addView(opacityBox())
+        column.addView(sectionLabel(R.string.widget_cfg_radius))
+        column.addView(radiusBox())
+        column.addView(sectionLabel(R.string.widget_cfg_height))
+        column.addView(heightBox())
+        column.addView(sectionLabel(R.string.widget_cfg_border))
+        column.addView(borderBox())
+        column.addView(sectionLabel(R.string.widget_cfg_border_color))
+        column.addView(choiceBox(
+            listOf(WidgetTheme.BORDER_ACCENT to R.string.widget_border_accent, WidgetTheme.BORDER_NEUTRAL to R.string.widget_border_neutral),
+            { borderColor },
+        ) { borderColor = it })
+        column.addView(sectionLabel(R.string.widget_cfg_accent))
+        column.addView(accentBox())
+        column.addView(sectionLabel(R.string.widget_cfg_ok))
+        column.addView(choiceBox(
+            listOf(WidgetTheme.OK_GREEN to R.string.widget_ok_green, WidgetTheme.OK_ACCENT to R.string.widget_ok_accent),
+            { okColor },
+        ) { okColor = it })
+        column.addView(sectionLabel(R.string.widget_cfg_shape))
+        column.addView(choiceBox(
+            listOf(
+                WidgetTheme.SHAPE_CIRCLE to R.string.widget_shape_circle,
+                WidgetTheme.SHAPE_ROUNDED to R.string.widget_shape_rounded,
+                WidgetTheme.SHAPE_SQUARE to R.string.widget_shape_square,
+            ),
+            { shape },
+        ) { shape = it })
+        // A view is resized from a widget on Android 12+ only: older phones keep the size of the button.
+        if (WidgetTheme.canSizeButton) {
+            column.addView(sectionLabel(R.string.widget_cfg_button))
+            column.addView(buttonBox())
+        }
+        column.addView(sectionLabel(R.string.widget_cfg_side))
+        column.addView(choiceBox(
+            listOf(WidgetTheme.LEFT to R.string.widget_side_left, WidgetTheme.RIGHT to R.string.widget_side_right),
+            { side },
+        ) { side = it })
+        column.addView(sectionLabel(R.string.widget_cfg_font))
+        column.addView(fontBox())
+        column.addView(sectionLabel(R.string.widget_cfg_show))
+        column.addView(showBox())
+        column.addView(sectionLabel(R.string.widget_cfg_unit))
+        column.addView(choiceBox(
+            listOf(0 to R.string.widget_unit_bytes, 1 to R.string.widget_unit_bits),
+            { if (bits) 1 else 0 },
+        ) { bits = it == 1 })
+        column.addView(sectionLabel(R.string.widget_cfg_tap))
+        column.addView(choiceBox(
+            listOf(WidgetTheme.TAP_OPEN to R.string.widget_tap_open, WidgetTheme.TAP_TOGGLE to R.string.widget_tap_toggle),
+            { tap },
+        ) { tap = it })
+    }
+
+    /** A preset sets the whole look at once (not the side of the button, the unit or the tap): the colours, the corners,
+     *  the border, the shape, the sizes and what is shown. */
+    private class Preset(val name: Int, val action: (WidgetConfigActivity) -> Unit)
+
+    private val presets = listOf(
+        Preset(R.string.widget_preset_default) {
+            it.setLook(WidgetTheme.AUTO, 100, -1, 100, 100, 100, 0, WidgetTheme.OK_GREEN, WidgetTheme.SHAPE_CIRCLE, WidgetTheme.SHOW_ALL, 0, WidgetTheme.BORDER_ACCENT)
+        },
+        Preset(R.string.widget_preset_minimal) {
+            it.setLook(
+                WidgetTheme.AUTO, 100, 12, 100, 90, 100, 0, WidgetTheme.OK_ACCENT, WidgetTheme.SHAPE_ROUNDED,
+                WidgetTheme.SHOW_SERVER or WidgetTheme.SHOW_SPEED, 0, WidgetTheme.BORDER_ACCENT,
+            )
+        },
+        Preset(R.string.widget_preset_glass) {
+            it.setLook(WidgetTheme.DARK, 40, 32, 100, 100, 100, 0, WidgetTheme.OK_GREEN, WidgetTheme.SHAPE_CIRCLE, WidgetTheme.SHOW_ALL, 1, WidgetTheme.BORDER_NEUTRAL)
+        },
+        Preset(R.string.widget_preset_bold) {
+            it.setLook(WidgetTheme.AUTO, 100, 36, 100, 120, 110, 1, WidgetTheme.OK_ACCENT, WidgetTheme.SHAPE_CIRCLE, WidgetTheme.SHOW_ALL, 0, WidgetTheme.BORDER_ACCENT)
+        },
+        Preset(R.string.widget_preset_night) {
+            it.setLook(WidgetTheme.DARK, 90, 20, 100, 100, 100, 2, WidgetTheme.OK_ACCENT, WidgetTheme.SHAPE_ROUNDED, WidgetTheme.SHOW_ALL, 1, WidgetTheme.BORDER_ACCENT)
+        },
+        Preset(R.string.widget_preset_sharp) {
+            it.setLook(WidgetTheme.AUTO, 100, 0, 100, 100, 100, 3, WidgetTheme.OK_GREEN, WidgetTheme.SHAPE_SQUARE, WidgetTheme.SHOW_ALL, 2, WidgetTheme.BORDER_ACCENT)
+        },
+    )
+
+    /** [corners] -1: the corners the widget was drawn with. */
+    private fun setLook(
+        theme: Int, opacity: Int, corners: Int, height: Int, button: Int, font: Int, accent: Int, ok: Int,
+        shape: Int, show: Int, border: Int, borderColor: Int,
+    ) {
+        this.theme = theme
+        this.opacity = opacity
+        radiusChosen = corners >= 0
+        if (corners >= 0) radius = corners
+        this.height = height
+        this.button = button
+        this.font = font
+        accentPick = accent
+        okColor = ok
+        this.shape = shape
+        this.show = show
+        this.border = border
+        this.borderColor = borderColor
+    }
+
+    private fun applyPreset(p: Preset) {
+        p.action(this)
+        // The controls are built from the values: build them again, where the user was.
+        column.removeAllViews()
+        themeRows.clear()
+        fillColumn()
+        markThemes()
+        renderPreview()
+    }
+
+    /** The presets as chips in a row that scrolls. */
+    private fun presetBar() = HorizontalScrollView(this).apply {
+        isHorizontalScrollBarEnabled = false
+        val row = LinearLayout(this@WidgetConfigActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        for (p in presets) {
+            row.addView(TextView(this@WidgetConfigActivity).apply {
+                text = getString(p.name)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTypeface(typeface, Typeface.BOLD)
+                setTextColor(accent)
+                setPadding(dp(16), dp(9), dp(16), dp(9))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(20).toFloat()
+                    setStroke(dp(1), accent)
+                }
+                isClickable = true
+                setOnClickListener { applyPreset(p) }
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+                ).apply { marginEnd = dp(8) }
+            })
+        }
+        addView(row)
+    }
+
+    /** Rows with a radio button each, one chosen: [current] tells which is, [onPick] hears a change. */
+    private fun choiceBox(options: List<Pair<Int, Int>>, current: () -> Int, onPick: (Int) -> Unit): LinearLayout {
+        val box = panelBox()
+        val rows = ArrayList<Pair<RadioButton, Int>>()
+        fun mark() {
+            for ((radio, value) in rows) radio.isChecked = value == current()
+        }
+        for ((value, title) in options) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(8), dp(12), dp(8))
+                minimumHeight = dp(48)
+                isClickable = true
+                setOnClickListener {
+                    onPick(value)
+                    mark()
+                    renderPreview()
+                }
+            }
+            val radio = RadioButton(this).apply {
+                buttonTintList = ColorStateList.valueOf(accent)
+                isClickable = false
+            }
+            row.addView(radio)
+            row.addView(TextView(this).apply {
+                text = getString(title)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTextColor(ink)
+                setPadding(dp(8), 0, 0, 0)
+            })
+            box.addView(row)
+            rows.add(Pair(radio, value))
+        }
+        mark()
+        return box
+    }
+
+    /** The accent colours as discs: the first is the look own colour (the wallpaper, or Kumo teal). */
+    private fun accentBox(): LinearLayout {
+        val box = panelBox()
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dp(4), dp(8), dp(4), dp(8))
+        }
+        val discs = ArrayList<Pair<View, Int>>()
+        fun mark() {
+            for ((disc, value) in discs) {
+                (disc.background as GradientDrawable).apply {
+                    if (value == accentPick) setStroke(dp(3), ink) else setStroke(dp(1), inkSoft)
+                }
+            }
+        }
+        for (value in 0..WidgetColors.ACCENT_COUNT) {
+            val disc = View(this).apply {
+                background = GradientDrawable().apply {
+                    setShape(GradientDrawable.OVAL)
+                    setColor(if (value == 0) WidgetColors.light(this@WidgetConfigActivity).ring else WidgetColors.swatch(value))
+                }
+                isClickable = true
+                setOnClickListener {
+                    accentPick = value
+                    mark()
+                    renderPreview()
+                }
+                layoutParams = LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                    marginStart = dp(6)
+                    marginEnd = dp(6)
+                }
+            }
+            row.addView(disc)
+            discs.add(Pair(disc, value))
+        }
+        mark()
+        box.addView(row)
+        return box
+    }
+
+    /** What the widget shows: a switch for each of the server, the speeds, the delay, the data and the time. */
+    private fun showBox(): LinearLayout {
+        val box = panelBox()
+        val items = listOf(
+            WidgetTheme.SHOW_SERVER to R.string.widget_show_server,
+            WidgetTheme.SHOW_SPEED to R.string.widget_show_speed,
+            WidgetTheme.SHOW_PING to R.string.widget_show_ping,
+            WidgetTheme.SHOW_TOTAL to R.string.widget_show_total,
+            WidgetTheme.SHOW_TIME to R.string.widget_show_time,
+        )
+        for ((flag, title) in items) {
+            box.addView(CheckBox(this).apply {
+                text = getString(title)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTextColor(ink)
+                buttonTintList = ColorStateList.valueOf(accent)
+                minimumHeight = dp(48)
+                setPadding(dp(10), dp(4), dp(12), dp(4))
+                isChecked = (show and flag) != 0
+                setOnCheckedChangeListener { _, on ->
+                    show = if (on) show or flag else show and flag.inv()
+                    renderPreview()
+                }
+            })
+        }
+        return box
+    }
+
+    /** The slider of the border: 0 (none) to 3 dp. */
+    private fun borderBox() = sliderBox(0, 1, WidgetTheme.MAX_BORDER, border, " dp") {
+        border = it
+        renderPreview()
+    }
     /** The slider of the opacity: eleven steps, 0 to 100 percent. */
     private fun opacityBox() = sliderBox(0, 10, 10, opacity, "%") {
         opacity = it
@@ -394,44 +661,6 @@ class WidgetConfigActivity : Activity() {
     private fun fontBox() = sliderBox(WidgetTheme.MIN_FONT, 10, 8, font, "%") {
         font = it
         renderPreview()
-    }
-
-    /** The side of the power button: two rows to choose from, as the colours are. */
-    private fun sideBox(): LinearLayout {
-        val box = panelBox()
-        for ((value, title) in listOf(WidgetTheme.LEFT to R.string.widget_side_left, WidgetTheme.RIGHT to R.string.widget_side_right)) {
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(10), dp(8), dp(12), dp(8))
-                minimumHeight = dp(48)
-                isClickable = true
-                setOnClickListener {
-                    side = value
-                    markSides()
-                    renderPreview()
-                }
-            }
-            val radio = RadioButton(this).apply {
-                buttonTintList = ColorStateList.valueOf(accent)
-                isClickable = false
-            }
-            row.addView(radio)
-            row.addView(TextView(this).apply {
-                text = getString(title)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
-                setTextColor(ink)
-                setPadding(dp(8), 0, 0, 0)
-            })
-            box.addView(row)
-            sideRows.add(Pair(radio, value))
-        }
-        markSides()
-        return box
-    }
-
-    private fun markSides() {
-        for ((radio, value) in sideRows) radio.isChecked = value == side
     }
 
     private fun barButton(text: Int, filled: Boolean, onClick: () -> Unit) = TextView(this).apply {
@@ -472,7 +701,9 @@ class WidgetConfigActivity : Activity() {
         try {
             val views = KumoWidget.preview(
                 this, widgetId,
-                WidgetLook(theme, opacity, shownState, if (radiusChosen) radius else -1, height, button, font, side),
+                WidgetLook(theme, opacity, shownState, if (radiusChosen) radius else -1, height, button, font, side,
+                    accentPick, okColor, shape, show, border, borderColor, bits, tap,
+                ),
             ) ?: return
             val (w, h) = widgetSizeDp()
             val widget = views.apply(this, stage)
@@ -490,6 +721,7 @@ class WidgetConfigActivity : Activity() {
         WidgetTheme.saveShape(this, widgetId, if (radiusChosen) radius else null, height)
         WidgetTheme.saveSizes(this, widgetId, button, font)
         WidgetTheme.saveSide(this, widgetId, side)
+        WidgetTheme.saveExtras(this, widgetId, WidgetTheme.Extras(accentPick, okColor, shape, show, border, borderColor, bits, tap))
         KumoWidget.refreshOne(this, widgetId)
         setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
         finish()
