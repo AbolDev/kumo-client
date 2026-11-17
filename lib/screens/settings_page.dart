@@ -421,11 +421,11 @@ class _SettingsPageState extends State<SettingsPage> {
       _section(Icons.rss_feed, t.subSettings, [
         _switch(Icons.sync, 'autoUpdateSubs', state.autoUpdateSubs, t.autoUpdateSubs, t.autoUpdateSubsDesc),
         _switch(Icons.rocket_launch_outlined, 'updateOnStartup', state.updateOnStartup, t.updateOnStartup, t.updateOnStartupDesc),
-        ListTile(
-          leading: const Icon(Icons.timer_outlined),
+        ValueOption(
+          icon: const Icon(Icons.timer_outlined),
           title: Text(tr(context, 'defaultInterval')),
           subtitle: Text(tr(context, 'defaultIntervalDesc')),
-          trailing: Text(tr(context, 'hoursShort').replaceAll('{n}', '${state.subInterval}')),
+          value: tr(context, 'hoursShort').replaceAll('{n}', '${state.subInterval}'),
           onTap: () async {
             final v =
                 await pickOption<int>(context, tr(context, 'defaultInterval'), state.subInterval, {
@@ -444,11 +444,11 @@ class _SettingsPageState extends State<SettingsPage> {
       ]),
       _section(Icons.apps, t.appSettings, [
         _switch(Icons.power_settings_new, 'autoConnect', state.autoConnect, t.autoConnect, t.autoConnectDesc),
-        ListTile(
-          leading: const Icon(Icons.bedtime_outlined),
+        ValueOption(
+          icon: const Icon(Icons.bedtime_outlined),
           title: Text(tr(context, 'sleepTimer')),
           subtitle: Text(tr(context, 'sleepTimerDesc')),
-          trailing: Text(_limitText(state.sleepMinutes, minutes: true)),
+          value: _limitText(state.sleepMinutes, minutes: true),
           onTap: () async {
             final v = await pickOption<int>(context, tr(context, 'sleepTimer'), state.sleepMinutes, {
               for (final m in {...AppState.sleepChoices, state.sleepMinutes}.toList()..sort())
@@ -457,12 +457,12 @@ class _SettingsPageState extends State<SettingsPage> {
             if (v != null) state.setSleepMinutes(v);
           },
         ),
-        ListTile(
-          leading: const Icon(Icons.data_usage),
+        ValueOption(
+          icon: const Icon(Icons.data_usage),
           title: Text(tr(context, 'dailyCap')),
           subtitle: Text('${tr(context, 'dailyCapDesc')}\n'
               '${tr(context, 'dailyCapUsed', {'n': formatBytes(state.usedToday)})}'),
-          trailing: Text(_limitText(state.dailyCapMb, minutes: false)),
+          value: _limitText(state.dailyCapMb, minutes: false),
           onTap: () async {
             final v = await pickOption<int>(context, tr(context, 'dailyCap'), state.dailyCapMb, {
               for (final m in {...AppState.capChoices, state.dailyCapMb}.toList()..sort())
@@ -579,8 +579,8 @@ class _SettingsPageState extends State<SettingsPage> {
             trailing: const Icon(Icons.arrow_drop_down),
             onTap: _pickAppIcon,
           ),
-        ListTile(
-          leading: const Icon(Icons.shield_moon_outlined),
+        ValueOption(
+          icon: const Icon(Icons.shield_moon_outlined),
           title: Text(tr(context, 'privacyTools')),
           subtitle: Text(tr(context, 'privacyToolsDesc')),
           trailing: const Icon(Icons.chevron_right),
@@ -656,8 +656,8 @@ class _SettingsPageState extends State<SettingsPage> {
           title: Text(tr(context, 'importBackup')),
           onTap: _import,
         ),
-        ListTile(
-          leading: const Icon(Icons.devices_outlined),
+        ValueOption(
+          icon: const Icon(Icons.devices_outlined),
           title: Text(tr(context, 'syncTitle')),
           subtitle: Text(tr(context, 'syncDesc')),
           trailing: const Icon(Icons.chevron_right),
@@ -666,11 +666,11 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ]),
       _section(Icons.receipt_long, t.logs, [
-        ListTile(
-          leading: const Icon(Icons.list_alt),
+        ValueOption(
+          icon: const Icon(Icons.list_alt),
           title: Text(t.logs),
           subtitle: Text(t.logsDesc),
-          trailing: Text('${state.logs.length}'),
+          value: '${state.logs.length}',
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute<void>(settings: const RouteSettings(name: '/LogsPage'), builder: (_) => LogsPage(state: state)),
@@ -725,22 +725,22 @@ class _SettingsPageState extends State<SettingsPage> {
               maxLines: 2, overflow: TextOverflow.ellipsis, textDirection: TextDirection.ltr),
           onTap: () => _editDelayUrl(t),
         ),
-        ListTile(
-          leading: const Icon(Icons.memory),
+        ValueOption(
+          icon: const Icon(Icons.memory),
           title: taggedTitle(tr(context, 'coreChoice')),
           subtitle: Text(tr(context, 'coreChoiceDesc')),
-          trailing: Text(state.net.core == 'xray' ? 'Xray' : 'sing-box'),
+          value: state.net.core == 'xray' ? 'Xray' : 'sing-box',
           onTap: () async {
             final v = await pickOption<String>(context, tr(context, 'coreChoice'), state.net.core,
                 {'singbox': 'sing-box', 'xray': 'Xray'});
             if (v != null) await state.updateNet((o) => o.core = v);
           },
         ),
-        ListTile(
-          leading: const Icon(Icons.verified_user_outlined),
+        ValueOption(
+          icon: const Icon(Icons.verified_user_outlined),
           title: taggedTitle(tr(context, 'certStore')),
           subtitle: Text(tr(context, 'certStoreDesc')),
-          trailing: Text(tr(context, 'store_${state.net.certStore}')),
+          value: tr(context, 'store_${state.net.certStore}'),
           onTap: () async {
             final v =
                 await pickOption<String>(context, tr(context, 'certStore'), state.net.certStore, {
@@ -756,8 +756,8 @@ class _SettingsPageState extends State<SettingsPage> {
           title: taggedTitle(tr(context, 'ntp')),
           subtitle: Text(tr(context, 'ntpDesc')),
         ),
-        ListTile(
-          leading: const Icon(Icons.data_object),
+        ValueOption(
+          icon: const Icon(Icons.data_object),
           title: taggedTitle(tr(context, 'extraSingbox')),
           subtitle: Text(tr(context, 'extraSingboxForm')),
           trailing: state.net.extraSingbox.isEmpty ? null : const Icon(Icons.check),
@@ -771,8 +771,8 @@ class _SettingsPageState extends State<SettingsPage> {
             if (v != null) await state.updateNet((o) => o.extraSingbox = v);
           },
         ),
-        ListTile(
-          leading: const Icon(Icons.data_object),
+        ValueOption(
+          icon: const Icon(Icons.data_object),
           title: taggedTitle(tr(context, 'extraXray')),
           subtitle: Text(tr(context, 'extraXrayForm')),
           trailing: state.net.extraXray.isEmpty ? null : const Icon(Icons.check),
@@ -786,11 +786,11 @@ class _SettingsPageState extends State<SettingsPage> {
             if (v != null) await state.updateNet((o) => o.extraXray = v);
           },
         ),
-        ListTile(
-          leading: const Icon(Icons.receipt_long),
+        ValueOption(
+          icon: const Icon(Icons.receipt_long),
           title: taggedTitle(tr(context, 'logLevel')),
           subtitle: Text(tr(context, 'logLevelDesc')),
-          trailing: Text(state.net.logLevel),
+          value: state.net.logLevel,
           onTap: () => _choose<String>(
             tr(context, 'logLevel'),
             state.net.logLevel,

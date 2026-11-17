@@ -109,6 +109,83 @@ class SwitchOption extends StatelessWidget {
   }
 }
 
+/// An option that opens a choice or a page and shows its value (or an arrow) at the end of the title's line,
+/// laid out like [SwitchOption]: the description under the title takes the whole width (in a [ListTile] the
+/// value has a column of its own the height of the row, so a description wraps into many more lines).
+class ValueOption extends StatelessWidget {
+  const ValueOption({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.value,
+    this.trailing,
+    required this.onTap,
+  });
+
+  /// The icon before the title; it stands in the middle of the row, as in a [ListTile].
+  final Widget icon;
+  final Widget title;
+  final Widget? subtitle;
+
+  /// The current value, in words ("Off", "6 h"); shown before [trailing].
+  final String? value;
+
+  /// An arrow or a check mark after the value.
+  final Widget? trailing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final enabled = onTap != null;
+    Color faded(Color c) => enabled ? c : c.withValues(alpha: 0.38);
+    return MergeSemantics(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 16),
+              child: IconTheme.merge(data: IconThemeData(color: faded(scheme.onSurfaceVariant)), child: icon),
+            ),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 40),
+                  child: Row(children: [
+                    Expanded(
+                      child: DefaultTextStyle.merge(
+                          style: theme.textTheme.bodyLarge?.copyWith(color: faded(scheme.onSurface)), child: title),
+                    ),
+                    if (value != null) ...[
+                      const SizedBox(width: 12),
+                      Text(value!, style: theme.textTheme.bodyMedium?.copyWith(color: faded(scheme.onSurfaceVariant))),
+                    ],
+                    if (trailing != null) ...[
+                      const SizedBox(width: 8),
+                      IconTheme.merge(data: IconThemeData(color: faded(scheme.onSurfaceVariant)), child: trailing!),
+                    ],
+                  ]),
+                ),
+                if (subtitle != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: DefaultTextStyle.merge(
+                        style: theme.textTheme.bodyMedium?.copyWith(color: faded(scheme.onSurfaceVariant)),
+                        child: subtitle!),
+                  ),
+              ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
 /// A description longer than this is cut to two lines under the option, with the whole text behind an
 /// information button.
 const longDescription = 90;

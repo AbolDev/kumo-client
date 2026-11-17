@@ -111,11 +111,11 @@ List<Widget> networkSections(
       reset('network'),
     ]),
     section(Icons.alt_route, tr(context, 'routingSection'), [
-      ListTile(
-        leading: const Icon(Icons.apps_outage),
+      ValueOption(
+        icon: const Icon(Icons.apps_outage),
         title: Text(tr(context, 'appRouting')),
         subtitle: Text(modeText),
-        trailing: o.apps.isEmpty ? null : Text('${o.apps.length}'),
+        value: o.apps.isEmpty ? null : '${o.apps.length}',
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute<void>(
@@ -149,13 +149,13 @@ List<Widget> networkSections(
             if (v != null) await state.updateNet((o) => o.listsRoute = v, reconnect: false);
           },
         ),
-      ListTile(
-        leading: const Icon(Icons.alt_route),
+      ValueOption(
+        icon: const Icon(Icons.alt_route),
         title: Text(tr(context, 'ruleTitle')),
         subtitle: Text(tr(context, 'ruleDesc')),
-        trailing: o.directRules.length + o.proxyRules.length + o.blockRules.length == 0
+        value: o.directRules.length + o.proxyRules.length + o.blockRules.length == 0
             ? null
-            : Text('${o.directRules.length + o.proxyRules.length + o.blockRules.length}'),
+            : '${o.directRules.length + o.proxyRules.length + o.blockRules.length}',
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute<void>(settings: const RouteSettings(name: '/RoutingRulesPage'), builder: (_) => RoutingRulesPage(state: state)),
@@ -259,19 +259,19 @@ List<Widget> networkSections(
           (v) => o.tcpFastOpen = v),
       flag(Icons.timeline, tr(context, 'tcpMultiPath'), tr(context, 'tcpMultiPathDesc'), o.tcpMultiPath,
           (v) => o.tcpMultiPath = v),
-      ListTile(
-        leading: const Icon(Icons.timer_outlined),
+      ValueOption(
+        icon: const Icon(Icons.timer_outlined),
         title: Text(tr(context, 'connectTimeout')),
         subtitle: Text(tr(context, 'connectTimeoutDesc')),
-        trailing: Text(o.connectTimeout == 0 ? '—' : '${o.connectTimeout} s'),
+        value: o.connectTimeout == 0 ? '—' : '${o.connectTimeout} s',
         onTap: () => _editTimeout(context, state),
       ),
       if (!win)
-        ListTile(
-          leading: const Icon(Icons.swap_horiz),
+        ValueOption(
+          icon: const Icon(Icons.swap_horiz),
           title: Text(tr(context, 'networkStrategy')),
           subtitle: Text(tr(context, 'networkStrategyDesc')),
-          trailing: Text(tr(context, 'strategy_${o.networkStrategy}')),
+          value: tr(context, 'strategy_${o.networkStrategy}'),
           onTap: () async {
             final v = await pickOption<String>(
                 context, tr(context, 'networkStrategy'), o.networkStrategy, {
@@ -301,8 +301,8 @@ List<Widget> networkSections(
           onChanged: (v) => state.updateNet((o) => o.fingerprint = v ?? ''),
         ),
       ),
-      ListTile(
-        leading: const Icon(Icons.link),
+      ValueOption(
+        icon: const Icon(Icons.link),
         title: Text(tr(context, 'chain')),
         subtitle: Text(o.chain.isEmpty
             ? tr(context, 'chainDesc')
