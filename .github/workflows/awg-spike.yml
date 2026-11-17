@@ -34,7 +34,7 @@ jobs:
       - name: Resolve the modules
         run: |
           go version
-          go get github.com/sagernet/sing-box@v1.13.21 github.com/amnezia-vpn/amneziawg-go/v3@master golang.org/x/crypto golang.org/x/net
+          go get github.com/sagernet/sing-box@v1.13.21 github.com/amnezia-vpn/amneziawg-go/v3@master golang.org/x/crypto@v0.48.0 golang.org/x/net@v0.50.0
           go mod tidy
           go list -m github.com/amnezia-vpn/amneziawg-go/v3 github.com/sagernet/wireguard-go github.com/sagernet/sing-box
 

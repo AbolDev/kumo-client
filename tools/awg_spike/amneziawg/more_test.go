@@ -167,10 +167,10 @@ func TestTwoPeers(t *testing.T) {
 	serverPrivateB, serverPublicB := newKey(t)
 	clientPrivate, clientPublic := newKey(t)
 	startServerAt(t, 51843, "10.9.0.1", "10.9.0.2/32", serverPrivateA, clientPublic, awg1Server)
-	startServerAt(t, 51844, "10.10.0.1", "10.10.0.2/32", serverPrivateB, clientPublic, awg1Server)
+	startServerAt(t, 51844, "10.10.0.1", "10.9.0.2/32", serverPrivateB, clientPublic, awg1Server)
 	opts := EndpointOptions{
 		PrivateKey: b64(clientPrivate),
-		Address:    []netip.Prefix{netip.MustParsePrefix("10.9.0.2/32"), netip.MustParsePrefix("10.10.0.2/32")},
+		Address:    []netip.Prefix{netip.MustParsePrefix("10.9.0.2/32")},
 		Peers: []PeerOptions{
 			{Endpoint: M.ParseSocksaddrHostPort("127.0.0.1", 51843), PublicKey: b64(serverPublicA), AllowedIPs: []netip.Prefix{netip.MustParsePrefix("10.9.0.0/24")}, PersistentKeepaliveInterval: 2},
 			{Endpoint: M.ParseSocksaddrHostPort("127.0.0.1", 51844), PublicKey: b64(serverPublicB), AllowedIPs: []netip.Prefix{netip.MustParsePrefix("10.10.0.0/24")}, PersistentKeepaliveInterval: 2},
