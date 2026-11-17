@@ -14,7 +14,7 @@
 
 ## ما هو Kumo؟
 
-Kumo عميل VPN مجاني ومفتوح المصدر لأندرويد وويندوز وmacOS ولينكس، ولا يحتاج إلى إنشاء حساب. يعثر على الخوادم العامة التي تعمل على شبكتك ويوصلك بأسرعها بلمسة واحدة. ويفتح أيضًا إعدادات واشتراكات V2Ray وXray وsing-box الخاصة بك (VLESS وVMess وTrojan وShadowsocks وHysteria2 وWireGuard وغيرها)، وهي الروابط نفسها التي تستخدمها عملاء V2Ray وsing-box الأخرى. يعمل Kumo بمحركي [sing-box](https://github.com/SagerNet/sing-box) و[Xray](https://github.com/XTLS/Xray-core).
+Kumo عميل VPN مجاني ومفتوح المصدر لأندرويد وويندوز وmacOS ولينكس، ولا يحتاج إلى إنشاء حساب. يعثر على الخوادم العامة التي تعمل على شبكتك ويوصلك بأسرعها بلمسة واحدة. ويفتح أيضًا إعدادات واشتراكات V2Ray وXray وsing-box الخاصة بك (VLESS وVMess وTrojan وShadowsocks وHysteria2 وWireGuard وAmneziaWG وOpenVPN وغيرها)، وهي الروابط نفسها التي تستخدمها عملاء V2Ray وsing-box الأخرى. يعمل Kumo بمحركي [sing-box](https://github.com/SagerNet/sing-box) و[Xray](https://github.com/XTLS/Xray-core).
 
 ## التنزيل
 
@@ -69,7 +69,7 @@ Kumo عميل VPN مجاني ومفتوح المصدر لأندرويد ووين
 - اتصال بلمسة واحدة، واختيار أسرع خادم تلقائيًا، والانتقال تلقائيًا عندما يتوقف الخادم عن الاستجابة.
 - الجهاز كله (أندرويد) أو وكيل محلي؛ توجيه حسب التطبيق، ودول مباشرة، وقواعد التوجيه الخاصة بك.
 - خوادم عامة مجانية، وإعداداتك واشتراكاتك الخاصة (روابط، رموز QR، ملفات؛ بصيغ Clash وsing-box وXray وSurge).
-- بروتوكولات كثيرة: VLESS وVMess وTrojan وShadowsocks وHysteria 1 و2 وTUIC وAnyTLS وWireGuard وAmneziaWG وSOCKS وSSH وغيرها.
+- بروتوكولات كثيرة: VLESS وVMess وTrojan وShadowsocks وHysteria 1 و2 وTUIC وAnyTLS وWireGuard وAmneziaWG وOpenVPN وSOCKS وSSH وغيرها. ويتوفر Cloudflare WARP (عبر WireGuard وMASQUE) داخل التطبيق.
 - الخصوصية: مفتاح القطع (kill switch)، DNS صارم، منع تسرّب WebRTC، حظر الإعلانات والمتتبعات، اختبارات تسرّب IP وDNS.
 - اختبارات السرعة، السرعة والاستهلاك المباشران، الأدوات (widgets)، أيقونة شريط المهام، Android TV، سبع لغات.
 

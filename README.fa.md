@@ -14,7 +14,7 @@
 
 ## کومو چیست؟
 
-کومو یک برنامهٔ VPN رایگان و متن‌باز برای اندروید، ویندوز، مک و لینوکس است و ثبت‌نام نمی‌خواهد. سرورهای رایگانی را که در شبکهٔ شما کار می‌کنند پیدا می‌کند و با یک لمس به سریع‌ترینشان وصل می‌شود. کانفیگ‌ها و اشتراک‌های V2Ray، Xray و sing-box خودتان را هم باز می‌کند (VLESS، VMess، Trojan، Shadowsocks، Hysteria2، WireGuard و بیشتر)؛ همان لینک‌هایی که برنامه‌های دیگر V2Ray و sing-box می‌خوانند. کومو بر پایهٔ [sing-box](https://github.com/SagerNet/sing-box) و [Xray](https://github.com/XTLS/Xray-core) ساخته شده است.
+کومو یک برنامهٔ VPN رایگان و متن‌باز برای اندروید، ویندوز، مک و لینوکس است و ثبت‌نام نمی‌خواهد. سرورهای رایگانی را که در شبکهٔ شما کار می‌کنند پیدا می‌کند و با یک لمس به سریع‌ترینشان وصل می‌شود. کانفیگ‌ها و اشتراک‌های V2Ray، Xray و sing-box خودتان را هم باز می‌کند (VLESS، VMess، Trojan، Shadowsocks، Hysteria2، WireGuard، AmneziaWG، OpenVPN و بیشتر)؛ همان لینک‌هایی که برنامه‌های دیگر V2Ray و sing-box می‌خوانند. کومو بر پایهٔ [sing-box](https://github.com/SagerNet/sing-box) و [Xray](https://github.com/XTLS/Xray-core) ساخته شده است.
 
 ## دانلود
 
@@ -69,7 +69,7 @@
 - اتصال با یک لمس، انتخاب خودکار سریع‌ترین سرور و رفتن به سرور بعدی وقتی سرور جواب نمی‌دهد.
 - کل دستگاه (اندروید) یا پروکسی محلی؛ مسیریابی بر اساس برنامه، کشورهای مستقیم و قوانین شخصی.
 - سرورهای عمومی رایگان، کانفیگ و اشتراک شخصی (لینک، QR، فایل؛ فرمت‌های Clash، sing-box، Xray و Surge).
-- پروتکل‌های متعدد: VLESS، VMess، Trojan، Shadowsocks، Hysteria 1 و 2، TUIC، AnyTLS، WireGuard، AmneziaWG، SOCKS، SSH و بیشتر.
+- پروتکل‌های متعدد: VLESS، VMess، Trojan، Shadowsocks، Hysteria 1 و 2، TUIC، AnyTLS، WireGuard، AmneziaWG، OpenVPN، SOCKS، SSH و بیشتر. Cloudflare WARP (با WireGuard و MASQUE) هم داخل برنامه است.
 - حریم خصوصی: کیل سوییچ، DNS سخت‌گیرانه، جلوگیری از نشت WebRTC، مسدود کردن تبلیغات و ردیاب‌ها، تست نشت IP و DNS.
 - تست سرعت، سرعت و مصرف زنده، ویجت، آیکون نوار وظیفه، Android TV و هفت زبان.
 

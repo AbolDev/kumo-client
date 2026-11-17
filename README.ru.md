@@ -12,7 +12,7 @@
 
 ## Что такое Kumo?
 
-Kumo — бесплатный VPN-клиент с открытым исходным кодом для Android, Windows, macOS и Linux, без регистрации. Он находит публичные серверы, которые работают в вашей сети, и подключает к самому быстрому одним нажатием. Он также открывает ваши собственные конфиги и подписки V2Ray, Xray и sing-box (VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard и другие) — те же ссылки, что используют другие клиенты V2Ray и sing-box. Kumo работает на [sing-box](https://github.com/SagerNet/sing-box) и [Xray](https://github.com/XTLS/Xray-core).
+Kumo — бесплатный VPN-клиент с открытым исходным кодом для Android, Windows, macOS и Linux, без регистрации. Он находит публичные серверы, которые работают в вашей сети, и подключает к самому быстрому одним нажатием. Он также открывает ваши собственные конфиги и подписки V2Ray, Xray и sing-box (VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, AmneziaWG, OpenVPN и другие) — те же ссылки, что используют другие клиенты V2Ray и sing-box. Kumo работает на [sing-box](https://github.com/SagerNet/sing-box) и [Xray](https://github.com/XTLS/Xray-core).
 
 ## Скачать
 
@@ -59,7 +59,7 @@ Kumo — бесплатный VPN-клиент с открытым исходн�
 - Подключение одним нажатием, автоматический выбор самого быстрого сервера, автоматическое переключение, когда сервер перестаёт отвечать.
 - Всё устройство (Android) или локальный прокси; маршрутизация по приложениям, прямые страны, свои правила маршрутизации.
 - Бесплатные публичные серверы, ваши собственные конфиги и подписки (ссылки, QR-коды, файлы; форматы Clash, sing-box, Xray и Surge).
-- Много протоколов: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 и 2, TUIC, AnyTLS, WireGuard, AmneziaWG, SOCKS, SSH и другие.
+- Много протоколов: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 и 2, TUIC, AnyTLS, WireGuard, AmneziaWG, OpenVPN, SOCKS, SSH и другие. Cloudflare WARP (через WireGuard и MASQUE) встроен.
 - Приватность: kill switch, строгий DNS, блокировка утечки WebRTC, блокировка рекламы и трекеров, тесты утечки IP и DNS.
 - Тесты скорости, скорость и трафик в реальном времени, виджеты, значок в трее, Android TV, семь языков.
 

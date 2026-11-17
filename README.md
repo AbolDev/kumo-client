@@ -12,7 +12,7 @@ Website: [kumo-client.ir](https://kumo-client.ir) · [Telegram](https://t.me/Kum
 
 ## What is Kumo?
 
-Kumo is a free, open-source VPN client for Android, Windows, macOS and Linux, with no account to make. It finds public servers that work on your network and connects you to the fastest with one tap. It also opens your own V2Ray, Xray and sing-box configs and subscriptions (VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard and more), the same links other V2Ray and sing-box clients use. It is powered by [sing-box](https://github.com/SagerNet/sing-box) and [Xray](https://github.com/XTLS/Xray-core).
+Kumo is a free, open-source VPN client for Android, Windows, macOS and Linux, with no account to make. It finds public servers that work on your network and connects you to the fastest with one tap. It also opens your own V2Ray, Xray and sing-box configs and subscriptions (VLESS, VMess, Trojan, Shadowsocks, Hysteria2, WireGuard, AmneziaWG, OpenVPN and more), the same links other V2Ray and sing-box clients use. It is powered by [sing-box](https://github.com/SagerNet/sing-box) and [Xray](https://github.com/XTLS/Xray-core).
 
 ## Download
 
@@ -59,7 +59,7 @@ The apps are not code-signed or on Google Play, so Play Protect, SmartScreen or 
 - One-tap connect, automatic fastest server, automatic switch when a server stops answering.
 - Whole device (Android) or local proxy; per-app routing, direct countries, your own routing rules.
 - Free public servers, your own configs and subscriptions (links, QR codes, files; Clash, sing-box, Xray and Surge formats).
-- Many protocols: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 and 2, TUIC, AnyTLS, WireGuard, AmneziaWG, SOCKS, SSH and more.
+- Many protocols: VLESS, VMess, Trojan, Shadowsocks, Hysteria 1 and 2, TUIC, AnyTLS, WireGuard, AmneziaWG, OpenVPN, SOCKS, SSH and more. Cloudflare WARP (over WireGuard and MASQUE) is built in.
 - Privacy: kill switch, strict DNS, WebRTC leak block, ad and tracker block, IP and DNS leak tests.
 - Speed tests, live speed and usage, widgets, tray icon, Android TV, seven languages.
 - Sleep timer and daily data cap; connect or disconnect from the launcher icon on the phone (long press) and from the command line on a computer (`kumo --connect`, `--disconnect`, `--toggle`; add `--minimized` to keep the window hidden).

@@ -12,7 +12,7 @@
 
 ## Kumo 是什么？
 
-Kumo 是一款免费、开源的 VPN 客户端，支持 Android、Windows、macOS 和 Linux，无需注册账号。它会找到在你的网络上可用的公共服务器，一键连接到最快的那一个。它也能打开你自己的 V2Ray、Xray 和 sing-box 配置与订阅（VLESS、VMess、Trojan、Shadowsocks、Hysteria2、WireGuard 等），与其他 V2Ray 和 sing-box 客户端使用相同的链接。Kumo 基于 [sing-box](https://github.com/SagerNet/sing-box) 和 [Xray](https://github.com/XTLS/Xray-core)。
+Kumo 是一款免费、开源的 VPN 客户端，支持 Android、Windows、macOS 和 Linux，无需注册账号。它会找到在你的网络上可用的公共服务器，一键连接到最快的那一个。它也能打开你自己的 V2Ray、Xray 和 sing-box 配置与订阅（VLESS、VMess、Trojan、Shadowsocks、Hysteria2、WireGuard、AmneziaWG、OpenVPN 等），与其他 V2Ray 和 sing-box 客户端使用相同的链接。Kumo 基于 [sing-box](https://github.com/SagerNet/sing-box) 和 [Xray](https://github.com/XTLS/Xray-core)。
 
 ## 下载
 
@@ -59,7 +59,7 @@ Kumo 是一款免费、开源的 VPN 客户端，支持 Android、Windows、macO
 - 一键连接，自动选择最快的服务器，服务器无响应时自动切换。
 - 整台设备（Android）或本地代理；按应用分流、直连国家、自定义路由规则。
 - 免费公共服务器，你自己的配置和订阅（链接、二维码、文件；Clash、sing-box、Xray 和 Surge 格式）。
-- 多种协议：VLESS、VMess、Trojan、Shadowsocks、Hysteria 1 和 2、TUIC、AnyTLS、WireGuard、AmneziaWG、SOCKS、SSH 等。
+- 多种协议：VLESS、VMess、Trojan、Shadowsocks、Hysteria 1 和 2、TUIC、AnyTLS、WireGuard、AmneziaWG、OpenVPN、SOCKS、SSH 等。内置 Cloudflare WARP（WireGuard 与 MASQUE）。
 - 隐私：kill switch、严格 DNS、阻止 WebRTC 泄露、拦截广告和跟踪器、IP 和 DNS 泄露测试。
 - 测速、实时速度和流量、小组件、托盘图标、Android TV、七种语言。
 
