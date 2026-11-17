@@ -40,6 +40,12 @@ type AWGOptions struct {
 	S1, S2, S3, S4   uint16
 	H1, H2, H3, H4   string
 	I1, I2, I3, I4, I5 string
+
+	// AmneziaWG 3 and later: as the reference implementation names them (a time is a number or a range "low-high").
+	RandomTrailers, DisableCookies                bool
+	HeaderProtectionKey, ContentPaddingAddition  string
+	RekeyAfterTime, RekeyTimeout, RejectAfterTime string
+	KeepaliveTimeout, MaxHandshakeAttempts        string
 }
 
 // ipcLines are the lines of the UAPI configuration of the device that carry the parameters.
@@ -65,6 +71,23 @@ func (o AWGOptions) ipcLines() string {
 		if p != "" {
 			add(fmt.Sprintf("i%d", i+1), p)
 		}
+	}
+	for _, p := range []struct {
+		key, value string
+	}{
+		{"header_protection_key", o.HeaderProtectionKey}, {"content_padding_addition", o.ContentPaddingAddition},
+		{"rekey_after_time", o.RekeyAfterTime}, {"rekey_timeout", o.RekeyTimeout}, {"reject_after_time", o.RejectAfterTime},
+		{"keepalive_timeout", o.KeepaliveTimeout}, {"max_handshake_attempts", o.MaxHandshakeAttempts},
+	} {
+		if p.value != "" {
+			add(p.key, p.value)
+		}
+	}
+	if o.RandomTrailers {
+		add("random_trailers", true)
+	}
+	if o.DisableCookies {
+		add("disable_cookies", true)
 	}
 	return b.String()
 }

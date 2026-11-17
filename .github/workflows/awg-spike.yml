@@ -1,8 +1,8 @@
 name: AWG spike
 
 # A trial, not part of the app: can the WireGuard glue of sing-box (transport/wireguard, v1.13.21) be built on the
-# reference amneziawg-go instead of sagernet/wireguard-go, and does it connect to an unchanged AmneziaWG server?
-# Runs for the branches spike/awg-* only (tools/awg_spike).
+# reference amneziawg-go instead of sagernet/wireguard-go, does it connect to an unchanged AmneziaWG server, and does it
+# work as an endpoint of sing-box? Runs for the branches spike/awg-* only (tools/awg_spike).
 on:
   push:
     branches: ['spike/awg-*']
@@ -17,7 +17,7 @@ permissions:
 jobs:
   spike:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       TAGS: with_gvisor,badlinkname,tfogo_checklinkname0
     defaults:
@@ -34,7 +34,7 @@ jobs:
       - name: Resolve the modules
         run: |
           go version
-          go get github.com/sagernet/sing-box@v1.13.21 github.com/amnezia-vpn/amneziawg-go/v3@master golang.org/x/crypto
+          go get github.com/sagernet/sing-box@v1.13.21 github.com/amnezia-vpn/amneziawg-go/v3@master golang.org/x/crypto golang.org/x/net
           go mod tidy
           go list -m github.com/amnezia-vpn/amneziawg-go/v3 github.com/sagernet/wireguard-go github.com/sagernet/sing-box
 
@@ -44,5 +44,24 @@ jobs:
       - name: Vet
         run: go vet -tags "$TAGS" ./...
 
-      - name: Test (the glue against the reference server)
+      - name: Build for the platforms of Kumo (compile only)
+        run: |
+          fail=0
+          for target in android/arm64 android/arm linux/arm64 linux/amd64 windows/amd64 windows/arm64 darwin/arm64 darwin/amd64; do
+            if GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build -tags "$TAGS" ./amneziawg/ ./protocol/ 2>"$RUNNER_TEMP/build.err"; then
+              echo "ok      $target"
+            else
+              echo "FAILED  $target"; head -5 "$RUNNER_TEMP/build.err"; fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Test (the glue against the reference server, and as an endpoint of sing-box)
         run: go test -count=1 -v -tags "$TAGS" -ldflags "-checklinkname=0" ./...
+
+      - name: Test against the amneziawg-go program with a TUN device of the kernel
+        run: |
+          go build -o "$RUNNER_TEMP/amneziawg-go" github.com/amnezia-vpn/amneziawg-go/v3
+          go test -c -tags "$TAGS" -ldflags "-checklinkname=0" -o "$RUNNER_TEMP/awg.test" ./amneziawg/
+          ls /dev/net/tun
+          sudo AWG_REAL_BIN="$RUNNER_TEMP/amneziawg-go" "$RUNNER_TEMP/awg.test" -test.run 'TestRealServer' -test.v -test.count=1
