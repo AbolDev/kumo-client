@@ -1,0 +1,48 @@
+name: AWG spike
+
+# A trial, not part of the app: can the WireGuard glue of sing-box (transport/wireguard, v1.13.21) be built on the
+# reference amneziawg-go instead of sagernet/wireguard-go, and does it connect to an unchanged AmneziaWG server?
+# Runs for the branches spike/awg-* only (tools/awg_spike).
+on:
+  push:
+    branches: ['spike/awg-*']
+    paths:
+      - 'tools/awg_spike/**'
+      - '.github/workflows/awg-spike.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spike:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TAGS: with_gvisor,badlinkname,tfogo_checklinkname0
+    defaults:
+      run:
+        working-directory: tools/awg_spike
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Resolve the modules
+        run: |
+          go version
+          go get github.com/sagernet/sing-box@v1.13.21 github.com/amnezia-vpn/amneziawg-go/v3@master golang.org/x/crypto
+          go mod tidy
+          go list -m github.com/amnezia-vpn/amneziawg-go/v3 github.com/sagernet/wireguard-go github.com/sagernet/sing-box
+
+      - name: Build
+        run: go build -tags "$TAGS" ./...
+
+      - name: Vet
+        run: go vet -tags "$TAGS" ./...
+
+      - name: Test (the glue against the reference server)
+        run: go test -count=1 -v -tags "$TAGS" -ldflags "-checklinkname=0" ./...
