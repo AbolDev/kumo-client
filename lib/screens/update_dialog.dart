@@ -533,10 +533,12 @@ Future<void> _install(BuildContext context, UpdateInfo info,
     return;
   }
   if (Platform.isWindows) {
-    // The VPN is put away first; the installer then closes Kumo and replaces it.
+    // The VPN is put away first; the installer then closes Kumo and replaces it. /SILENT shows only its progress
+    // window (no pages to click through), and /UPDATE makes it start Kumo again when it is done (see
+    // installer/kumo.iss).
     await VpnChannel.stop();
     await VpnChannel.stopStandby();
-    await Process.start(path, const [], mode: ProcessStartMode.detached);
+    await Process.start(path, const ['/SILENT', '/NORESTART', '/UPDATE'], mode: ProcessStartMode.detached);
     exit(0);
   }
   final result = await VpnChannel.installApk(path);

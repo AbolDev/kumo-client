@@ -306,6 +306,12 @@ jobs:
 
       - run: flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-${{ matrix.arch }} --no-pub ${{ matrix.target }}
 
+      # The Visual C++ runtime next to kumo.exe (the installer and the portable zip both carry it), so that the app
+      # starts on a Windows that never had it installed.
+      - name: Bundle the Visual C++ runtime
+        shell: pwsh
+        run: ./tools/bundle_vc_runtime.ps1 -Arch ${{ matrix.arch }}
+
       # One installer for the whole app: the program, the cores, the driver and an uninstaller.
       - name: Build the installer
         shell: pwsh
@@ -399,6 +405,10 @@ jobs:
             New-Item -ItemType Directory -Force (Split-Path $want) | Out-Null
             Copy-Item $release $want -Recurse -Force
           }
+
+      - name: Bundle the Visual C++ runtime
+        shell: pwsh
+        run: ./tools/bundle_vc_runtime.ps1 -Arch arm64
 
       - name: Build the installer
         shell: pwsh
