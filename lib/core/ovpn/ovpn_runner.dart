@@ -37,8 +37,27 @@ class OvpnConnectException implements Exception {
   final OvpnFailure failure;
   final String detail;
 
+  /// With what OpenVPN printed as the detail, the line that says why it ended comes first: the start of its output is the
+  /// version and the notes about options, which told nothing in the reports.
   @override
-  String toString() => detail.isEmpty ? failure.name : '${failure.name}: $detail';
+  String toString() {
+    if (detail.isEmpty) return failure.name;
+    final cause = failure == OvpnFailure.exited || failure == OvpnFailure.timeout ? ovpnCause(detail) : null;
+    return cause == null ? '${failure.name}: $detail' : '${failure.name}: $cause\n$detail';
+  }
+}
+
+/// The line of OpenVPN's output that says why it ended: the last one that reads like an error (the notes about options
+/// that are out of date, `DEPRECATED OPTION`, are not). Null when none does.
+String? ovpnCause(String output) {
+  final reads = RegExp(r'fatal|error|cannot|can.t|could not|failed|failure|exiting|refused|denied|no tap|no adapter|not found|unable',
+      caseSensitive: false);
+  for (final line in output.split('\n').reversed) {
+    final l = line.trim();
+    if (l.isEmpty || l.contains('DEPRECATED OPTION')) continue;
+    if (reads.hasMatch(l)) return l;
+  }
+  return null;
 }
 
 /// The name of the adapter Kumo makes for OpenVPN. sing-box sends the traffic out through it.
@@ -124,7 +143,8 @@ class OvpnRunner {
   bool get running => _process != null;
 
   void _remember(String line) {
-    if (line.trim().isEmpty) return;
+    // The notes about options that are out of date fill the 30 lines and push out what says why it ended.
+    if (line.trim().isEmpty || line.contains('DEPRECATED OPTION')) return;
     _tail.add(line.trim());
     if (_tail.length > 30) _tail.removeAt(0);
   }

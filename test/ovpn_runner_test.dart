@@ -22,6 +22,20 @@ ${login ? '' : '<cert>\n${_pem('CERTIFICATE')}\n</cert>\n<key>\n${_pem('PRIVATE 
 }
 
 void main() {
+  test('the line that says why OpenVPN ended comes first, not the notes about old options', () {
+    const output = '2026-11-12 14:11:43 DEPRECATED OPTION: --persist-key option ignored. Keys are now always persisted.\n'
+        '2026-11-12 14:11:43 OpenVPN 2.7.8 [git:v2.7.8/dc1f569087135894] Windows [SSL (OpenSSL)] [DCO] built on Oct 22 2026\n'
+        '2026-11-12 14:11:43 MANAGEMENT: TCP Socket listening on [AF_INET]127.0.0.1:1234\n'
+        '2026-11-12 14:11:44 Exiting due to fatal error\n'
+        '2026-11-12 14:11:44 Could not open TAP device\n'
+        '2026-11-12 14:11:44 Closing';
+    expect(ovpnCause(output), '2026-11-12 14:11:44 Could not open TAP device', reason: 'the last line that reads like an error');
+    expect(ovpnCause('2026-11-12 14:11:43 DEPRECATED OPTION: --cipher missing\n2026-11-12 14:11:43 OpenVPN 2.7.8'), isNull);
+    final text = OvpnConnectException(OvpnFailure.exited, output).toString();
+    expect(text.split('\n').first, contains('Could not open TAP device'), reason: 'the first line of a report');
+    expect(OvpnConnectException(OvpnFailure.authFailed).toString(), 'authFailed');
+  });
+
   test('the adapters that openvpn lists are read', () {
     const out = "Available adapters [name, GUID, driver]:\n"
         "'Local Area Connection' {E64FDB88-5F19-4CD4-8329-7DF59B49CD2C} tap-windows6\n"

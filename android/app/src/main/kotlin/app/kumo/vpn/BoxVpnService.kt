@@ -196,12 +196,19 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     private var proxyPort = 0
     @Volatile private var proxyMode = false
 
+    /** The id of the newest start request this instance was given (0: none yet). */
+    @Volatile private var lastStartId = 0
+
     override fun onCreate() {
         super.onCreate()
         live = this
     }
 
     override fun onStartCommand(startIntent: Intent?, flags: Int, startId: Int): Int {
+        // The newest request this instance has been given: the service is stopped only when no newer one has come (see
+        // stopForegroundAndSelf), or a Connect that arrives while a disconnect finishes would find the service gone
+        // and Android would end the app ("did not then call Service.startForeground()").
+        lastStartId = startId
         when (startIntent?.action) {
             ACTION_STOP -> {
                 stopVpn()
@@ -224,7 +231,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         // does the system when it starts the service itself: "Always-on VPN" (after the phone starts
         // and whenever the connection is lost) and its "Block connections without VPN" setting.
         val intent = if (startIntent?.action == ACTION_CONNECT || startIntent?.action == VpnService.SERVICE_INTERFACE) {
-            runCatching { showForeground() }
+            showForegroundSafely()
             VpnControl.lastStartIntent(this) ?: run {
                 stopForegroundAndSelf()
                 IdleNotification.show(this)
@@ -237,7 +244,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         // Every startForegroundService() must be answered by startForeground(), even when the
         // request is ignored or carries nothing to start (no configuration path), or Android kills the app
         // for it ("did not then call Service.startForeground()").
-        runCatching { showForeground() }
+        showForegroundSafely()
         if (path == null || VpnBridge.status == VpnBridge.STARTING || VpnBridge.status == VpnBridge.STARTED ||
             VpnBridge.status == VpnBridge.STOPPING
         ) {
@@ -260,7 +267,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         speedText = null
         VpnBridge.engine = "singbox"
         VpnBridge.update(VpnBridge.STARTING)
-        showForeground()
+        showForegroundSafely()
         scope.launch {
             lifecycle.withLock {
                 // The proxy that was kept running holds the same port: it gives way to the tunnel.
@@ -287,7 +294,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         readStandby(intent)
         val idle = VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.ERROR
         // Every startForegroundService() must be answered by startForeground().
-        runCatching { if (idle) showProxyForeground() else showForeground() }
+        runCatching { if (idle) showProxyForeground() else showForeground() }.onFailure { Log.e(TAG, "startForeground failed", it) }
         if (!idle || standbyPath == null) {
             if (idle) stopForegroundAndSelf()
             return
@@ -312,7 +319,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         VpnBridge.closeGate()
         try {
             App.ensureLibbox()
-            val content = File(path).readText()
+            val content = RuleSetGuard.withoutMissing(File(path).readText())
             require(content.isNotBlank()) { "empty configuration" }
             standbyXrayPath?.let {
                 xrayPort = standbyXrayPort
@@ -393,12 +400,41 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 NotificationChannel(CHANNEL_ID, getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW),
             )
         }
-        val notification = proxyNotification()
+        enterForeground(
+            proxyNotification(),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED,
+        )
+    }
+
+    /**
+     * Puts the service in the foreground with [notification]. On Android 14 and later the type matters and a phone may refuse
+     * one of those the service declares (a SecurityException): the next is tried, and last the call with no type (the ones of
+     * the manifest). Only when all of them fail does it throw, so a refusal of one type never leaves a service that was
+     * started with startForegroundService() unanswered.
+     */
+    private fun enterForeground(notification: android.app.Notification, vararg types: Int) {
+        var failure: Throwable? = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+            for (type in types) {
+                try {
+                    startForeground(NOTIFICATION_ID, notification, type)
+                    return
+                } catch (e: Throwable) {
+                    Log.w(TAG, "startForeground with type $type was refused", e)
+                    failure = e
+                }
+            }
         }
+        try {
+            startForeground(NOTIFICATION_ID, notification)
+        } catch (e: Throwable) {
+            throw failure ?: e
+        }
+    }
+
+    /** [showForeground] for a place that must not throw: a refusal is logged (the next start request answers again). */
+    private fun showForegroundSafely() {
+        runCatching { showForeground() }.onFailure { Log.e(TAG, "startForeground failed", it) }
     }
 
     // ---- notification ----------------------------------------------------------
@@ -441,12 +477,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 NotificationChannel(CHANNEL_ID, getString(R.string.notif_channel), NotificationManager.IMPORTANCE_LOW),
             )
         }
-        val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
+        enterForeground(
+            buildNotification(),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+        )
     }
 
     private fun refreshNotification() {
@@ -600,7 +634,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         VpnBridge.closeGate()
         try {
             App.ensureLibbox()
-            val content = File(path).readText()
+            val content = RuleSetGuard.withoutMissing(File(path).readText())
             require(content.isNotBlank()) { "empty configuration" }
             xrayConfigPath?.let { startXray(it) }
             // A stop that came while Xray was starting: the core is not started at all (its teardown follows).
@@ -914,8 +948,18 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     private fun stopForegroundAndSelf() {
+        // Only when no newer request is waiting: a request that came in the meantime (the tile, the widget, the
+        // Connect button of the notification) is given to onStartCommand, which answers it with startForeground().
+        // Stopping the service under it is what makes Android say the request was never answered.
+        val id = lastStartId
+        val newerWaiting = id > 0 && !stopSelfResult(id)
+        if (newerWaiting) {
+            Log.i(TAG, "a newer start request is waiting: the service stays for it")
+            return
+        }
+        // (The foreground state is let go of only now: it must not be removed from a service that stays.)
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-        stopSelf()
+        if (id <= 0) stopSelf()
     }
 
     override fun onRevoke() {
@@ -962,7 +1006,7 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     override fun serviceReload() {
         // In proxy-only mode the configuration without a tunnel is the one that runs.
         val path = (if (proxyMode) standbyPath else configPath) ?: return
-        commandServer?.startOrReloadService(File(path).readText(), OverrideOptions())
+        commandServer?.startOrReloadService(RuleSetGuard.withoutMissing(File(path).readText()), OverrideOptions())
     }
 
     override fun getSystemProxyStatus(): SystemProxyStatus = SystemProxyStatus()

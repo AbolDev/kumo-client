@@ -100,7 +100,11 @@ class OvpnVpnService : VpnService(), OvpnManagement.Handler {
         live = this
     }
 
+    /** The id of the newest start request this instance was given (0: none yet): the service is stopped only when no newer one is waiting. */
+    @Volatile private var lastStartId = 0
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         if (intent?.action == ACTION_STOP) {
             stopConnection(null)
             return START_NOT_STICKY
@@ -551,10 +555,15 @@ class OvpnVpnService : VpnService(), OvpnManagement.Handler {
         }
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+            try {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
+                return
+            } catch (e: Throwable) {
+                // The phone refused the type: the call with no type (the one of the manifest) still answers the request.
+                Log.w("OvpnVpnService", "startForeground with its type was refused", e)
+            }
         }
+        startForeground(NOTIFICATION_ID, notification)
     }
 
     private fun refreshNotification() {
@@ -563,8 +572,12 @@ class OvpnVpnService : VpnService(), OvpnManagement.Handler {
     }
 
     private fun stopForegroundAndSelf() {
+        // Only when no newer start request is waiting (it is answered by onStartCommand with startForeground()): stopping the
+        // service under it is what makes Android say the request was never answered.
+        val id = lastStartId
+        if (id > 0 && !stopSelfResult(id)) return
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-        stopSelf()
+        if (id <= 0) stopSelf()
     }
 
     private fun speed(bytesPerSecond: Long): String = when {
