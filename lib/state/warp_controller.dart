@@ -78,7 +78,13 @@ class WarpController extends ChangeNotifier {
   bool busy = false;
 
   /// How far the making of a new account has come (0 to 1) while [setUp] signs up; null at other times.
-  double? setupProgress;
+  double? get setupProgress => busy ? _setupProgress : null;
+  double? _setupProgress;
+
+  /// The number of the run of [setUp] that may report progress: a sign-up that was left running (the MASQUE one
+  /// when the WireGuard one failed) goes on calling its progress after the run ended, and must not bring the bar
+  /// back for good.
+  int _setupRun = 0;
   bool loaded = false;
   String? error;
   WarpUpdateResult? lastUpdate;
@@ -474,14 +480,16 @@ class WarpController extends ChangeNotifier {
       if (store.profile == null) throw StateError('no WARP profile is available');
       final fresh = account == null;
       var masqueReady = masque != null;
+      final run = ++_setupRun;
       if (fresh) {
         // The two sign-ups (WireGuard and MASQUE) run at the same time; the bar shows the two together.
-        setupProgress = 0;
+        _setupProgress = 0;
         var wg = 0.0, mq = 0.0;
         final wantMasque = !inWarp && masque == null && (await combos()).any((c) => isMasqueKind(c.method.kind));
         void report() {
+          if (run != _setupRun || !busy) return;
           final now = 0.9 * (wantMasque ? (wg + mq) / 2 : wg);
-          if (now > (setupProgress ?? 0)) setupProgress = now;
+          if (now > (_setupProgress ?? 0)) _setupProgress = now;
           notifyListeners();
         }
 
@@ -510,7 +518,14 @@ class WarpController extends ChangeNotifier {
           masque = made;
           masqueReady = true;
           _masqueTried = true;
+        } else if (wantMasque) {
+          // It was tried just now, with the bar showing it: making the list must not run it a second time while
+          // the bar stands still (it is asked for again at the next start).
+          _masqueTried = true;
         }
+        // The accounts are made; what is left is putting the servers in the list.
+        if (run == _setupRun) _setupProgress = 0.95;
+        notifyListeners();
       }
       enabled = true;
       // A new account starts with MASQUE over HTTP/2 (it passes where WireGuard is cut). When its sign-up
@@ -532,8 +547,9 @@ class WarpController extends ChangeNotifier {
       error = '$e'.replaceFirst('Bad state: ', '');
       if (account == null) enabled = false;
     } finally {
+      _setupRun++;
       busy = false;
-      setupProgress = null;
+      _setupProgress = null;
       notifyListeners();
     }
   }
