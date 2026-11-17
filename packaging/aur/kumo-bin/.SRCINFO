@@ -1,6 +1,6 @@
 pkgbase = kumo-bin
 	pkgdesc = Free VPN client powered by sing-box and Xray
-	pkgver = 1.12.1
+	pkgver = 1.13.0
 	pkgrel = 1
 	url = https://github.com/AbolDev/kumo-client
 	install = kumo.install
@@ -14,9 +14,9 @@ pkgbase = kumo-bin
 	conflicts = kumo
 	options = !strip
 	options = !debug
-	source_x86_64 = kumo-1.12.1-x86_64.tar.gz::https://github.com/AbolDev/kumo-client/releases/download/v1.12.1/kumo-linux-x64-portable.tar.gz
-	sha256sums_x86_64 = dccbd07cb225d08875d236facca1cf09b2a687be88f017d46c70c52e5de08199
-	source_aarch64 = kumo-1.12.1-aarch64.tar.gz::https://github.com/AbolDev/kumo-client/releases/download/v1.12.1/kumo-linux-arm64-portable.tar.gz
-	sha256sums_aarch64 = 0ab36a819b6b3899dd45d5c6d45a4ccb01042602749af2a6cba27a3c2894ba94
+	source_x86_64 = kumo-1.13.0-x86_64.tar.gz::https://github.com/AbolDev/kumo-client/releases/download/v1.13.0/kumo-linux-x64-portable.tar.gz
+	sha256sums_x86_64 = 1d83c2791ff676b5f8dbdcc95f98d7e8c77a72ea5c460ebd9af077edabb5e182
+	source_aarch64 = kumo-1.13.0-aarch64.tar.gz::https://github.com/AbolDev/kumo-client/releases/download/v1.13.0/kumo-linux-arm64-portable.tar.gz
+	sha256sums_aarch64 = e9436b8176dd222361ce226fad1af297870780ff045c1f7430a4d95ce1cc1e72
 
 pkgname = kumo-bin

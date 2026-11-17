@@ -1,6 +1,6 @@
 # Maintainer: AbolDev <abolfazlbaghery07@gmail.com>
 pkgname=kumo-bin
-pkgver=1.12.1
+pkgver=1.13.0
 pkgrel=1
 pkgdesc="Free VPN client powered by sing-box and Xray"
 arch=('x86_64' 'aarch64')
@@ -13,8 +13,8 @@ options=('!strip' '!debug')
 install=kumo.install
 source_x86_64=("kumo-$pkgver-x86_64.tar.gz::$url/releases/download/v$pkgver/kumo-linux-x64-portable.tar.gz")
 source_aarch64=("kumo-$pkgver-aarch64.tar.gz::$url/releases/download/v$pkgver/kumo-linux-arm64-portable.tar.gz")
-sha256sums_x86_64=('dccbd07cb225d08875d236facca1cf09b2a687be88f017d46c70c52e5de08199')
-sha256sums_aarch64=('0ab36a819b6b3899dd45d5c6d45a4ccb01042602749af2a6cba27a3c2894ba94')
+sha256sums_x86_64=('1d83c2791ff676b5f8dbdcc95f98d7e8c77a72ea5c460ebd9af077edabb5e182')
+sha256sums_aarch64=('e9436b8176dd222361ce226fad1af297870780ff045c1f7430a4d95ce1cc1e72')
 
 package() {
   install -d "$pkgdir/opt/kumo"
@@ -31,9 +31,10 @@ package() {
 Type=Application
 Name=Kumo
 Comment=Free VPN client powered by sing-box and Xray
-Exec=/opt/kumo/kumo
+Exec=/opt/kumo/kumo %U
 Icon=kumo
 Terminal=false
 Categories=Network;
+MimeType=x-scheme-handler/vless;x-scheme-handler/vmess;x-scheme-handler/trojan;x-scheme-handler/ss;x-scheme-handler/hysteria;x-scheme-handler/hysteria2;x-scheme-handler/hy2;x-scheme-handler/tuic;x-scheme-handler/anytls;x-scheme-handler/wireguard;x-scheme-handler/clash;x-scheme-handler/sing-box;x-scheme-handler/hiddify;
 EOF
 }
