@@ -294,7 +294,10 @@ ProxyConfig? _wireguard(String link) {
   };
   if (awg.isNotEmpty) {
     // Neither WARP's noise nor Xray carries it: only the core of the phone, as an endpoint of its own type.
-    if ((q['noise'] ?? '').isNotEmpty) return null;
+    if ((q['noise'] ?? '').isNotEmpty) {
+      awgProblem = 'WARP noise cannot be used with AmneziaWG';
+      return null;
+    }
     out.addAll(awg);
     for (final p in out['peers'] as List) {
       (p as Map<String, dynamic>).remove('reserved');
@@ -486,13 +489,20 @@ List<String> wireguardConfToLinks(String text) {
   final iface = <String, String>{};
   final peers = <Map<String, String>>[];
   Map<String, String>? current;
+  String? comment;
   for (final raw in text.split(RegExp(r'[\r\n]+'))) {
+    // A comment on a line of its own, just above a [Peer], names that server.
+    if (raw.trimLeft().startsWith('#')) {
+      comment = raw.trimLeft().substring(1).trim();
+      continue;
+    }
     final line = raw.split('#').first.trim();
     if (line.isEmpty) continue;
     if (line.toLowerCase() == '[interface]') {
       current = iface;
     } else if (line.toLowerCase() == '[peer]') {
-      current = <String, String>{};
+      current = <String, String>{if (comment != null && comment.isNotEmpty) '#name': comment};
+      comment = null;
       peers.add(current);
     } else if (line.contains('=') && current != null) {
       final i = line.indexOf('=');
@@ -525,8 +535,9 @@ List<String> wireguardConfToLinks(String text) {
     final query = params.entries
         .map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}')
         .join('&');
+    final name = p['#name'] ?? 'WireGuard $host';
     out.add('wireguard://${Uri.encodeComponent(iface['privatekey']!)}@$host:$port'
-        '?$query#${Uri.encodeComponent('WireGuard $host')}');
+        '?$query#${Uri.encodeComponent(name)}');
   }
   return out;
 }

@@ -129,6 +129,69 @@ void main() {
     expect(parseLink(extractSubscriptionLinks(plain).single)!.protocol, 'wireguard');
   });
 
+  test('a configuration of AmneziaWG 3 as Amnezia writes it (flags as on, a header key in base64, a comment with the name)', () {
+    const conf = '[Interface]\n'
+        'PrivateKey = $_priv\n'
+        'Address = 10.8.1.2/32\n'
+        'DNS = 8.8.8.8, 8.8.4.4\n'
+        'MTU = 1399\n'
+        'Jc = 6\nJmin = 57\nJmax = 275\n'
+        'S1 = 113\nS2 = 37\nS3 = 46\nS4 = 21\n'
+        'H1 = 156002114\nH2 = 828509851\nH3 = 1195889750\nH4 = 1755676305\n'
+        'I1 = <r 124>\n'
+        'HeaderProtectionKey = AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=\n'
+        'ContentPaddingAddition = 18-35\n'
+        'RekeyAfterTime = 116-134\nRekeyTimeout = 5-6\nRejectAfterTime = 185-259\n'
+        'KeepaliveTimeout = 11-17\nMaxHandshakeAttempts = 24-33\n'
+        'RandomTrailers = on\nDisableCookies = on\n'
+        '\n'
+        '# my-awg-server\n'
+        '[Peer]\n'
+        'PublicKey = $_pub\n'
+        'AllowedIPs = 0.0.0.0/0, ::/0\n'
+        'Endpoint = 203.0.113.9:16041\n'
+        'PersistentKeepalive = 25\n';
+    final links = extractSubscriptionLinks(conf);
+    expect(links, hasLength(1));
+    final c = parseLink(links.single);
+    expect(c, isNotNull, reason: awgProblem);
+    expect(c!.name, 'my-awg-server', reason: 'the comment above [Peer] names the server');
+    expect(c.protocol, 'amneziawg');
+    expect(c.host, '203.0.113.9');
+    expect(c.port, 16041);
+    final o = c.outbound;
+    expect(o['jc'], 6);
+    expect(o['s4'], 21);
+    expect(o['h2'], '828509851');
+    expect(o['i1'], '<r 124>');
+    expect(o['random_trailers'], true);
+    expect(o['disable_cookies'], true);
+    expect(o['content_padding_addition'], '18-35');
+    expect(o['rekey_after_time'], '116-134');
+    expect(o['max_handshake_attempts'], '24-33');
+    // The core reads the key of the header protection in hex (32 bytes), the file has base64.
+    expect(o['header_protection_key'], '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f');
+    expect(((o['peers'] as List).single as Map)['persistent_keepalive_interval'], 25);
+
+    // Pasted from the clipboard it is the same text.
+    expect(parseLink(extractSubscriptionLinks(conf).single)!.protocol, 'amneziawg');
+  });
+
+  test('why a setting was refused is kept', () {
+    expect(awgOptions({'Jc': '5', 'Jmin': '90', 'Jmax': '80'}), isNull);
+    expect(awgProblem, contains('Jmin'));
+    expect(awgOptions({'RandomTrailers': 'perhaps'}), isNull);
+    expect(awgProblem, contains('RandomTrailers'));
+    expect(awgOptions({'HeaderProtectionKey': 'AAAA', 'S1': '20', 'S2': '20', 'S3': '20', 'S4': '20'}), isNull);
+    expect(awgProblem, contains('HeaderProtectionKey'));
+    const key = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=';
+    expect(awgOptions({'HeaderProtectionKey': key, 'S1': '11', 'S2': '20', 'S3': '20', 'S4': '20'}), isNull);
+    expect(awgProblem, contains('S1'));
+    expect(awgOptions({'Jc': '5'}), {'jc': 5});
+    expect(awgProblem, isNull, reason: 'cleared by a read that was accepted');
+    // On and off, as the file writes them.
+    expect(awgOptions({'RandomTrailers': 'on', 'DisableCookies': 'off'}), {'random_trailers': true});
+  });
   test('awgOptions reads the settings by any case and with or without underscores', () {
     expect(awgOptions({'JC': '4', 'Jmin': '1', 'JMAX': '2'}), {'jc': 4, 'jmin': 1, 'jmax': 2});
     expect(awgOptions({'RandomTrailers': 'true', 'ContentPaddingAddition': '0-64'}),

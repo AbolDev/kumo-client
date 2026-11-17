@@ -6,6 +6,7 @@
 // The phone's core (libbox) has an endpoint of type `amneziawg` for it (see tools/libbox_patch/amneziawg). The cores of the
 // computers are the official sing-box releases, which have none: such a server is not carried there.
 
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 /// The protocol the servers of AmneziaWG show in lists.
@@ -38,6 +39,15 @@ String awgSettingKey(String key) => key.toLowerCase().replaceAll('_', '');
 /// Whether [key] (as a link or a configuration writes it) is a setting of AmneziaWG.
 bool isAwgSetting(String key) => _optionOf.containsKey(awgSettingKey(key));
 
+/// Why the last settings that were read were not accepted (null when they were, or none were read): said to the user when an
+/// import finds nothing it can use. Set by [awgOptions].
+String? awgProblem;
+
+Map<String, dynamic>? _refuse(String why) {
+  awgProblem = why;
+  return null;
+}
+
 /// A signature packet: the tags that amneziawg-go reads, one after the other (static bytes, random bytes, random digits,
 /// random letters, a timestamp). Anything else would stop the core from starting, so it is not accepted.
 final _packet = RegExp(r'^(?:<(?:b 0x(?:[0-9a-fA-F]{2})+|r [1-9][0-9]{0,3}|rd [1-9][0-9]{0,3}|rc [1-9][0-9]{0,3}|t)>)+$');
@@ -52,9 +62,35 @@ bool _validRange(String v, {int max = 0xFFFFFFFF}) {
   return parts.length == 1 || parts[0] <= parts[1];
 }
 
+/// A yes or a no as configurations write it (`true`, `on`, `yes`, `1`, `enabled`; `false`, `off`, `no`, `0`, `disabled`);
+/// null when it is neither.
+bool? _flag(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'true' || 'on' || 'yes' || '1' || 'enabled' || 'enable':
+      return true;
+    case 'false' || 'off' || 'no' || '0' || 'disabled' || 'disable':
+      return false;
+  }
+  return null;
+}
+
+/// The key of the header protection as the core takes it: 32 bytes in hex. Configurations write it in base64 (as the keys of
+/// WireGuard), the core reads hex; either is accepted. Null when it is neither.
+String? _headerKey(String value) {
+  final v = value.trim();
+  if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(v)) return v.toLowerCase();
+  try {
+    final bytes = base64.decode(base64.normalize(v.replaceAll('-', '+').replaceAll('_', '/')));
+    if (bytes.length == 32) return [for (final b in bytes) b.toRadixString(16).padLeft(2, '0')].join();
+  } catch (_) {}
+  return null;
+}
+
 /// The settings of AmneziaWG in [settings] (a link's query or the keys of a configuration, any case), as the options of the
-/// endpoint. Empty when there are none (an ordinary WireGuard server); null when one is not valid (the core would not start).
+/// endpoint. Empty when there are none (an ordinary WireGuard server); null when one is not valid (the core would not start;
+/// [awgProblem] says which).
 Map<String, dynamic>? awgOptions(Map<String, String> settings) {
+  awgProblem = null;
   final given = <String, String>{};
   for (final e in settings.entries) {
     final option = _optionOf[awgSettingKey(e.key)];
@@ -64,43 +100,47 @@ Map<String, dynamic>? awgOptions(Map<String, String> settings) {
   for (final e in given.entries) {
     final key = e.key;
     final value = e.value;
+    final name = key.toUpperCase();
     switch (key) {
       case 'jc':
         final n = int.tryParse(value);
-        if (n == null || n < 0 || n > 128) return null;
+        if (n == null || n < 0 || n > 128) return _refuse('Jc must be from 0 to 128 (it is $value)');
         out[key] = n;
       case 'jmin' || 'jmax':
         final n = int.tryParse(value);
-        if (n == null || n < 0 || n > 1500) return null;
+        if (n == null || n < 0 || n > 1500) return _refuse('$name must be from 0 to 1500 (it is $value)');
         out[key] = n;
       case 's1' || 's2' || 's3' || 's4':
         final n = int.tryParse(value);
-        if (n == null || n < 0 || n > 1500) return null;
+        if (n == null || n < 0 || n > 1500) return _refuse('$name must be from 0 to 1500 (it is $value)');
         out[key] = n;
       case 'h1' || 'h2' || 'h3' || 'h4':
-        if (!_validRange(value)) return null;
+        if (!_validRange(value)) return _refuse('$name must be a number or a range low-high (it is $value)');
         out[key] = value;
       case 'i1' || 'i2' || 'i3' || 'i4' || 'i5':
-        if (value.length > 2048 || !_packet.hasMatch(value)) return null;
+        // (A packet that looks like a QUIC one is some 1200 bytes, 2400 hex digits.)
+        if (value.length > 16384) return _refuse('$name is too long');
+        if (!_packet.hasMatch(value)) {
+          return _refuse('$name has a tag that is not known (only <b 0x..>, <r N>, <rd N>, <rc N> and <t> are) '
+              'or hex of an odd length');
+        }
         out[key] = value;
       case 'random_trailers' || 'disable_cookies':
-        final v = value.toLowerCase();
-        if (v == 'true' || v == '1' || v == 'yes') {
-          out[key] = true;
-        } else if (v != 'false' && v != '0' && v != 'no') {
-          return null;
-        }
+        final flag = _flag(value);
+        if (flag == null) return _refuse('${key == 'random_trailers' ? 'RandomTrailers' : 'DisableCookies'} must be on or off (it is $value)');
+        if (flag) out[key] = true;
       case 'header_protection_key':
-        if (value.length > 128 || !RegExp(r'^[A-Za-z0-9+/=_-]+$').hasMatch(value)) return null;
-        out[key] = value;
+        final hex = _headerKey(value);
+        if (hex == null) return _refuse('HeaderProtectionKey is not a key of 32 bytes');
+        out[key] = hex;
       default: // the times and the padding: a number or a range
-        if (!_validRange(value)) return null;
+        if (!_validRange(value)) return _refuse('$key must be a number or a range (it is $value)');
         out[key] = value;
     }
   }
   final min = out['jmin'] as int?;
   final max = out['jmax'] as int?;
-  if (min != null && max != null && min > max) return null;
+  if (min != null && max != null && min > max) return _refuse('Jmin ($min) is above Jmax ($max)');
   // The headers are the types of the messages: no two ranges may overlap.
   final headers = <(int, int)>[];
   for (final k in const ['h1', 'h2', 'h3', 'h4']) {
@@ -111,7 +151,14 @@ Map<String, dynamic>? awgOptions(Map<String, String> settings) {
   }
   for (var i = 0; i < headers.length; i++) {
     for (var j = i + 1; j < headers.length; j++) {
-      if (headers[i].$1 <= headers[j].$2 && headers[j].$1 <= headers[i].$2) return null;
+      if (headers[i].$1 <= headers[j].$2 && headers[j].$1 <= headers[i].$2) return _refuse('the headers H1 to H4 overlap');
+    }
+  }
+  // With the header protection the paddings S1 to S4 are the nonces of its cipher: none may be short.
+  if (out.containsKey('header_protection_key')) {
+    for (final k in const ['s1', 's2', 's3', 's4']) {
+      final s = out[k] as int? ?? 0;
+      if (s < 12) return _refuse('${k.toUpperCase()} must be at least 12 with HeaderProtectionKey (it is $s)');
     }
   }
   return out;

@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback, rootBundle;
 
 import '../core/ad_lists.dart' show adBaseAsset;
-import '../core/awg.dart' show amneziaSupported;
+import '../core/awg.dart' show amneziaSupported, awgProblem;
 import '../core/app_icon.dart';
 import '../core/backup.dart';
 import '../core/core_api.dart';
@@ -2510,10 +2510,13 @@ class AppState extends ChangeNotifier {
     }
     await _job((t) => t.adding, () async {
       try {
+        awgProblem = null;
         final parsed =
             parseLinks(await extractSubscriptionLinksInBackground(input));
         if (parsed.isEmpty) {
-          message = (t) => t.noValidConfig;
+          // An AmneziaWG server that was refused says why (a setting the core would not start with).
+          final why = awgProblem;
+          message = why == null ? (t) => t.noValidConfig : (t) => t.importFailed('AmneziaWG: $why');
           return;
         }
         _merge(manual, parsed);
