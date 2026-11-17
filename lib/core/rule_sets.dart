@@ -431,13 +431,35 @@ Future<int> compileRuleSets(String dir, Future<bool> Function(String source, Str
   return made;
 }
 
+/// The names of the files in [dir]/rules that the configurations kept in [dir] for starting without the app
+/// (the tile, the widget, an automation, the start at boot) and for the standby proxy ask for. A connection
+/// that was not started by this run of the app (or a past one of another server) has rules the app does not
+/// know of by their tags, so the files they name are read from the configurations themselves.
+Future<Set<String>> ruleFilesInUse(String dir) async {
+  final names = <String>{};
+  final path = RegExp(r'rules[\\/]+([^"\\/]+)"');
+  for (final config in const ['active_config.json', 'standby_config.json']) {
+    try {
+      final text = await File('$dir/$config').readAsString();
+      for (final m in path.allMatches(text)) {
+        names.add(m.group(1)!);
+      }
+    } catch (_) {}
+  }
+  return names;
+}
+
 /// Deletes the list files in [dir]/rules that the settings no longer use: the lists of countries
 /// and of a subscription's rules that are not chosen any more, the ad lists of another level, what
 /// older versions of the app left, and temporary files of downloads that never ended. With ad
 /// blocking off the ad lists are kept (it is often turned off and on again). Only files this app
-/// names are touched. Returns how many were deleted.
+/// names are touched, and never one in [inUse] (a file a saved configuration asks for: without it
+/// that configuration would not start). Returns how many were deleted.
 Future<int> cleanRuleSets(String dir, List<String> countries,
-    {bool ads = false, String adsLevel = defaultAdLevel, List<String> tags = const []}) async {
+    {bool ads = false,
+    String adsLevel = defaultAdLevel,
+    List<String> tags = const [],
+    Set<String> inUse = const {}}) async {
   final folder = Directory('$dir/rules');
   if (!await folder.exists()) return 0;
   final keep = <String>{
@@ -480,7 +502,7 @@ Future<int> cleanRuleSets(String dir, List<String> countries,
       }
       continue;
     }
-    if (f is! File || !ours.hasMatch(name) || keep.contains(name)) continue;
+    if (f is! File || !ours.hasMatch(name) || keep.contains(name) || inUse.contains(name)) continue;
     // A download in progress writes a .tmp file: only old ones are leftovers.
     if (name.endsWith('.tmp') && (await f.lastModified()).isAfter(stale)) continue;
     if (!ads && name.startsWith(adTagPrefix)) continue;

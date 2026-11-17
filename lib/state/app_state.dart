@@ -2931,7 +2931,13 @@ class AppState extends ChangeNotifier {
             fetch: fetch,
             limit: const Duration(minutes: 5));
         await compileRuleSets(dir, VpnChannel.compileRuleSet);
-        await cleanRuleSets(dir, net.bypass, ads: net.blockAds, adsLevel: net.adsLevel, tags: _connectedTags);
+        // A connection the tile, the widget or an automation started has rules this run never saw the tags of:
+        // what the saved configurations name stays, or the next start from them would find a file missing.
+        await cleanRuleSets(dir, net.bypass,
+            ads: net.blockAds,
+            adsLevel: net.adsLevel,
+            tags: _connectedTags,
+            inUse: await ruleFilesInUse(dir));
       } catch (e) {
         _logQuiet('Refreshing the lists', e);
       }

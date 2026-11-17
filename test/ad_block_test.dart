@@ -360,6 +360,37 @@ nodot
       expect(File('${rules.path}/geoip-ir.srs').existsSync(), isFalse);
     });
 
+    test('a list a saved configuration asks for is not deleted (a connection the widget started)', () async {
+      final rules = Directory('${dir.path}/rules')..createSync(recursive: true);
+      for (final n in ['geosite-category-ads-all.srs', 'geoip-cn.srs', 'geosite-private.srs']) {
+        File('${rules.path}/$n').writeAsStringSync('x');
+      }
+      // The configuration the tile and the widget start again names the lists with their paths (a Windows path
+      // has its backslashes doubled in JSON); the standby one too.
+      File('${dir.path}/active_config.json').writeAsStringSync(jsonEncode({
+        'route': {
+          'rule_set': [
+            {'tag': 'geosite-category-ads-all', 'path': '${dir.path}/rules/geosite-category-ads-all.srs'},
+            {'tag': 'geoip-cn', 'path': '${dir.path}\\rules\\geoip-cn.srs'},
+          ],
+        },
+      }));
+      File('${dir.path}/standby_config.json').writeAsStringSync('{"path":"${dir.path}/rules/geosite-private.srs"}');
+      final inUse = await ruleFilesInUse(dir.path);
+      expect(inUse, containsAll(['geosite-category-ads-all.srs', 'geoip-cn.srs', 'geosite-private.srs']));
+      // The app itself knows no tags (it did not start this connection): without the names read from the
+      // configurations, all of them would be deleted.
+      await cleanRuleSets(dir.path, const [], inUse: inUse);
+      for (final n in inUse) {
+        expect(File('${rules.path}/$n').existsSync(), isTrue, reason: n);
+      }
+      File('${dir.path}/active_config.json').deleteSync();
+      File('${dir.path}/standby_config.json').deleteSync();
+      expect(await ruleFilesInUse(dir.path), isEmpty);
+      await cleanRuleSets(dir.path, const []);
+      expect(File('${rules.path}/geosite-category-ads-all.srs').existsSync(), isFalse);
+    });
+
     test('the max list: every list merged, less what is allowed, what apps need and what a parent covers', () async {
       final text = [
         for (var i = 0; i < 60000; i++) 'ad$i.example.net',
