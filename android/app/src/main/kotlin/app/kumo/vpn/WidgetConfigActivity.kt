@@ -773,7 +773,8 @@ class WidgetConfigActivity : Activity() {
         column.addView(segmented(
             listOf(WidgetTheme.BORDER_ACCENT to R.string.widget_border_accent, WidgetTheme.BORDER_NEUTRAL to R.string.widget_border_neutral),
             { look.borderColor },
-        ) { look.borderColor = it }, topGap = 8)
+            topGap = 8,
+        ) { look.borderColor = it })
 
         column.addView(sectionLabel(R.string.widget_cfg_depth))
         column.addView(segmented(
