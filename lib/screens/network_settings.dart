@@ -164,14 +164,23 @@ List<Widget> networkSections(
       reset('routing'),
     ]),
     section(Icons.dns, tr(context, 'dns'), [
-      RadioGroupLike(
-        value: o.dns,
-        items: {
+      Builder(builder: (context) {
+        final choices = {
           for (final p in dnsPresets) p.id: p.name,
           'custom': tr(context, 'dnsCustom'),
-        },
-        onChanged: (v) => state.updateNet((o) => o.dns = v),
-      ),
+        };
+        // Only the chosen one is shown; the others open in a list when it is tapped.
+        final current = choices.containsKey(o.dns) ? o.dns : dnsPresets.first.id;
+        return ListTile(
+          leading: const Icon(Icons.dns_outlined),
+          title: Text(choices[current]!),
+          trailing: const Icon(Icons.arrow_drop_down),
+          onTap: () async {
+            final v = await pickOption<String>(context, tr(context, 'dns'), current, choices);
+            if (v != null) await state.updateNet((o) => o.dns = v);
+          },
+        );
+      }),
       if (o.dns == 'custom')
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -628,33 +637,6 @@ class _LanAddressState extends State<_LanAddress> {
       },
     );
   }
-}
-
-/// A column of radio buttons built from a value -> label map.
-class RadioGroupLike extends StatelessWidget {
-  const RadioGroupLike(
-      {super.key,
-      required this.value,
-      required this.items,
-      required this.onChanged});
-
-  final String value;
-  final Map<String, String> items;
-  final void Function(String) onChanged;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          for (final e in items.entries)
-            RadioListTile<String>(
-              value: e.key,
-              groupValue: value,
-              onChanged: (v) => onChanged(v!),
-              title: Text(e.value),
-              dense: true,
-            ),
-        ],
-      );
 }
 
 Future<void> _editProxyLogin(BuildContext context, AppState state) async {
