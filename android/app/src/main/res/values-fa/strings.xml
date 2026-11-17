@@ -24,6 +24,8 @@
     <string name="widget_cfg_done">تأیید</string>
     <string name="widget_cfg_bg">رنگ پس‌زمینه</string>
     <string name="widget_cfg_opacity">شفافیت پس‌زمینه</string>
+    <string name="widget_cfg_radius">گردی گوشه‌ها</string>
+    <string name="widget_cfg_height">ارتفاع کارت</string>
     <string name="widget_cfg_cancel">انصراف</string>
     <string name="widget_cfg_save">ذخیره</string>
     <string name="widget_cfg_state">پیش‌نمایش در حالت</string>

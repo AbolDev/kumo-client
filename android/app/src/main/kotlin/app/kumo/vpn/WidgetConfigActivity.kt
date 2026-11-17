@@ -34,11 +34,18 @@ class WidgetConfigActivity : Activity() {
     private var theme = WidgetTheme.AUTO
     private var opacity = 100
 
+    /** The corners in dp. A widget that never had them chosen starts at the usual 20 and keeps the corners it was drawn
+     *  with until the slider is moved ([radiusChosen]). */
+    private var radius = 20
+    private var radiusChosen = false
+
+    /** How high the card stands in the room of the widget, in percent. */
+    private var height = 100
+
     /** The state the preview shows (the VPN's own now, or what the user picked). */
     private var shownState = WidgetState.OFF
 
     private lateinit var stage: FrameLayout
-    private lateinit var percent: TextView
     private val themeRows = ArrayList<Pair<RadioButton, Int>>()
     private val stateLabels = ArrayList<Pair<TextView, Int>>()
 
@@ -64,6 +71,13 @@ class WidgetConfigActivity : Activity() {
         }
         val saved = WidgetTheme.load(this, widgetId)
         opacity = WidgetTheme.opacity(this, widgetId)
+        height = WidgetTheme.height(this, widgetId)
+        WidgetTheme.radius(this, widgetId).let {
+            if (it >= 0) {
+                radius = it
+                radiusChosen = true
+            }
+        }
         // The see-through look of the first versions is now dark colours with a lower opacity.
         theme = if (saved == WidgetTheme.CLEAR) WidgetTheme.DARK else saved
         shownState = if (WidgetState.current() == WidgetState.OFF) WidgetState.OFF else WidgetState.ON
@@ -122,6 +136,10 @@ class WidgetConfigActivity : Activity() {
         column.addView(colours)
         column.addView(sectionLabel(R.string.widget_cfg_opacity))
         column.addView(opacityBox())
+        column.addView(sectionLabel(R.string.widget_cfg_radius))
+        column.addView(radiusBox())
+        column.addView(sectionLabel(R.string.widget_cfg_height))
+        column.addView(heightBox())
 
         sheet.addView(ScrollView(this).apply {
             addView(column)
@@ -282,26 +300,39 @@ class WidgetConfigActivity : Activity() {
         for ((radio, value) in themeRows) radio.isChecked = value == theme
     }
 
-    /** The slider of the opacity with its value beside it. */
-    private fun opacityBox(): LinearLayout {
+    /**
+     * A slider with its value beside it, in a box: [steps] + 1 positions, the value of position `i` being
+     * `from + i * step`; [onValue] hears every change (the first call is not one: nothing is sent while the box is built).
+     */
+    private fun sliderBox(
+        from: Int, step: Int, steps: Int, value: Int, unit: String,
+        onValue: (Int) -> Unit,
+    ): LinearLayout {
         val box = panelBox()
         box.setPadding(dp(12), dp(14), dp(18), dp(14))
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        // Eleven steps, 0 to 100 percent.
+        val shown = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTypeface(typeface, Typeface.BOLD)
+            setTextColor(ink)
+            gravity = Gravity.END
+            minWidth = dp(56)
+            text = "$value$unit"
+        }
         row.addView(SeekBar(this).apply {
-            max = 10
-            progress = opacity / 10
+            max = steps
+            progress = ((value - from) / step).coerceIn(0, steps)
             progressTintList = ColorStateList.valueOf(accent)
             thumbTintList = ColorStateList.valueOf(accent)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(bar: SeekBar?, value: Int, fromUser: Boolean) {
-                    opacity = value * 10
-                    percent.text = "$opacity%"
-                    renderPreview()
+                override fun onProgressChanged(bar: SeekBar?, position: Int, fromUser: Boolean) {
+                    val v = from + position * step
+                    shown.text = "$v$unit"
+                    if (fromUser) onValue(v)
                 }
 
                 override fun onStartTrackingTouch(bar: SeekBar?) {}
@@ -309,17 +340,28 @@ class WidgetConfigActivity : Activity() {
                 override fun onStopTrackingTouch(bar: SeekBar?) {}
             })
         })
-        percent = TextView(this).apply {
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            setTypeface(typeface, Typeface.BOLD)
-            setTextColor(ink)
-            gravity = Gravity.END
-            minWidth = dp(48)
-            text = "$opacity%"
-        }
-        row.addView(percent)
+        row.addView(shown)
         box.addView(row)
         return box
+    }
+
+    /** The slider of the opacity: eleven steps, 0 to 100 percent. */
+    private fun opacityBox() = sliderBox(0, 10, 10, opacity, "%") {
+        opacity = it
+        renderPreview()
+    }
+
+    /** The slider of the corners: eleven steps, 0 to 40 dp. */
+    private fun radiusBox() = sliderBox(0, 4, 10, radius, " dp") {
+        radius = it
+        radiusChosen = true
+        renderPreview()
+    }
+
+    /** The slider of the height of the card in its room: six steps, 50 to 100 percent. */
+    private fun heightBox() = sliderBox(WidgetTheme.MIN_HEIGHT, 10, 5, height, "%") {
+        height = it
+        renderPreview()
     }
 
     private fun barButton(text: Int, filled: Boolean, onClick: () -> Unit) = TextView(this).apply {
@@ -358,7 +400,10 @@ class WidgetConfigActivity : Activity() {
     private fun renderPreview() {
         stage.removeAllViews()
         try {
-            val views = KumoWidget.preview(this, widgetId, WidgetLook(theme, opacity, shownState)) ?: return
+            val views = KumoWidget.preview(
+                this, widgetId,
+                WidgetLook(theme, opacity, shownState, if (radiusChosen) radius else -1, height),
+            ) ?: return
             val (w, h) = widgetSizeDp()
             val widget = views.apply(this, stage)
             stage.addView(widget, FrameLayout.LayoutParams(dp(w), dp(h), Gravity.CENTER))
@@ -372,6 +417,7 @@ class WidgetConfigActivity : Activity() {
     private fun save() {
         WidgetTheme.save(this, widgetId, theme)
         WidgetTheme.saveOpacity(this, widgetId, opacity)
+        WidgetTheme.saveShape(this, widgetId, if (radiusChosen) radius else null, height)
         KumoWidget.refreshOne(this, widgetId)
         setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
         finish()

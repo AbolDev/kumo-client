@@ -32,16 +32,22 @@ object WidgetState {
 
 /**
  * The colours of a widget in one look (light or dark). The card and its texts are the same in every state: only
- * the power button tells the state (an outlined button while disconnected, a filled one while connected).
+ * the power button tells the state (an outlined button while disconnected, a filled one in the accent colour while
+ * it connects or disconnects, a green one while connected: [okBtn] is green in every look, wallpaper colours or not).
  */
 class WidgetColors(
     val bg: Int, val text: Int, val sub: Int,
     val ring: Int, val offBtn: Int, val offIcon: Int,
     val onBtn: Int, val onIcon: Int,
     val chipBg: Int, val chipText: Int,
+    val okBtn: Int, val okIcon: Int,
 ) {
     companion object {
         private fun c(v: Long) = v.toInt()
+
+        // The green of a connected widget: a deeper one on a light card, a brighter one on a dark card.
+        private val GREEN_LIGHT = c(0xFF1E9E52) to c(0xFFFFFFFF)
+        private val GREEN_DARK = c(0xFF4CCB7E) to c(0xFF06301A)
 
         /** Kumo's own teal, where the system gives no colours of its own (before Android 12). */
         val TEAL_LIGHT = WidgetColors(
@@ -49,12 +55,14 @@ class WidgetColors(
             c(0xFF1D9E75), c(0xFFE8F6F0), c(0xFF0F6E56),
             c(0xFF1D9E75), c(0xFFFFFFFF),
             c(0xFFE1F5EE), c(0xFF085041),
+            GREEN_LIGHT.first, GREEN_LIGHT.second,
         )
         val TEAL_DARK = WidgetColors(
             c(0xFF1F2120), c(0xFFF1EFE8), c(0xFFB4B2A9),
             c(0xFF5DCAA5), c(0xFF2A3431), c(0xFF9FE1CB),
             c(0xFF5DCAA5), c(0xFF04342C),
             c(0xFF0B4A3C), c(0xFFC8EFE0),
+            GREEN_DARK.first, GREEN_DARK.second,
         )
 
         /** Android 12 and later: the colours of the wallpaper (Material You), on a neutral card. */
@@ -69,6 +77,7 @@ class WidgetColors(
                         s("system_accent1_600"), s("system_accent1_50"), s("system_accent1_600"),
                         s("system_accent1_600"), s("system_accent1_0"),
                         s("system_accent1_100"), s("system_accent1_800"),
+                        GREEN_LIGHT.first, GREEN_LIGHT.second,
                     )
                 } else {
                     WidgetColors(
@@ -76,6 +85,7 @@ class WidgetColors(
                         s("system_accent1_200"), s("system_neutral1_800"), s("system_accent1_200"),
                         s("system_accent1_200"), s("system_accent1_900"),
                         s("system_accent1_800"), s("system_accent1_100"),
+                        GREEN_DARK.first, GREEN_DARK.second,
                     )
                 }
             }.getOrNull()
@@ -86,9 +96,14 @@ class WidgetColors(
     }
 }
 
-/** A look of a widget: its colours ([WidgetTheme]) and the opacity of its background (0 to 100). With [state]
- *  the widget is drawn as in that state (the preview of the settings), else as in the one the VPN is in. */
-class WidgetLook(val theme: Int, val opacity: Int, val state: Int? = null)
+/** A look of a widget: its colours ([WidgetTheme]), the opacity of its background (0 to 100), the roundness of its
+ *  corners in dp ([radius], -1 while none was chosen: the widget keeps the corners it was drawn with) and how high its
+ *  card stands in the room the launcher gives it ([height], 50 to 100 percent). With [state] the widget is drawn as in
+ *  that state (the preview of the settings), else as in the one the VPN is in. */
+class WidgetLook(
+    val theme: Int, val opacity: Int, val state: Int? = null,
+    val radius: Int = -1, val height: Int = 100,
+)
 
 /**
  * The look of one placed widget, chosen in [WidgetConfigActivity] and kept per widget id: follow the
@@ -123,15 +138,35 @@ object WidgetTheme {
         prefs(context).edit().putInt("opacity_$id", opacity.coerceIn(0, 100)).apply()
     }
 
+    /** The roundness of the corners in dp, 0 to 40 (-1 when none was chosen). */
+    fun radius(context: Context, id: Int): Int {
+        val saved = prefs(context).getInt("radius_$id", -1)
+        return if (saved in 0..MAX_RADIUS) saved else -1
+    }
+
+    /** How high the card stands in the room of the widget, [MIN_HEIGHT] to 100 percent (100 when none was chosen). */
+    fun height(context: Context, id: Int): Int = prefs(context).getInt("height_$id", 100).coerceIn(MIN_HEIGHT, 100)
+
+    /** Keeps the shape of the widget [id]: [radius] only when the user chose one (else the widget keeps its own). */
+    fun saveShape(context: Context, id: Int, radius: Int?, height: Int) {
+        val e = prefs(context).edit().putInt("height_$id", height.coerceIn(MIN_HEIGHT, 100))
+        if (radius != null) e.putInt("radius_$id", radius.coerceIn(0, MAX_RADIUS))
+        e.apply()
+    }
+
     /** The look kept for the widget [id]. */
-    fun look(context: Context, id: Int) = WidgetLook(load(context, id), opacity(context, id))
+    fun look(context: Context, id: Int) =
+        WidgetLook(load(context, id), opacity(context, id), null, radius(context, id), height(context, id))
 
     fun forget(context: Context, id: Int) {
         // The keys of the older widgets go too.
-        val e = prefs(context).edit().remove("theme_$id")
+        val e = prefs(context).edit().remove("theme_$id").remove("radius_$id").remove("height_$id")
         for (k in listOf("color", "shape", "opacity", "size", "content")) e.remove("${k}_$id")
         e.apply()
     }
+
+    const val MAX_RADIUS = 40
+    const val MIN_HEIGHT = 50
 
     /** The last server used, shown while disconnected (and the delay the app measured for it). */
     fun lastServer(context: Context): String? = prefs(context).getString("last_server", null)
@@ -190,6 +225,9 @@ object WidgetFeed {
  */
 class WidgetPainter(private val context: Context, private val v: RemoteViews, look: WidgetLook, private val state: Int) {
     private val on = state != WidgetState.OFF
+    private val connected = state == WidgetState.ON
+    private val radius = look.radius
+    private val heightPercent = look.height.coerceIn(WidgetTheme.MIN_HEIGHT, 100)
     private val nightNow = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
         Configuration.UI_MODE_NIGHT_YES
     private val theme = look.theme
@@ -223,16 +261,27 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
         }
     }
 
-    /** The card: one colour in every state, as opaque as chosen. */
-    fun background() {
+    /**
+     * The card: one colour in every state, as opaque as chosen, with the corners the user chose (the ones the layout
+     * was drawn with when none was) and, when asked to be lower than the room it has, centred in it. [heightDp] is the
+     * height the launcher gives the widget (0 when not known) and [minCardDp] the least the content of this layout
+     * needs: the card never gets lower than that.
+     */
+    fun background(heightDp: Int = 0, minCardDp: Int = 0) {
         set(R.id.widget_bg, "setColorFilter") { it.bg }
         v.setInt(R.id.widget_bg, "setImageAlpha", opacity * 255 / 100)
+        if (radius >= 0) v.setImageViewResource(R.id.widget_bg, radiusDrawable(radius))
+        if (heightPercent < 100 && heightDp > minCardDp) {
+            val card = maxOf(heightDp * heightPercent / 100, minCardDp)
+            val inset = ((heightDp - card) / 2f * context.resources.displayMetrics.density).toInt()
+            v.setViewPadding(R.id.widget_root, 0, inset, 0, inset)
+        }
     }
 
-    /** The power button: outlined while disconnected, filled while connected (or connecting). */
+    /** The power button: outlined while disconnected, green while connected, filled in the accent colour between. */
     fun button() {
-        set(R.id.wg_btn_bg, "setColorFilter") { if (on) it.onBtn else it.offBtn }
-        set(R.id.wg_icon, "setColorFilter") { if (on) it.onIcon else it.offIcon }
+        set(R.id.wg_btn_bg, "setColorFilter") { if (connected) it.okBtn else if (on) it.onBtn else it.offBtn }
+        set(R.id.wg_icon, "setColorFilter") { if (connected) it.okIcon else if (on) it.onIcon else it.offIcon }
         set(R.id.wg_ring, "setColorFilter") { it.ring }
         v.setViewVisibility(R.id.wg_ring, if (on) View.GONE else View.VISIBLE)
     }
@@ -273,6 +322,21 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
     private companion object {
         const val WHITE = 0xFFFFFFFF.toInt()
         const val WHITE_SOFT = 0xD9FFFFFF.toInt()
+
+        /** The background with corners of [dp] (a step of 4, 0 to 40). */
+        fun radiusDrawable(dp: Int): Int = when (dp.coerceIn(0, WidgetTheme.MAX_RADIUS) / 4) {
+            0 -> R.drawable.wg_rad_0
+            1 -> R.drawable.wg_rad_4
+            2 -> R.drawable.wg_rad_8
+            3 -> R.drawable.wg_rad_12
+            4 -> R.drawable.wg_rad_16
+            5 -> R.drawable.wg_rad_20
+            6 -> R.drawable.wg_rad_24
+            7 -> R.drawable.wg_rad_28
+            8 -> R.drawable.wg_rad_32
+            9 -> R.drawable.wg_rad_36
+            else -> R.drawable.wg_rad_40
+        }
     }
 }
 
@@ -428,7 +492,7 @@ class VpnWidget : KumoWidget() {
         }
         val v = RemoteViews(context.packageName, layout)
         val p = WidgetPainter(context, v, look, state)
-        p.background()
+        p.background(heightDp(options), 48)
         p.button()
         if (layout != R.layout.wg_bar_icon) {
             p.main(R.id.wg_title, serverName(context))
@@ -464,7 +528,7 @@ class VpnWidgetIcon : KumoWidget() {
         }
         val v = RemoteViews(context.packageName, layout)
         val p = WidgetPainter(context, v, look, state)
-        p.background()
+        p.background(h, if (layout == R.layout.wg_power_tall) 96 else 52)
         p.button()
         if (layout != R.layout.wg_power) p.main(R.id.wg_title, stateText(context, state))
         toggleOn(context, v, R.id.widget_root)
@@ -493,7 +557,15 @@ class VpnWidgetStats : KumoWidget() {
         }
         val v = RemoteViews(context.packageName, layout)
         val p = WidgetPainter(context, v, look, state)
-        p.background()
+        p.background(
+            h,
+            when (layout) {
+                R.layout.wg_card_s -> 46
+                R.layout.wg_card_m -> 52
+                R.layout.wg_card_tall -> 130
+                else -> 100
+            },
+        )
         p.button()
         p.main(R.id.wg_title, serverName(context))
         // Disconnected: the state stands where the speed would be, and nothing of a session is shown.
