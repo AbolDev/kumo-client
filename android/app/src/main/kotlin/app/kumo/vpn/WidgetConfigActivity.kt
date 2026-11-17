@@ -42,6 +42,14 @@ class WidgetConfigActivity : Activity() {
     /** How high the card stands in the room of the widget, in percent. */
     private var height = 100
 
+    /** The size of the power button and the size of the texts, each in percent and each its own. */
+    private var button = 100
+    private var font = 100
+
+    /** The side of the power button in the layouts that have it beside the texts. */
+    private var side = WidgetTheme.LEFT
+    private val sideRows = ArrayList<Pair<RadioButton, Int>>()
+
     /** The state the preview shows (the VPN's own now, or what the user picked). */
     private var shownState = WidgetState.OFF
 
@@ -72,6 +80,9 @@ class WidgetConfigActivity : Activity() {
         val saved = WidgetTheme.load(this, widgetId)
         opacity = WidgetTheme.opacity(this, widgetId)
         height = WidgetTheme.height(this, widgetId)
+        button = WidgetTheme.button(this, widgetId)
+        font = WidgetTheme.font(this, widgetId)
+        side = WidgetTheme.side(this, widgetId)
         WidgetTheme.radius(this, widgetId).let {
             if (it >= 0) {
                 radius = it
@@ -140,6 +151,15 @@ class WidgetConfigActivity : Activity() {
         column.addView(radiusBox())
         column.addView(sectionLabel(R.string.widget_cfg_height))
         column.addView(heightBox())
+        // A view is resized from a widget on Android 12+ only: older phones keep the size of the button.
+        if (WidgetTheme.canSizeButton) {
+            column.addView(sectionLabel(R.string.widget_cfg_button))
+            column.addView(buttonBox())
+        }
+        column.addView(sectionLabel(R.string.widget_cfg_font))
+        column.addView(fontBox())
+        column.addView(sectionLabel(R.string.widget_cfg_side))
+        column.addView(sideBox())
 
         sheet.addView(ScrollView(this).apply {
             addView(column)
@@ -364,6 +384,56 @@ class WidgetConfigActivity : Activity() {
         renderPreview()
     }
 
+    /** The slider of the power button: eight steps, 70 to 140 percent. */
+    private fun buttonBox() = sliderBox(WidgetTheme.MIN_BUTTON, 10, 7, button, "%") {
+        button = it
+        renderPreview()
+    }
+
+    /** The slider of the texts: nine steps, 70 to 150 percent. */
+    private fun fontBox() = sliderBox(WidgetTheme.MIN_FONT, 10, 8, font, "%") {
+        font = it
+        renderPreview()
+    }
+
+    /** The side of the power button: two rows to choose from, as the colours are. */
+    private fun sideBox(): LinearLayout {
+        val box = panelBox()
+        for ((value, title) in listOf(WidgetTheme.LEFT to R.string.widget_side_left, WidgetTheme.RIGHT to R.string.widget_side_right)) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(8), dp(12), dp(8))
+                minimumHeight = dp(48)
+                isClickable = true
+                setOnClickListener {
+                    side = value
+                    markSides()
+                    renderPreview()
+                }
+            }
+            val radio = RadioButton(this).apply {
+                buttonTintList = ColorStateList.valueOf(accent)
+                isClickable = false
+            }
+            row.addView(radio)
+            row.addView(TextView(this).apply {
+                text = getString(title)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+                setTextColor(ink)
+                setPadding(dp(8), 0, 0, 0)
+            })
+            box.addView(row)
+            sideRows.add(Pair(radio, value))
+        }
+        markSides()
+        return box
+    }
+
+    private fun markSides() {
+        for ((radio, value) in sideRows) radio.isChecked = value == side
+    }
+
     private fun barButton(text: Int, filled: Boolean, onClick: () -> Unit) = TextView(this).apply {
         this.text = getString(text)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
@@ -402,7 +472,7 @@ class WidgetConfigActivity : Activity() {
         try {
             val views = KumoWidget.preview(
                 this, widgetId,
-                WidgetLook(theme, opacity, shownState, if (radiusChosen) radius else -1, height),
+                WidgetLook(theme, opacity, shownState, if (radiusChosen) radius else -1, height, button, font, side),
             ) ?: return
             val (w, h) = widgetSizeDp()
             val widget = views.apply(this, stage)
@@ -418,6 +488,8 @@ class WidgetConfigActivity : Activity() {
         WidgetTheme.save(this, widgetId, theme)
         WidgetTheme.saveOpacity(this, widgetId, opacity)
         WidgetTheme.saveShape(this, widgetId, if (radiusChosen) radius else null, height)
+        WidgetTheme.saveSizes(this, widgetId, button, font)
+        WidgetTheme.saveSide(this, widgetId, side)
         KumoWidget.refreshOne(this, widgetId)
         setResult(RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
         finish()

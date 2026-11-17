@@ -23,6 +23,7 @@
         android:padding="14dp">
 
         <TextView
+            android:textDirection="ltr"
             android:id="@+id/wg_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -35,6 +36,7 @@
             android:textStyle="bold" />
 
         <TextView
+            android:textDirection="ltr"
             android:id="@+id/wg_sub"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -88,14 +90,12 @@
                 android:orientation="horizontal">
 
                 <TextView
+                    android:textDirection="ltr"
                     android:id="@+id/wg_down"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:autoSizeMaxTextSize="15sp"
-                    android:autoSizeMinTextSize="9sp"
-                    android:autoSizeStepGranularity="1sp"
-                    android:autoSizeTextType="uniform"
+                    android:textSize="15sp"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:maxLines="1"
@@ -103,14 +103,12 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    android:textDirection="ltr"
                     android:id="@+id/wg_up"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:autoSizeMaxTextSize="15sp"
-                    android:autoSizeMinTextSize="9sp"
-                    android:autoSizeStepGranularity="1sp"
-                    android:autoSizeTextType="uniform"
+                    android:textSize="15sp"
                     android:gravity="center"
                     android:includeFontPadding="false"
                     android:maxLines="1"
@@ -126,6 +124,7 @@
             android:orientation="horizontal">
 
             <TextView
+                android:textDirection="ltr"
                 android:id="@+id/wg_total"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -138,6 +137,7 @@
                 android:textStyle="bold" />
 
             <Chronometer
+                android:textDirection="ltr"
                 android:id="@+id/wg_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

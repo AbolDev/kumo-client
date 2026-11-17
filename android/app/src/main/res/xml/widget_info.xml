@@ -7,7 +7,7 @@
     android:minHeight="40dp"
     android:minResizeWidth="40dp"
     android:minResizeHeight="40dp"
-    android:previewLayout="@layout/wg_bar"
+    android:previewLayout="@layout/wg_preview_bar"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="2"
     android:targetCellHeight="1"

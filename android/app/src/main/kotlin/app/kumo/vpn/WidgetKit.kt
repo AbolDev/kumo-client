@@ -3,6 +3,7 @@ package app.kumo.vpn
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
+import android.appwidget.AppWidgetProviderInfo
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.os.SystemClock
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import java.util.Locale
@@ -98,11 +100,14 @@ class WidgetColors(
 
 /** A look of a widget: its colours ([WidgetTheme]), the opacity of its background (0 to 100), the roundness of its
  *  corners in dp ([radius], -1 while none was chosen: the widget keeps the corners it was drawn with) and how high its
- *  card stands in the room the launcher gives it ([height], 50 to 100 percent). With [state] the widget is drawn as in
- *  that state (the preview of the settings), else as in the one the VPN is in. */
+ *  card stands in the room the launcher gives it ([height], 50 to 100 percent). [button] is the size of the power button
+ *  and [font] the size of every text, each in percent of the size the layout was drawn with and each its own choice.
+ *  With [state] the widget is drawn as in that state (the preview of the settings), else as in the one the VPN is in. */
 class WidgetLook(
     val theme: Int, val opacity: Int, val state: Int? = null,
     val radius: Int = -1, val height: Int = 100,
+    val button: Int = 100, val font: Int = 100,
+    val side: Int = WidgetTheme.LEFT,
 )
 
 /**
@@ -154,19 +159,52 @@ object WidgetTheme {
         e.apply()
     }
 
+    /** The size of the power button in percent, [MIN_BUTTON] to [MAX_BUTTON] (100 when none was chosen). */
+    fun button(context: Context, id: Int): Int = prefs(context).getInt("button_$id", 100).coerceIn(MIN_BUTTON, MAX_BUTTON)
+
+    /** The size of the texts in percent, [MIN_FONT] to [MAX_FONT] (100 when none was chosen). */
+    fun font(context: Context, id: Int): Int = prefs(context).getInt("font_$id", 100).coerceIn(MIN_FONT, MAX_FONT)
+
+    fun saveSizes(context: Context, id: Int, button: Int, font: Int) {
+        prefs(context).edit()
+            .putInt("button_$id", button.coerceIn(MIN_BUTTON, MAX_BUTTON))
+            .putInt("font_$id", font.coerceIn(MIN_FONT, MAX_FONT))
+            .apply()
+    }
+
+    /** The side the power button stands on, [LEFT] or [RIGHT] (left when none was chosen). */
+    fun side(context: Context, id: Int): Int = if (prefs(context).getInt("side_$id", LEFT) == RIGHT) RIGHT else LEFT
+
+    fun saveSide(context: Context, id: Int, side: Int) {
+        prefs(context).edit().putInt("side_$id", if (side == RIGHT) RIGHT else LEFT).apply()
+    }
+
     /** The look kept for the widget [id]. */
-    fun look(context: Context, id: Int) =
-        WidgetLook(load(context, id), opacity(context, id), null, radius(context, id), height(context, id))
+    fun look(context: Context, id: Int) = WidgetLook(
+        load(context, id), opacity(context, id), null, radius(context, id), height(context, id),
+        button(context, id), font(context, id), side(context, id),
+    )
 
     fun forget(context: Context, id: Int) {
         // The keys of the older widgets go too.
         val e = prefs(context).edit().remove("theme_$id").remove("radius_$id").remove("height_$id")
+            .remove("button_$id").remove("font_$id").remove("side_$id")
         for (k in listOf("color", "shape", "opacity", "size", "content")) e.remove("${k}_$id")
         e.apply()
     }
 
     const val MAX_RADIUS = 40
     const val MIN_HEIGHT = 50
+    /** The side of the power button in the layouts that have it beside the texts. */
+    const val LEFT = 0
+    const val RIGHT = 1
+    const val MIN_BUTTON = 70
+    const val MAX_BUTTON = 140
+    const val MIN_FONT = 70
+    const val MAX_FONT = 150
+
+    /** Whether the size of the power button can be changed: a view is resized from a RemoteViews on Android 12+ only. */
+    val canSizeButton: Boolean get() = Build.VERSION.SDK_INT >= 31
 
     /** The last server used, shown while disconnected (and the delay the app measured for it). */
     fun lastServer(context: Context): String? = prefs(context).getString("last_server", null)
@@ -177,6 +215,9 @@ object WidgetTheme {
         prefs(context).edit().putString("last_server", name).apply()
     }
 }
+
+/** The least of the width and the height the launcher gave (the one it did not give, 0, does not count). */
+private fun roomOf(w: Int, h: Int): Int = listOf(w, h).filter { it > 0 }.minOrNull() ?: 0
 
 private fun speed(bytesPerSecond: Long): String = when {
     bytesPerSecond >= 1L shl 20 -> String.format(Locale.US, "%.1f MB/s", bytesPerSecond / 1048576.0)
@@ -228,6 +269,9 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
     private val connected = state == WidgetState.ON
     private val radius = look.radius
     private val heightPercent = look.height.coerceIn(WidgetTheme.MIN_HEIGHT, 100)
+    private val buttonPercent = look.button.coerceIn(WidgetTheme.MIN_BUTTON, WidgetTheme.MAX_BUTTON)
+    private val fontPercent = look.font.coerceIn(WidgetTheme.MIN_FONT, WidgetTheme.MAX_FONT)
+    private val right = look.side == WidgetTheme.RIGHT
     private val nightNow = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
         Configuration.UI_MODE_NIGHT_YES
     private val theme = look.theme
@@ -271,11 +315,42 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
         set(R.id.widget_bg, "setColorFilter") { it.bg }
         v.setInt(R.id.widget_bg, "setImageAlpha", opacity * 255 / 100)
         if (radius >= 0) v.setImageViewResource(R.id.widget_bg, radiusDrawable(radius))
-        if (heightPercent < 100 && heightDp > minCardDp) {
-            val card = maxOf(heightDp * heightPercent / 100, minCardDp)
-            val inset = ((heightDp - card) / 2f * context.resources.displayMetrics.density).toInt()
-            v.setViewPadding(R.id.widget_root, 0, inset, 0, inset)
+        // A bigger button or bigger texts need more room: the card never gets lower than they do. The padding is
+        // always written (0 at full height), since a launcher may redraw the widget over what it showed before.
+        val least = minCardDp + maxOf(0, buttonDp() - buttonBase) + maxOf(0, fontPercent - 100) * 26 / 100
+        var inset = 0
+        if (heightPercent < 100 && heightDp > least) {
+            val card = maxOf(heightDp * heightPercent / 100, least)
+            inset = ((heightDp - card) / 2f * context.resources.displayMetrics.density).toInt()
         }
+        v.setViewPadding(R.id.widget_root, 0, inset, 0, inset)
+    }
+
+    /** For a layout that has the button beside its texts: the button stands on the side the user chose (the layouts are
+     *  drawn left to right, and drawn right to left they mirror, the texts keeping their direction). Always written, since
+     *  a launcher may redraw the widget over what it showed before. [buttonAtEnd] is for the layout that draws the button at
+     *  the right: it is mirrored to put it on the left. */
+    fun mirror(buttonAtEnd: Boolean = false) = v.setInt(
+        R.id.widget_root, "setLayoutDirection",
+        if (right != buttonAtEnd) View.LAYOUT_DIRECTION_RTL else View.LAYOUT_DIRECTION_LTR,
+    )
+
+    private var buttonBase = 0
+    private var room = 0
+
+    /** What the layout is drawn with: the size of its power button in dp and the room the widget has (the least of its
+     *  width and height, 0 when not known), so a bigger button never grows out of it. Called before the rest. */
+    fun frame(buttonDp: Int, roomDp: Int) {
+        buttonBase = buttonDp
+        room = roomDp
+    }
+
+    /** The size of the power button in dp: the layout's own, as the user chose it (Android 12+), kept inside the room. */
+    private fun buttonDp(): Int {
+        if (buttonBase == 0 || Build.VERSION.SDK_INT < 31) return buttonBase
+        var size = buttonBase * buttonPercent / 100
+        if (buttonPercent > 100 && room > 0) size = minOf(size, maxOf(room - 8, buttonBase))
+        return size
     }
 
     /** The power button: outlined while disconnected, green while connected, filled in the accent colour between. */
@@ -284,6 +359,26 @@ class WidgetPainter(private val context: Context, private val v: RemoteViews, lo
         set(R.id.wg_icon, "setColorFilter") { if (connected) it.okIcon else if (on) it.onIcon else it.offIcon }
         set(R.id.wg_ring, "setColorFilter") { it.ring }
         v.setViewVisibility(R.id.wg_ring, if (on) View.GONE else View.VISIBLE)
+        if (buttonBase > 0 && Build.VERSION.SDK_INT >= 31) {
+            val size = buttonDp().toFloat()
+            v.setViewLayoutWidth(R.id.wg_button, size, TypedValue.COMPLEX_UNIT_DIP)
+            v.setViewLayoutHeight(R.id.wg_button, size, TypedValue.COMPLEX_UNIT_DIP)
+            // The icon is half of the button, as the layouts draw it.
+            v.setViewLayoutWidth(R.id.wg_icon, size / 2, TypedValue.COMPLEX_UNIT_DIP)
+            v.setViewLayoutHeight(R.id.wg_icon, size / 2, TypedValue.COMPLEX_UNIT_DIP)
+        }
+    }
+
+    /** Sets the size of the texts as the user chose it: each pair is a view and the size in sp the layout draws it with. */
+    fun fonts(vararg sizes: Pair<Int, Float>) {
+        for ((id, sp) in sizes) v.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, sp * fontPercent / 100f)
+    }
+
+    /** A text that must fit a slot of [slotDp] (the layout has no room to spare): as large as [maxSp] allows down to
+     *  [minSp], then the size the user chose on top of it. */
+    fun fit(id: Int, text: CharSequence, slotDp: Int, maxSp: Float, minSp: Float) {
+        val sp = (slotDp / (maxOf(text.length, 1) * 0.62f)).coerceIn(minSp, maxSp)
+        v.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, sp * fontPercent / 100f)
     }
 
     /** A main text (the name, the speeds). */
@@ -438,11 +533,19 @@ abstract class KumoWidget : AppWidgetProvider() {
             return WidgetTheme.lastServer(context) ?: "Kumo"
         }
 
-        fun pingText(): String? = VpnBridge.ping?.takeIf { it > 0 }?.let { "$it ms" }
+        /** The delay of the server. The preview of the settings ([sample]) shows an example while there is none (the VPN
+         *  is off there, yet the preview is asked to show the connected look), so the chip is seen as it will be. */
+        fun pingText(sample: Boolean = false): String? =
+            VpnBridge.ping?.takeIf { it > 0 }?.let { "$it ms" } ?: if (sample) "42 ms" else null
 
-        fun downText(): String = "↓ ${speed(WidgetFeed.down)}"
-        fun upText(): String = "↑ ${speed(WidgetFeed.up)}"
-        fun totalText(): String = size(WidgetFeed.downTotal + WidgetFeed.upTotal)
+        // The preview of the settings and of the widget list ([sample]) shows example numbers while there are none yet.
+        private fun idle() = WidgetFeed.down == 0L && WidgetFeed.up == 0L
+
+        fun downText(sample: Boolean = false): String = "↓ ${if (sample && idle()) "1.2 MB/s" else speed(WidgetFeed.down)}"
+        fun upText(sample: Boolean = false): String = "↑ ${if (sample && idle()) "340 KB/s" else speed(WidgetFeed.up)}"
+        fun totalText(sample: Boolean = false): String =
+            if (sample && idle() && WidgetFeed.downTotal + WidgetFeed.upTotal == 0L) "48.2 MB"
+            else size(WidgetFeed.downTotal + WidgetFeed.upTotal)
 
         private fun redraw(context: Context, providers: List<KumoWidget>) {
             val manager = AppWidgetManager.getInstance(context)
@@ -464,6 +567,35 @@ abstract class KumoWidget : AppWidgetProvider() {
             val info = manager.getAppWidgetInfo(id) ?: return null
             val provider = kinds.map { it() }.firstOrNull { it::class.java.name == info.provider.className } ?: return null
             return provider.build(context, id, manager.getAppWidgetOptions(id), look)
+        }
+
+        /**
+         * Android 15 and later: the list of widgets shows the real widget, drawn by this code in its connected look with
+         * your last server, at the size the widget has when first placed. (Before that it shows the layouts of
+         * `wg_preview_*`, which look the same.) Done once for each version of the app and each language: the system
+         * limits how often a preview may be set.
+         */
+        fun publishPreviews(context: Context) {
+            if (Build.VERSION.SDK_INT < 35) return
+            val prefs = context.getSharedPreferences("widgets", Context.MODE_PRIVATE)
+            val stamp = "${context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime}" +
+                "/${Locale.getDefault().toLanguageTag()}"
+            if (prefs.getString("preview_stamp", null) == stamp) return
+            val manager = AppWidgetManager.getInstance(context)
+            val look = WidgetLook(WidgetTheme.AUTO, 100, WidgetState.ON)
+            // The widget, its width and height in dp when placed (the cells of the launcher's grid).
+            val sizes = listOf(Triple(VpnWidget(), 180, 56), Triple(VpnWidgetIcon(), 56, 56), Triple(VpnWidgetStats(), 180, 180))
+            for ((provider, w, h) in sizes) {
+                val options = Bundle().apply {
+                    putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, w)
+                    putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, h)
+                }
+                val views = provider.build(context, AppWidgetManager.INVALID_APPWIDGET_ID, options, look)
+                manager.setWidgetPreview(
+                    ComponentName(context, provider::class.java), AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN, views,
+                )
+            }
+            prefs.edit().putString("preview_stamp", stamp).apply()
         }
 
         fun refreshOne(context: Context, id: Int) {
@@ -492,19 +624,28 @@ class VpnWidget : KumoWidget() {
         }
         val v = RemoteViews(context.packageName, layout)
         val p = WidgetPainter(context, v, look, state)
+        p.frame(40, roomOf(w, heightDp(options)))
         p.background(heightDp(options), 48)
         p.button()
         if (layout != R.layout.wg_bar_icon) {
+            p.fonts(R.id.wg_title to 13f, R.id.wg_sub to 11f)
+            if (layout == R.layout.wg_bar_wide) p.fonts(R.id.wg_chip to 11f)
             p.main(R.id.wg_title, serverName(context))
             // Room is short below two cells and a half: one speed is enough there.
             val sub = when {
                 state != WidgetState.ON -> stateText(context, state)
-                w in 1 until 200 -> downText()
-                else -> "${downText()} · ${upText()}"
+                w in 1 until 200 -> downText(custom != null)
+                else -> listOfNotNull(
+                    downText(custom != null), upText(custom != null),
+                    // The delay stands in the same row from about 240 dp on (below it the row has no room for it).
+                    if (w >= 240 || w == 0) pingText(custom != null) else null,
+                ).joinToString(" · ")
             }
             p.sub(R.id.wg_sub, sub)
         }
-        if (layout == R.layout.wg_bar_wide) p.chip(if (state == WidgetState.ON) pingText() else null)
+        if (layout != R.layout.wg_bar_icon) p.mirror()
+        // The delay is in the row of the speeds: the chip of this layout is not used any more.
+        if (layout == R.layout.wg_bar_wide) p.chip(null)
         openOn(context, v, R.id.widget_root)
         toggleOn(context, v, R.id.wg_button)
         return v
@@ -528,9 +669,14 @@ class VpnWidgetIcon : KumoWidget() {
         }
         val v = RemoteViews(context.packageName, layout)
         val p = WidgetPainter(context, v, look, state)
+        p.frame(if (layout == R.layout.wg_power_tall) 64 else 44, roomOf(w, h))
         p.background(h, if (layout == R.layout.wg_power_tall) 96 else 52)
         p.button()
-        if (layout != R.layout.wg_power) p.main(R.id.wg_title, stateText(context, state))
+        if (layout == R.layout.wg_power_wide) p.mirror()
+        if (layout != R.layout.wg_power) {
+            p.fonts(R.id.wg_title to 13f)
+            p.main(R.id.wg_title, stateText(context, state))
+        }
         toggleOn(context, v, R.id.widget_root)
         return v
     }
@@ -557,6 +703,14 @@ class VpnWidgetStats : KumoWidget() {
         }
         val v = RemoteViews(context.packageName, layout)
         val p = WidgetPainter(context, v, look, state)
+        p.frame(
+            when (layout) {
+                R.layout.wg_card_s -> 38
+                R.layout.wg_card_tall -> 64
+                else -> 44
+            },
+            roomOf(w, h),
+        )
         p.background(
             h,
             when (layout) {
@@ -567,35 +721,54 @@ class VpnWidgetStats : KumoWidget() {
             },
         )
         p.button()
+        if (layout == R.layout.wg_card_s || layout == R.layout.wg_card_m) p.mirror()
+        if (layout == R.layout.wg_card_wide) p.mirror(buttonAtEnd = true)
+        when (layout) {
+            R.layout.wg_card_s -> p.fonts(R.id.wg_title to 13f, R.id.wg_down to 12f, R.id.wg_total to 11f)
+            R.layout.wg_card_m -> p.fonts(
+                R.id.wg_title to 13f, R.id.wg_down to 12f, R.id.wg_up to 12f, R.id.wg_total to 12f, R.id.wg_time to 11f,
+            )
+            R.layout.wg_card_tall -> p.fonts(
+                R.id.wg_title to 13f, R.id.wg_sub to 11f, R.id.wg_total to 12f, R.id.wg_time to 11f,
+            )
+            else -> p.fonts(
+                R.id.wg_title to 13f, R.id.wg_chip to 11f, R.id.wg_down to 17f, R.id.wg_up to 17f,
+                R.id.wg_total to 11f, R.id.wg_time to 11f,
+            )
+        }
         p.main(R.id.wg_title, serverName(context))
         // Disconnected: the state stands where the speed would be, and nothing of a session is shown.
         fun showUp(text: String) = if (on) { p.show(R.id.wg_up); p.main(R.id.wg_up, text) } else p.hide(R.id.wg_up)
         when (layout) {
             R.layout.wg_card_s -> {
-                p.main(R.id.wg_down, if (on) downText() else stateText(context, state))
-                if (on) { p.show(R.id.wg_total); p.sub(R.id.wg_total, totalText()) } else p.hide(R.id.wg_total)
+                p.main(R.id.wg_down, if (on) downText(custom != null) else stateText(context, state))
+                if (on) { p.show(R.id.wg_total); p.sub(R.id.wg_total, totalText(custom != null)) } else p.hide(R.id.wg_total)
             }
             R.layout.wg_card_m -> {
-                p.main(R.id.wg_down, if (on) downText() else stateText(context, state))
-                showUp(upText())
-                if (on) { p.show(R.id.wg_total); p.main(R.id.wg_total, totalText()) } else p.hide(R.id.wg_total)
+                p.main(R.id.wg_down, if (on) downText(custom != null) else stateText(context, state))
+                showUp(upText(custom != null))
+                if (on) { p.show(R.id.wg_total); p.main(R.id.wg_total, totalText(custom != null)) } else p.hide(R.id.wg_total)
                 session(p, v, on)
             }
             R.layout.wg_card_tall -> {
                 // The button stands in the middle: the rows under it keep their room while disconnected (written
                 // but not shown), so it does not move when the state changes.
                 p.sub(R.id.wg_sub, stateText(context, state))
-                p.main(R.id.wg_down, downText())
-                p.main(R.id.wg_up, upText())
-                p.main(R.id.wg_total, totalText())
+                p.main(R.id.wg_down, downText(custom != null))
+                p.main(R.id.wg_up, upText(custom != null))
+                p.main(R.id.wg_total, totalText(custom != null))
+                // The two speeds share the width of the card (less its padding): each is as large as fits, 9 to 15 sp.
+                val slot = ((if (w > 0) w else 150) - 28) / 2
+                p.fit(R.id.wg_down, downText(custom != null), slot, 15f, 9f)
+                p.fit(R.id.wg_up, upText(custom != null), slot, 15f, 9f)
                 for (row in listOf(R.id.wg_down, R.id.wg_up, R.id.wg_total)) if (on) p.show(row) else p.keep(row)
                 session(p, v, on)
             }
             else -> {
-                p.chip(if (on) pingText() else null)
-                p.main(R.id.wg_down, if (on) downText() else stateText(context, state))
-                showUp(upText())
-                if (on) { p.show(R.id.wg_total); p.sub(R.id.wg_total, totalText()) } else p.hide(R.id.wg_total)
+                p.chip(if (on) pingText(custom != null) else null)
+                p.main(R.id.wg_down, if (on) downText(custom != null) else stateText(context, state))
+                showUp(upText(custom != null))
+                if (on) { p.show(R.id.wg_total); p.sub(R.id.wg_total, totalText(custom != null)) } else p.hide(R.id.wg_total)
                 session(p, v, on)
             }
         }

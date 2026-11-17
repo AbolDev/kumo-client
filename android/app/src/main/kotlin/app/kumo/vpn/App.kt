@@ -32,6 +32,8 @@ class App : Application() {
         }
         // Exactly one launcher entry (the picked icon) must be enabled, or the app cannot be opened.
         AppIcons.ensure(this)
+        // The list of widgets (Android 15+) shows the real widget; a failure only leaves the plain preview.
+        runCatching { KumoWidget.publishPreviews(this) }
     }
 
     /** The phone switched between light and dark: before Android 12 the widgets are painted again for it (later

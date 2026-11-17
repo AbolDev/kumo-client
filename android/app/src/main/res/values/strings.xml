@@ -26,6 +26,11 @@
     <string name="widget_cfg_opacity">Opacity</string>
     <string name="widget_cfg_radius">Corner roundness</string>
     <string name="widget_cfg_height">Card height</string>
+    <string name="widget_cfg_button">Button size</string>
+    <string name="widget_cfg_font">Text size</string>
+    <string name="widget_cfg_side">Power button side</string>
+    <string name="widget_side_left">Left</string>
+    <string name="widget_side_right">Right</string>
     <string name="widget_cfg_cancel">Cancel</string>
     <string name="widget_cfg_save">Save</string>
     <string name="widget_cfg_state">Preview as</string>

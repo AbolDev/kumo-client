@@ -60,6 +60,7 @@
             android:orientation="vertical">
 
             <TextView
+                android:textDirection="ltr"
                 android:id="@+id/wg_title"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -72,6 +73,7 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:textDirection="ltr"
                 android:id="@+id/wg_sub"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -98,6 +100,7 @@
                 android:tint="#FFEDECE6" />
 
             <TextView
+                android:textDirection="ltr"
                 android:id="@+id/wg_chip"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

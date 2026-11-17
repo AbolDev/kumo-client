@@ -26,6 +26,11 @@
     <string name="widget_cfg_opacity">شفافیت پس‌زمینه</string>
     <string name="widget_cfg_radius">گردی گوشه‌ها</string>
     <string name="widget_cfg_height">ارتفاع کارت</string>
+    <string name="widget_cfg_button">اندازهٔ دکمهٔ اتصال</string>
+    <string name="widget_cfg_font">اندازهٔ فونت متن‌ها</string>
+    <string name="widget_cfg_side">جای دکمهٔ اتصال</string>
+    <string name="widget_side_left">چپ</string>
+    <string name="widget_side_right">راست</string>
     <string name="widget_cfg_cancel">انصراف</string>
     <string name="widget_cfg_save">ذخیره</string>
     <string name="widget_cfg_state">پیش‌نمایش در حالت</string>

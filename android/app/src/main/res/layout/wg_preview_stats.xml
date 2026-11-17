@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the list of widgets shows for the status card before Android 15: the connected look, with example numbers. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layoutDirection="ltr">
+
+    <ImageView
+        android:id="@+id/widget_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/wg_r24"
+        android:tint="#FFFFFFFF" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="14dp">
+
+        <TextView
+            android:textDirection="ltr"
+            android:id="@+id/wg_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="2"
+            android:text="Kumo"
+            android:textColor="#FF2C2C2A"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:textDirection="ltr"
+            android:id="@+id/wg_sub"
+            android:text="@string/widget_on"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="#FF5F5E5A"
+            android:textSize="11sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <FrameLayout
+                android:id="@+id/wg_button"
+                android:layout_width="64dp"
+                android:layout_height="64dp">
+
+                <ImageView
+                    android:id="@+id/wg_btn_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/wg_circle"
+                    android:tint="#FF1E9E52" />
+
+                <ImageView
+                    android:id="@+id/wg_ring"
+                    android:visibility="gone"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/wg_ring"
+                    android:tint="#FF1D9E75" />
+
+                <ImageView
+                    android:id="@+id/wg_icon"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="@string/widget_toggle"
+                    android:src="@drawable/ic_power"
+                    android:tint="#FFFFFFFF" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:textDirection="ltr"
+                    android:id="@+id/wg_down"
+                    android:text="↓ 1.2 MB/s"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="15sp"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#FF2C2C2A"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:textDirection="ltr"
+                    android:id="@+id/wg_up"
+                    android:text="↑ 340 KB/s"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="15sp"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:textColor="#FF2C2C2A"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:textDirection="ltr"
+                android:id="@+id/wg_total"
+                android:text="48.2 MB"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FF2C2C2A"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <Chronometer
+                android:textDirection="ltr"
+                android:id="@+id/wg_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:includeFontPadding="false"
+                android:textColor="#FF5F5E5A"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>
