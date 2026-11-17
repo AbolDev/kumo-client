@@ -179,3 +179,23 @@ func TestMismatchDoesNotConnect(t *testing.T) {
 	}
 	t.Logf("as expected: %v", err)
 }
+
+// What the glue had to change: with the bytes 1 to 3 of sing-box (zeros) AmneziaWG does not connect, since they are a
+// part of its message types.
+func TestSingBoxReservedBytesBreakAmneziaWG(t *testing.T) {
+	legacyReservedBytes = true
+	t.Cleanup(func() { legacyReservedBytes = false })
+	server := "\njc=4\njmin=40\njmax=70\ns1=15\ns2=23\nh1=1234567891\nh2=1234567892\nh3=1234567893\nh4=1234567894"
+	client := AWGOptions{
+		Jc: 4, Jmin: 40, Jmax: 70, S1: 15, S2: 23,
+		H1: "1234567891", H2: "1234567892", H3: "1234567893", H4: "1234567894",
+	}
+	serverPrivate, serverPublic := newKey(t)
+	clientPrivate, clientPublic := newKey(t)
+	startServer(t, 51835, serverPrivate, clientPublic, server)
+	err := echoThroughClient(t, 51835, clientPrivate, serverPublic, client, 5*time.Second)
+	if err == nil {
+		t.Fatal("AmneziaWG connected with the reserved bytes of sing-box: the premise of the change is wrong")
+	}
+	t.Logf("as expected: %v", err)
+}

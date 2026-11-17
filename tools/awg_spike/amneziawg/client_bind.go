@@ -20,6 +20,10 @@ import (
 
 var _ conn.Bind = (*ClientBind)(nil)
 
+// legacyReservedBytes puts back what sing-box does: zeros in bytes 1 to 3 of every packet, sent and received. Only a
+// test sets it (to show that it breaks AmneziaWG).
+var legacyReservedBytes = false
+
 type ClientBind struct {
 	ctx                 context.Context
 	logger              logger.Logger
@@ -132,6 +136,9 @@ func (c *ClientBind) receive(packets [][]byte, sizes []int, eps []conn.Endpoint)
 	sizes[0] = n
 	// (sing-box clears bytes 1 to 3 here, where WireGuard keeps its reserved zeros. AmneziaWG puts its own header
 	// there, so the packet is left as it came.)
+	if legacyReservedBytes && n > 3 {
+		clear(packets[0][1:4])
+	}
 	eps[0] = remoteEndpoint(M.SocksaddrFromNet(addr).Unwrap().AddrPort())
 	count = 1
 	return
@@ -165,6 +172,9 @@ func (c *ClientBind) Send(bufs [][]byte, ep conn.Endpoint) error {
 	}
 	destination := netip.AddrPort(ep.(remoteEndpoint))
 	for _, buf := range bufs {
+		if legacyReservedBytes && len(buf) > 3 {
+			clear(buf[1:4])
+		}
 		_, err = udpConn.WriteToUDPAddrPort(buf, destination)
 		if err != nil {
 			udpConn.Close()
