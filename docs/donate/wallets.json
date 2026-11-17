@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "version": 1,
+  "key_id": "t1",
+  "wallets": [
+    { "kind": "ton", "coin": "TON", "network": "TON", "address": "UQApm3onic1pHi7PkvnUx-L_y9vycVJQUHrSXY4T8ksAzGwj" },
+    { "kind": "tron", "coin": "TRX", "network": "TRON", "address": "TN3od12nkirPW6iN2y2RtrD6ERXb1Sws8S" },
+    { "kind": "evm", "coin": "USDT", "network": "BNB Smart Chain (BEP-20)", "address": "0x89af99EfAA7D4385aA087705606CDEfb9f532639" },
+    { "kind": "btc", "coin": "BTC", "network": "Bitcoin", "address": "bc1qxgrf78l7t8j9e9lhtm444wyjmeu3d56kp6fdky" },
+    { "kind": "ltc", "coin": "LTC", "network": "Litecoin", "address": "ltc1q55y0m367a4av678878l6dzzhf32kpu8vtvyr82" }
+  ]
+}

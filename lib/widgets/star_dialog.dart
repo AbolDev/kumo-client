@@ -5,8 +5,8 @@ import '../l10n/strings.dart';
 import 'kumo_mark.dart';
 
 /// The request for a star on GitHub: a header with Kumo's cloud and a gold star on a soft gradient, the
-/// question, one big button to star, and the two quieter answers side by side under it. Pops 'star', 'later'
-/// or 'never'.
+/// question, one big button to star, a button for a donation, and the two quieter answers side by side under
+/// it. Pops 'star', 'donate', 'later' or 'never'.
 class StarDialog extends StatelessWidget {
   const StarDialog({super.key});
 
@@ -52,6 +52,17 @@ class StarDialog extends StatelessWidget {
                 onPressed: () => Navigator.pop(context, 'star'),
                 icon: const Icon(Icons.star_rounded, color: _gold),
                 label: Text(tr(context, 'starOpen')),
+              ),
+            ),
+            // A quieter way to help: the wallets of donations (the page opens after this closes).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: OutlinedButton.icon(
+                key: const ValueKey('star-donate'),
+                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46), shape: const StadiumBorder()),
+                onPressed: () => Navigator.pop(context, 'donate'),
+                icon: const Icon(Icons.favorite_border),
+                label: Text(tr(context, 'starDonate')),
               ),
             ),
             Padding(

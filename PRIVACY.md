@@ -9,6 +9,7 @@ Kumo talks to other servers only for the features below. Each one is started by 
 | When | Where | What is sent |
 | --- | --- | --- |
 | Checking for updates (on start and from *Settings → About*) | `api.github.com`, `github.com` | A request for the project's releases. The download of an update is a normal file download from GitHub. |
+| The list of wallets in *Settings → About → Support Kumo* (on start and when the page is opened; the list is taken only when it carries the project's signature) | `cdn.jsdelivr.net`, `raw.githubusercontent.com` | A request for a small public text file (`docs/donate/wallets.json`). |
 | Loading the free public server list (the *Public servers* group; it can be hidden in Settings) | `cdn.jsdelivr.net` and mirrors, `raw.githubusercontent.com` | A request for a public text file. |
 | Downloading routing data when you pick *Direct countries* or turn on *Block ads and trackers* (the lists are fetched a few seconds after a connection is up, through it: the ad lists when they are a day old, or when you tap *Update now*) | `cdn.jsdelivr.net` and its mirrors (`fastly.`, `gcore.`, `testingcf.jsdelivr.net`), `raw.githubusercontent.com` | A request for public rule files. |
 | Opening *What is my IP* or the *DNS leak test* (only when you do) | `api.ipify.org`, `ipwho.is`, `bash.ws` | Your address and the names looked up for the test. |

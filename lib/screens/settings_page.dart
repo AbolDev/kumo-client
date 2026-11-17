@@ -25,6 +25,7 @@ import '../l10n/extra.dart';
 import '../widgets/prompt_dialog.dart';
 import 'connections_page.dart';
 import 'logs_page.dart';
+import 'donate_page.dart';
 import 'share_app_page.dart';
 import '../widgets/option_tile.dart';
 import 'network_settings.dart';
@@ -695,6 +696,16 @@ class _SettingsPageState extends State<SettingsPage> {
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute<void>(settings: const RouteSettings(name: '/ShareAppPage'), builder: (_) => const ShareAppPage()),
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.favorite_border),
+          title: Text(tr(context, 'donateTitle')),
+          subtitle: Text(tr(context, 'donateDesc')),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(settings: const RouteSettings(name: '/DonatePage'), builder: (_) => const DonatePage()),
           ),
         ),
         // News of the releases and help, in the project's own channel.

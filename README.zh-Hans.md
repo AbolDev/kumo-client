@@ -82,6 +82,16 @@ Flutter 3.27（Dart 3.6）：`flutter pub get`、`flutter test`。sing-box 和 X
 
 发现 bug 或有想法？请提交 [issue](../../issues)。
 
+## 支持 Kumo
+
+Kumo 免费、无广告、无需账号。如果你想支持它，可以向下面的钱包捐赠。请只发送这里写明的币种，并走这里写明的网络：一个网络的地址收不到另一个网络的转账，发错的资产会丢失。同样的列表也在应用中（*设置 → 关于 → 支持 Kumo*）和 [`docs/donate/wallets.json`](docs/donate/wallets.json) 里；转账前请核对。
+
+- **TON**（TON 网络）：`UQApm3onic1pHi7PkvnUx-L_y9vycVJQUHrSXY4T8ksAzGwj`
+- **TRX**（TRON 网络）：`TN3od12nkirPW6iN2y2RtrD6ERXb1Sws8S`
+- **USDT**（BNB Smart Chain 网络，BEP-20）：`0x89af99EfAA7D4385aA087705606CDEfb9f532639`
+- **BTC**（Bitcoin 网络）：`bc1qxgrf78l7t8j9e9lhtm444wyjmeu3d56kp6fdky`
+- **LTC**（Litecoin 网络）：`ltc1q55y0m367a4av678878l6dzzhf32kpu8vtvyr82`
+
 ## 免责声明与许可证
 
 Kumo 不提供服务器，也不控制它列出的公共服务器。你需要自行遵守所在地的法律。本软件按原样提供。Kumo 是基于 **GNU GPL v3.0** 的自由软件，包含 [sing-box](https://github.com/SagerNet/sing-box) 和 [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android) 的部分代码。广告拦截使用 [HaGeZi](https://github.com/hagezi/dns-blocklists)（GPL-3.0；内置一份 *Pro mini*）、[OISD](https://oisd.nl)、[AdGuard DNS filter](https://github.com/AdguardTeam/AdGuardSDNSFilter)、[PersianBlocker](https://github.com/MasterKia/PersianBlocker) 和 [sing-geosite](https://github.com/SagerNet/sing-geosite) 的拦截列表；随附的国家列表来自 [sing-geoip](https://github.com/SagerNet/sing-geoip)（基于 MaxMind 的 GeoLite2 数据，CC BY-SA 4.0）、sing-geosite 和 [Iran-sing-box-rules](https://github.com/Chocolate4U/Iran-sing-box-rules)。

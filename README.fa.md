@@ -92,6 +92,16 @@ Flutter 3.27 (Dart 3.6): `flutter pub get` و `flutter test`. هسته‌های 
 
 باگ یا ایده‌ای دارید؟ یک [issue](../../issues) باز کنید.
 
+## حمایت از کومو
+
+کومو رایگان است، بدون تبلیغ و بدون حساب. اگر می‌خواهید از آن حمایت کنید، می‌توانید به یکی از این ولت‌ها کمک مالی بفرستید. فقط همان ارزی را که نوشته شده، روی همان شبکه بفرستید: آدرس یک شبکه از شبکه‌ی دیگر دریافت نمی‌کند و پولی که اشتباه فرستاده شود از دست می‌رود. همین فهرست در برنامه (*تنظیمات ← درباره ← حمایت از کومو*) و در [`docs/donate/wallets.json`](docs/donate/wallets.json) هم هست؛ قبل از ارسال مقایسه‌شان کنید.
+
+- **TON** (شبکه‌ی TON): `UQApm3onic1pHi7PkvnUx-L_y9vycVJQUHrSXY4T8ksAzGwj`
+- **TRX** (شبکه‌ی TRON): `TN3od12nkirPW6iN2y2RtrD6ERXb1Sws8S`
+- **USDT** (شبکه‌ی BNB Smart Chain، BEP-20): `0x89af99EfAA7D4385aA087705606CDEfb9f532639`
+- **BTC** (شبکه‌ی Bitcoin): `bc1qxgrf78l7t8j9e9lhtm444wyjmeu3d56kp6fdky`
+- **LTC** (شبکه‌ی Litecoin): `ltc1q55y0m367a4av678878l6dzzhf32kpu8vtvyr82`
+
 ## سلب مسئولیت و مجوز
 
 کومو سرور ارائه نمی‌دهد و روی سرورهای عمومی که فهرست می‌کند کنترلی ندارد. رعایت قوانین محل زندگی با خود شماست. نرم‌افزار «همان‌طور که هست» و بدون هیچ ضمانتی ارائه می‌شود. کومو نرم‌افزار آزاد با مجوز **GNU GPL v3.0** است و بخش‌هایی از [sing-box](https://github.com/SagerNet/sing-box) و [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android) را دارد.

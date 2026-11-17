@@ -82,6 +82,16 @@ Flutter 3.27 (Dart 3.6): `flutter pub get`, `flutter test`. Lõi sing-box và Xr
 
 Tìm thấy lỗi hoặc có ý tưởng? Hãy mở một [issue](../../issues).
 
+## Ủng hộ Kumo
+
+Kumo miễn phí, không quảng cáo và không cần tài khoản. Nếu muốn ủng hộ, bạn có thể gửi tiền đến một trong các ví này. Chỉ gửi đúng loại tiền ghi ở đây, qua đúng mạng ghi ở đây: địa chỉ của mạng này không nhận từ mạng khác, và tiền gửi sai mạng sẽ mất. Danh sách này cũng có trong ứng dụng (*Cài đặt → Giới thiệu → Ủng hộ Kumo*) và trong [`docs/donate/wallets.json`](docs/donate/wallets.json); hãy đối chiếu trước khi gửi.
+
+- **TON** (mạng TON): `UQApm3onic1pHi7PkvnUx-L_y9vycVJQUHrSXY4T8ksAzGwj`
+- **TRX** (mạng TRON): `TN3od12nkirPW6iN2y2RtrD6ERXb1Sws8S`
+- **USDT** (mạng BNB Smart Chain, BEP-20): `0x89af99EfAA7D4385aA087705606CDEfb9f532639`
+- **BTC** (mạng Bitcoin): `bc1qxgrf78l7t8j9e9lhtm444wyjmeu3d56kp6fdky`
+- **LTC** (mạng Litecoin): `ltc1q55y0m367a4av678878l6dzzhf32kpu8vtvyr82`
+
 ## Miễn trừ trách nhiệm và giấy phép
 
 Kumo không cung cấp máy chủ và không kiểm soát các máy chủ công cộng mà nó liệt kê. Bạn chịu trách nhiệm tuân thủ pháp luật nơi bạn sống. Phần mềm được cung cấp nguyên trạng. Kumo là phần mềm tự do theo giấy phép **GNU GPL v3.0** và bao gồm một phần của [sing-box](https://github.com/SagerNet/sing-box) và [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android). Trình chặn quảng cáo dùng danh sách chặn của [HaGeZi](https://github.com/hagezi/dns-blocklists) (GPL-3.0; có sẵn một bản *Pro mini*), [OISD](https://oisd.nl), [AdGuard DNS filter](https://github.com/AdguardTeam/AdGuardSDNSFilter), [PersianBlocker](https://github.com/MasterKia/PersianBlocker) và [sing-geosite](https://github.com/SagerNet/sing-geosite); các danh sách quốc gia đi kèm lấy từ [sing-geoip](https://github.com/SagerNet/sing-geoip) (dựa trên dữ liệu GeoLite2 của MaxMind, CC BY-SA 4.0), sing-geosite và [Iran-sing-box-rules](https://github.com/Chocolate4U/Iran-sing-box-rules).

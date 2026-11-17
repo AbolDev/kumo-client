@@ -21,6 +21,8 @@ import 'core/vpn_channel.dart';
 import 'core/win_menu_theme.dart';
 import 'l10n/extra.dart';
 import 'l10n/strings.dart';
+import 'core/donate_sync.dart' show startWallets;
+import 'screens/donate_page.dart';
 import 'screens/home_page.dart';
 import 'screens/onboarding_page.dart';
 import 'screens/update_dialog.dart';
@@ -132,6 +134,8 @@ class _KumoAppState extends State<KumoApp>
       _askBatteryOnce();
       _listenExternal();
       _state.noteOpen();
+      // The wallets of donations: the list kept by the last download, then a new one from GitHub (signed, or it is not taken).
+      unawaited(startWallets());
       _askStarLater();
       // A newer stable release is offered as soon as the app is ready and the answer is in.
       update?.then((info) {
@@ -394,6 +398,11 @@ class _KumoAppState extends State<KumoApp>
       if (answer == null) return;
       _state.answerStar(done: answer != 'later');
       if (answer == 'star') await openLink('https://github.com/AbolDev/kumo-client');
+      // The wallets of donations (it counts as answered: the question is not asked again).
+      if (answer == 'donate') {
+        _navigator.currentState?.push(MaterialPageRoute<void>(
+            settings: const RouteSettings(name: '/DonatePage'), builder: (_) => const DonatePage()));
+      }
     });
   }
 

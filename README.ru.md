@@ -82,6 +82,16 @@ Flutter 3.27 (Dart 3.6): `flutter pub get`, `flutter test`. Ядер sing-box и
 
 Нашли ошибку или есть идея? Откройте [issue](../../issues).
 
+## Поддержать Kumo
+
+Kumo бесплатен, без рекламы и без аккаунта. Если хотите поддержать проект, можно отправить пожертвование на один из этих кошельков. Отправляйте только указанную монету и в указанной сети: адрес одной сети не принимает из другой, и отправленное так теряется. Тот же список есть в приложении (*Настройки → О приложении → Поддержать Kumo*) и в [`docs/donate/wallets.json`](docs/donate/wallets.json); сравните их перед отправкой.
+
+- **TON** (сеть TON): `UQApm3onic1pHi7PkvnUx-L_y9vycVJQUHrSXY4T8ksAzGwj`
+- **TRX** (сеть TRON): `TN3od12nkirPW6iN2y2RtrD6ERXb1Sws8S`
+- **USDT** (сеть BNB Smart Chain, BEP-20): `0x89af99EfAA7D4385aA087705606CDEfb9f532639`
+- **BTC** (сеть Bitcoin): `bc1qxgrf78l7t8j9e9lhtm444wyjmeu3d56kp6fdky`
+- **LTC** (сеть Litecoin): `ltc1q55y0m367a4av678878l6dzzhf32kpu8vtvyr82`
+
 ## Отказ от ответственности и лицензия
 
 Kumo не предоставляет серверы и не управляет публичными серверами, которые показывает. Вы сами отвечаете за соблюдение законов там, где живёте. Программа предоставляется «как есть». Kumo — свободное ПО под лицензией **GNU GPL v3.0** и включает части [sing-box](https://github.com/SagerNet/sing-box) и [sing-box-for-android](https://github.com/SagerNet/sing-box-for-android). Блокировщик рекламы использует списки [HaGeZi](https://github.com/hagezi/dns-blocklists) (GPL-3.0; копия *Pro mini* встроена), [OISD](https://oisd.nl), [AdGuard DNS filter](https://github.com/AdguardTeam/AdGuardSDNSFilter), [PersianBlocker](https://github.com/MasterKia/PersianBlocker) и [sing-geosite](https://github.com/SagerNet/sing-geosite); встроенные списки стран взяты из [sing-geoip](https://github.com/SagerNet/sing-geoip) (на основе данных GeoLite2 от MaxMind, CC BY-SA 4.0), sing-geosite и [Iran-sing-box-rules](https://github.com/Chocolate4U/Iran-sing-box-rules).

@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'extra_awg.dart';
 import 'extra_disguise.dart';
+import 'extra_donate.dart';
 import 'extra_langs.dart';
 import 'extra_sync.dart';
 import 'extra_more.dart';
@@ -28,12 +29,13 @@ String trFor(String lang, String key, [Map<String, Object>? args]) {
 }
 
 const _extra = <String, Map<String, String>>{
-  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu, ...extraAwgRu},
-  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi, ...extraAwgVi},
-  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh, ...extraAwgZh},
-  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr, ...extraAwgAr},
+  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu, ...extraAwgRu, ...extraDonateRu},
+  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi, ...extraAwgVi, ...extraDonateVi},
+  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh, ...extraAwgZh, ...extraDonateZh},
+  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr, ...extraAwgAr, ...extraDonateAr},
   'en': {
     ...extraAwgEn,
+    ...extraDonateEn,
     ...extraMoreEn,
     ...extraPrivacyEn,
     ...extraToolsEn,
@@ -154,6 +156,7 @@ const _extra = <String, Map<String, String>>{
   },
   'fa': {
     ...extraAwgFa,
+    ...extraDonateFa,
     ...extraMoreFa,
     ...extraPrivacyFa,
     ...extraToolsFa,
