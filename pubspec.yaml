@@ -28,6 +28,7 @@ dependencies:
   desktop_drop: ^0.8.4
   package_info_plus: ^8.1.2
   dynamic_color: 1.7.0
+  path_drawing: ^1.0.1
 
 dev_dependencies:
   flutter_test:

@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../core/donate.dart';
 import '../core/donate_sync.dart' show refreshWallets;
 import '../l10n/extra.dart';
+import '../widgets/coin_icon.dart';
 import 'share_sheet.dart' show ToastKind, toast;
 import 'update_dialog.dart' show openLink;
 
@@ -100,22 +101,28 @@ class _DonatePageState extends State<DonatePage> {
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${w.coin} · ${w.network}', textDirection: TextDirection.ltr, style: text.titleMedium),
-          const SizedBox(height: 6),
-          SelectableText(w.address, textDirection: TextDirection.ltr, style: text.bodyMedium?.copyWith(fontFamily: 'monospace')),
-          Row(children: [
-            TextButton.icon(
-              onPressed: () => _copy(w),
-              icon: const Icon(Icons.copy, size: 18),
-              label: Text(tr(context, 'donateCopy')),
-            ),
-            TextButton.icon(
-              onPressed: () => _qr(w),
-              icon: const Icon(Icons.qr_code_2, size: 20),
-              label: Text(tr(context, 'donateQr')),
-            ),
-          ]),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          CoinIcon(w.coin, key: ValueKey('coin:${w.kind.name}')),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${w.coin} · ${w.network}', textDirection: TextDirection.ltr, style: text.titleMedium),
+              const SizedBox(height: 6),
+              SelectableText(w.address, textDirection: TextDirection.ltr, style: text.bodyMedium?.copyWith(fontFamily: 'monospace')),
+              Row(children: [
+                TextButton.icon(
+                  onPressed: () => _copy(w),
+                  icon: const Icon(Icons.copy, size: 18),
+                  label: Text(tr(context, 'donateCopy')),
+                ),
+                TextButton.icon(
+                  onPressed: () => _qr(w),
+                  icon: const Icon(Icons.qr_code_2, size: 20),
+                  label: Text(tr(context, 'donateQr')),
+                ),
+              ]),
+            ]),
+          ),
         ]),
       ),
     );

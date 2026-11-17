@@ -173,6 +173,7 @@ void main() {
     await tester.pump();
     for (final x in builtInWallets) {
       expect(find.byKey(ValueKey('wallet:${x.kind.name}')), findsOneWidget);
+      expect(find.byKey(ValueKey('coin:${x.kind.name}')), findsOneWidget, reason: 'each coin has its icon');
       expect(find.text(x.address), findsOneWidget);
     }
   });
