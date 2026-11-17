@@ -18,7 +18,6 @@ import (
 	"github.com/sagernet/sing-box/log"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
 	"golang.org/x/crypto/curve25519"
 )
@@ -83,8 +82,7 @@ func startServer(t *testing.T, port int, serverPrivate, clientPublic []byte, awg
 // echoThroughClient starts the client (the glue) with [awg] and sends a line through the tunnel.
 func echoThroughClient(t *testing.T, port int, clientPrivate, serverPublic []byte, awg AWGOptions, wait time.Duration) error {
 	t.Helper()
-	base := context.Background()
-	ctx := service.ContextWith[pause.Manager](base, pause.NewDefaultManager(base))
+	ctx := pause.WithDefaultManager(context.Background())
 	endpoint, err := NewEndpoint(EndpointOptions{
 		Context: ctx,
 		Logger:  log.NewNOPFactory().Logger(),
