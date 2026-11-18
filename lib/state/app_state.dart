@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket, exit;
+import 'dart:io' show SocketException, HandshakeException, HttpClient, InternetAddress, Platform, ServerSocket, exit;
 import 'dart:isolate' show Isolate;
 import 'dart:math';
 import 'dart:typed_data';
@@ -3201,6 +3201,7 @@ class AppState extends ChangeNotifier {
       if (cancelled()) return;
       apiPort = await _freePort();
       apiSecret = _randomSecret();
+      await _ensureProxyPort();
       final chain = net.chain.isEmpty ? null : parseLink(net.chain);
       // One chosen server runs on Xray when only Xray can carry it, or when Xray is the default
       // core and can. A group of servers (automatic mode) is always sing-box.
@@ -3294,6 +3295,45 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       log('Could not start the connection: $e', level: LogLevel.error, tag: LogTag.connection);
       _show(VpnStatus.stopped);
+    }
+  }
+
+  /// Whether the system forbids listening on [port]: Windows keeps ranges of ports for Hyper-V, WSL and Docker, and binding one
+  /// fails with "forbidden by its access permissions" (WSAEACCES, 10013), so the core could never start on it. A port that another
+  /// program holds is another matter, and is left to the core's own error (the old core of the last connection may still be
+  /// letting go of it).
+  Future<bool> _portForbidden(int port) async {
+    try {
+      final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+      await s.close();
+      return false;
+    } on SocketException catch (e) {
+      return Platform.isWindows && e.osError?.errorCode == 10013;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// The proxy port of the core is moved out of a range the system keeps for itself, once (the new port is saved, and the user
+  /// is told), so that a connection never fails on it.
+  Future<void> _ensureProxyPort() async {
+    if (!Platform.isWindows || !await _portForbidden(net.proxyPort)) return;
+    final old = net.proxyPort;
+    final random = Random();
+    for (var i = 0; i < 60; i++) {
+      final port = 20000 + random.nextInt(28000);
+      if (port == net.lanPort || await _portForbidden(port)) continue;
+      // free as well: a port a program holds is no better
+      try {
+        final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+        await s.close();
+      } catch (_) {
+        continue;
+      }
+      net.proxyPort = port;
+      _saveSettings();
+      _notice('proxyPortMoved', {'old': old, 'port': port});
+      return;
     }
   }
 

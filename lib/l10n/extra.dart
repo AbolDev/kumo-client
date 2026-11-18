@@ -6,6 +6,7 @@ import 'extra_donate.dart';
 import 'extra_langs.dart';
 import 'extra_sync.dart';
 import 'extra_more.dart';
+import 'extra_port.dart';
 import 'extra_privacy.dart';
 import 'extra_speedpath.dart';
 import 'extra_tools.dart';
@@ -30,13 +31,14 @@ String trFor(String lang, String key, [Map<String, Object>? args]) {
 }
 
 const _extra = <String, Map<String, String>>{
-  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu, ...extraAwgRu, ...extraDonateRu, ...extraSpeedPathRu},
-  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi, ...extraAwgVi, ...extraDonateVi, ...extraSpeedPathVi},
-  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh, ...extraAwgZh, ...extraDonateZh, ...extraSpeedPathZh},
-  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr, ...extraAwgAr, ...extraDonateAr, ...extraSpeedPathAr},
+  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu, ...extraAwgRu, ...extraDonateRu, ...extraSpeedPathRu, ...extraPortRu},
+  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi, ...extraAwgVi, ...extraDonateVi, ...extraSpeedPathVi, ...extraPortVi},
+  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh, ...extraAwgZh, ...extraDonateZh, ...extraSpeedPathZh, ...extraPortZh},
+  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr, ...extraAwgAr, ...extraDonateAr, ...extraSpeedPathAr, ...extraPortAr},
   'en': {
     ...extraAwgEn,
     ...extraSpeedPathEn,
+    ...extraPortEn,
     ...extraDonateEn,
     ...extraMoreEn,
     ...extraPrivacyEn,
@@ -159,6 +161,7 @@ const _extra = <String, Map<String, String>>{
   'fa': {
     ...extraAwgFa,
     ...extraSpeedPathFa,
+    ...extraPortFa,
     ...extraDonateFa,
     ...extraMoreFa,
     ...extraPrivacyFa,
