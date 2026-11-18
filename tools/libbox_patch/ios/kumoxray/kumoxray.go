@@ -65,5 +65,3 @@ func Running() bool {
 func Version() string {
 	return core.Version()
 }
-
-var _ = errors.New
