@@ -22,6 +22,10 @@ jobs:
       - name: Make the iOS project
         run: |
           flutter create --platforms=ios --org app.kumo --project-name kumo .
+          # mobile_scanner asks for iOS 15.5 or later (the first trial stopped there at pod install).
+          perl -pi -e "s/^#? ?platform :ios, '[0-9.]+'/platform :ios, '15.5'/" ios/Podfile
+          perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/IPHONEOS_DEPLOYMENT_TARGET = 15.5;/g' ios/Runner.xcodeproj/project.pbxproj
+          grep -n "platform :ios" ios/Podfile
           git status --short | head -40
 
       - run: flutter pub get
