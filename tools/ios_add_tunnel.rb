@@ -41,6 +41,8 @@ group.new_file('Info.plist')
 group.new_file('KumoTunnel.entitlements')
 ext.add_file_references(sources)
 ext.add_system_framework('NetworkExtension')
+# The Go library of sing-box names UIApplication (for the background tasks) and the extension has to link UIKit for it.
+ext.add_system_framework('UIKit')
 
 ext.build_configurations.each do |c|
   s = c.build_settings
