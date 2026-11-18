@@ -1,0 +1,65 @@
+name: DNS tunnels trial build
+
+# Builds kumo-dns (the DNS tunnels and the SSH ones, see tools/build_dnstunnels.sh) for every system and says how big each is.
+# A trial: nothing is released or uploaded anywhere but the artifacts of this run.
+on:
+  workflow_dispatch:
+  # A workflow that is not on the main branch yet cannot be started by hand: a push of this branch starts it.
+  push:
+    branches: [feature/dns-tunnels]
+    paths: ['.github/workflows/dns-test.yml', 'tools/build_dnstunnels.sh', 'tools/dnstunnels/**']
+
+permissions:
+  contents: read
+
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build kumo-dns for every system
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          export DNSTUNNELS_SRC="$RUNNER_TEMP/dnstunnels-src"
+          mkdir -p out
+          bash tools/build_dnstunnels.sh linux amd64 out/linux-amd64/kumo-dns
+          bash tools/build_dnstunnels.sh windows amd64 out/windows-amd64/kumo-dns.exe
+          bash tools/build_dnstunnels.sh windows arm64 out/windows-arm64/kumo-dns.exe
+          bash tools/build_dnstunnels.sh linux arm64 out/linux-arm64/kumo-dns
+          bash tools/build_dnstunnels.sh darwin amd64 out/macos-amd64/kumo-dns
+          bash tools/build_dnstunnels.sh darwin arm64 out/macos-arm64/kumo-dns
+          bash tools/build_dnstunnels.sh android arm64 out/android/arm64-v8a/libkumodns.so
+          bash tools/build_dnstunnels.sh android arm out/android/armeabi-v7a/libkumodns.so
+          bash tools/build_dnstunnels.sh android amd64 out/android/x86_64/libkumodns.so
+
+      - name: Sizes
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### kumo-dns sizes'
+            echo
+            echo '| file | bytes | MB | zipped MB |'
+            echo '|---|---|---|---|'
+            find out -type f | sort | while read -r f; do
+              b=$(stat -c %s "$f")
+              z=$(gzip -9 -c "$f" | wc -c)
+              printf '| %s | %s | %s | %s |\n' "${f#out/}" "$b" "$(awk "BEGIN{printf \"%.1f\", $b/1048576}")" "$(awk "BEGIN{printf \"%.1f\", $z/1048576}")"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: kumo-dns
+          path: out
+          compression-level: 0
