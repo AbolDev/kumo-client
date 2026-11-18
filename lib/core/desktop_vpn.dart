@@ -230,13 +230,13 @@ class DesktopVpn {
           // program since).
           final r = await Process.run(winTool('tasklist'), ['/FI', 'PID eq $id', '/FO', 'CSV', '/NH']);
           final text = '${r.stdout}'.toLowerCase();
-          if (text.contains('kumo-core.exe') || text.contains('kumo-xray.exe') || text.contains('kumo-awg.exe')) {
+          if (text.contains('kumo-core.exe') || text.contains('kumo-xray.exe') || text.contains('kumo-awg.exe') || text.contains('kumo-dns.exe')) {
             await Process.run(winTool('taskkill'), ['/F', '/PID', '$id']);
           }
         } else {
           final r = await Process.run('ps', ['-p', '$id', '-o', 'comm=']);
           final name = '${r.stdout}'.trim();
-          if (name == 'kumo-core' || name == 'kumo-xray' || name == 'kumo-awg') Process.killPid(id);
+          if (name == 'kumo-core' || name == 'kumo-xray' || name == 'kumo-awg' || name == 'kumo-dns') Process.killPid(id);
         }
       }
       await file.delete();
@@ -477,7 +477,7 @@ rm -rf "$T"
         // Xray talks to its server directly: its own traffic must not loop into the tunnel.
         final route = cfg['route'] as Map<String, dynamic>;
         (route['rules'] as List).insert(0, {
-          'process_name': [_program('kumo-xray'), _program('kumo-awg')],
+          'process_name': [_program('kumo-xray'), _program('kumo-awg'), _program('kumo-dns')],
           'outbound': 'direct',
         });
         route['find_process'] = true;
@@ -496,7 +496,7 @@ rm -rf "$T"
         (cfg['inbounds'] as List).removeWhere((i) => i is Map && (i['tag'] == 'mixed-in' || i['tag'] == 'lan-in'));
         final route = cfg['route'] as Map<String, dynamic>;
         (route['rules'] as List).insert(0, {
-          'process_name': [_program('kumo-core'), _program('kumo-xray'), _program('kumo-awg')],
+          'process_name': [_program('kumo-core'), _program('kumo-xray'), _program('kumo-awg'), _program('kumo-dns')],
           'outbound': 'direct',
         });
         route['find_process'] = true;
@@ -992,7 +992,7 @@ rm -rf "$T"
         if (name.isNotEmpty && !name.startsWith('[')) names.add(name);
       }
     }
-    final own = {'kumo', 'kumo.exe', 'kumo-core', 'kumo-core.exe', 'kumo-xray', 'kumo-xray.exe', 'kumo-awg', 'kumo-awg.exe'};
+    final own = {'kumo', 'kumo.exe', 'kumo-core', 'kumo-core.exe', 'kumo-xray', 'kumo-xray.exe', 'kumo-awg', 'kumo-awg.exe', 'kumo-dns', 'kumo-dns.exe'};
     return [
       for (final n in (names.where((n) => !own.contains(n.toLowerCase())).toList()
         ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()))))
@@ -1008,12 +1008,17 @@ rm -rf "$T"
   /// The program that carries AmneziaWG servers next to the app (sing-box with the endpoint of AmneziaWG).
   String get awgExecutable => _exePath('kumo-awg');
 
+  /// The program that carries the DNS tunnels and the SSH ones over their own transports (kumo-dns, see tools/dnstunnels).
+  String get dnsExecutable => _exePath('kumo-dns');
+
   /// The program that runs [config], the configuration of a server the core cannot carry itself: sing-box with the endpoint of
   /// AmneziaWG (kumo-awg) when it is a configuration of sing-box (it has endpoints), else Xray.
   static String helperFor(String config) {
     try {
       final c = jsonDecode(config);
       if (c is Map && c['endpoints'] is List) return 'kumo-awg';
+      // The configuration of kumo-dns: a tunnel and the SOCKS5 port it opens.
+      if (c is Map && c['mode'] is String && c['listen'] is String) return 'kumo-dns';
     } catch (_) {}
     return 'kumo-xray';
   }

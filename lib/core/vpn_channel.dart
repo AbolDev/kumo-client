@@ -168,18 +168,18 @@ class VpnChannel {
 
   /// Real delay of a server only Xray can carry, -1 on failure (see [runXrayDelay]).
   static Future<int> xrayDelay(String Function(int port) config, String url,
-      {int timeoutMs = 8000, bool awg = false}) async {
+      {int timeoutMs = 8000, bool awg = false, bool dns = false}) async {
     final dir = await dataDir();
     if (_win) {
       return runXrayDelay(
-          exe: awg ? DesktopVpn.instance.awgExecutable : DesktopVpn.instance.xrayExecutable,
+          exe: awg ? DesktopVpn.instance.awgExecutable : (dns ? DesktopVpn.instance.dnsExecutable : DesktopVpn.instance.xrayExecutable),
           dataDir: dir,
           config: config,
           url: url,
           timeoutMs: timeoutMs,
           spawn: DesktopVpn.instance.spawnQuiet);
     }
-    final exe = await _control.invokeMethod<String>('xrayPath');
+    final exe = await _control.invokeMethod<String>('xrayPath', {'helper': dns ? 'dns' : 'xray'});
     if (exe == null) return -1;
     return runXrayDelay(
         exe: exe, dataDir: dir, config: config, url: url, timeoutMs: timeoutMs, resolveNames: true);

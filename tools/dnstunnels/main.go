@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -88,8 +89,18 @@ type config struct {
 	SSH       *sshConfig `json:"ssh"`
 }
 
-func logf(format string, a ...any) { fmt.Fprintf(os.Stderr, "kumo-dns: "+format+"\n", a...) }
+// On Android Go's resolver cannot read the phone's DNS settings (there is no /etc/resolv.conf): the names this program looks up
+// (a DoH or DoT resolver, an SSH server) are asked of a public resolver. The program is outside the VPN, so the question does not
+// go into the tunnel; it is asked in plain DNS, and only for the names of the tunnel's own servers.
+func init() {
+	if runtime.GOOS == "android" {
+		net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, network, "8.8.8.8:53")
+		}}
+	}
+}
 
+func logf(format string, a ...any) { fmt.Fprintf(os.Stderr, "kumo-dns: "+format+"\n", a...) }
 func fatal(format string, a ...any) {
 	logf(format, a...)
 	os.Exit(1)

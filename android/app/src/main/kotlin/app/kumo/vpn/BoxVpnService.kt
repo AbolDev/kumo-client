@@ -787,11 +787,21 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
     }
 
     private fun startXrayOnce(configFile: String) {
-        val exe = File(applicationInfo.nativeLibraryDir, "libxray.so")
-        require(exe.exists()) { "xray binary is missing" }
-
-        // Go's resolver cannot read Android's DNS settings, so the server name is resolved here.
         val config = JSONObject(File(configFile).readText())
+        // The configuration of kumo-dns (a DNS tunnel, or SSH over a transport of its own) has a tunnel and a SOCKS5 port, and
+        // no outbounds: its program is carried the way Xray's is, and it reads the addresses it is given itself.
+        val dnsTunnel = config.has("mode") && config.has("listen")
+        val exe = File(applicationInfo.nativeLibraryDir, if (dnsTunnel) "libkumodns.so" else "libxray.so")
+        require(exe.exists()) { (if (dnsTunnel) "kumo-dns" else "xray") + " binary is missing" }
+        if (!dnsTunnel) resolveXrayConfig(config)
+        File(configFile).writeText(config.toString())
+
+        xrayStopping = false
+        startHelperProcess(exe, configFile)
+    }
+
+    /** Go's resolver cannot read Android's DNS settings, so the server name of an Xray configuration is resolved here. */
+    private fun resolveXrayConfig(config: JSONObject) {
         val settings = config.getJSONArray("outbounds").getJSONObject(0).getJSONObject("settings")
         fun resolve(host: String): String = InetAddress.getByName(host).hostAddress ?: host
         val target = (settings.optJSONArray("vnext") ?: settings.optJSONArray("servers"))?.getJSONObject(0)
@@ -821,9 +831,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
                 s.put("address", InetAddress.getByName(s.getString("address")).hostAddress)
             }
         }
-        File(configFile).writeText(config.toString())
+    }
 
-        xrayStopping = false
+    /** Runs the program of a helper ([exe]: Xray or kumo-dns) with [configFile] and watches it. */
+    private fun startHelperProcess(exe: File, configFile: String) {
         val process = ProcessBuilder(exe.path, "run", "-c", configFile)
             .directory(filesDir)
             .redirectErrorStream(true)

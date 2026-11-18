@@ -8,6 +8,7 @@
 #
 #   bash tools/build_dnstunnels.sh <goos> <goarch> <output file>
 #   bash tools/build_dnstunnels.sh android arm64 out/libkumodns.so      (needs ANDROID_NDK_HOME; goarch arm64, arm or amd64)
+#   bash tools/build_dnstunnels.sh darwin universal out/kumo-dns         (Intel and Apple silicon in one file; needs lipo)
 set -euo pipefail
 
 goos="${1:?goos: windows, linux, darwin or android}"
@@ -65,17 +66,28 @@ go get "github.com/getlantern/soar@$SOAR_VERSION" github.com/coder/websocket gol
 go mod tidy
 
 flags=(-trimpath -buildvcs=false -ldflags "-s -w -buildid=")
-if [ "$goos" = android ]; then
-  BIN="${ANDROID_NDK_HOME:?ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
-  case "$goarch" in
-    arm64) cc=aarch64-linux-android23-clang; arm= ;;
-    arm) cc=armv7a-linux-androideabi23-clang; arm=7 ;;
-    amd64) cc=x86_64-linux-android23-clang; arm= ;;
-    *) echo "android: arm64, arm or amd64" >&2; exit 1 ;;
-  esac
-  CGO_ENABLED=1 CC="$BIN/$cc" GOOS=android GOARCH="$goarch" GOARM="$arm" go build "${flags[@]}" -o "$abs" .
+build() { # goarch, file
+  if [ "$goos" = android ]; then
+    BIN="${ANDROID_NDK_HOME:?ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+    case "$1" in
+      arm64) cc=aarch64-linux-android23-clang; arm= ;;
+      arm) cc=armv7a-linux-androideabi23-clang; arm=7 ;;
+      amd64) cc=x86_64-linux-android23-clang; arm= ;;
+      *) echo "android: arm64, arm or amd64" >&2; exit 1 ;;
+    esac
+    CGO_ENABLED=1 CC="$BIN/$cc" GOOS=android GOARCH="$1" GOARM="$arm" go build "${flags[@]}" -o "$2" .
+  else
+    CGO_ENABLED=0 GOOS="$goos" GOARCH="$1" go build "${flags[@]}" -o "$2" .
+  fi
+}
+
+if [ "$goarch" = universal ]; then
+  [ "$goos" = darwin ] || { echo "universal is for darwin only" >&2; exit 1; }
+  build amd64 "$work/dns-amd64"
+  build arm64 "$work/dns-arm64"
+  lipo -create "$work/dns-amd64" "$work/dns-arm64" -output "$abs"
 else
-  CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build "${flags[@]}" -o "$abs" .
+  build "$goarch" "$abs"
 fi
 chmod +x "$abs" 2>/dev/null || true
 ls -l "$abs"

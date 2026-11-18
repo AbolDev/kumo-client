@@ -48,6 +48,8 @@ String buildXrayConfig(ProxyConfig server, int port,
   // A server of AmneziaWG on a computer: the helper is kumo-awg, sing-box with the endpoint, so its configuration is one of
   // sing-box (a SOCKS inbound and the endpoint).
   if (server.isAmnezia) return _awgHelperConfig([server], port, logLevel: logLevel, auth: auth);
+  // A DNS tunnel (or SSH over a transport of its own): kumo-dns, a SOCKS5 port with the same login.
+  if (server.isDnsTunnel) return dnsTunnelHelperConfig(server, port, user: auth?.user, pass: auth?.pass);
   final o = options ?? NetOptions();
   final outbound =
       jsonDecode(jsonEncode(server.xrayOutbound!)) as Map<String, dynamic>;

@@ -179,6 +179,8 @@ ProxyConfig? _ssh(String link) {
   final port = u.hasPort ? u.port : 22;
   final (user, pass) = _userPass(u.userInfo);
   if (user.isEmpty) return null;
+  // A transport of its own (TLS, WebSocket, an HTTP proxy) or a payload: sing-box has none, kumo-dns carries it.
+  if (q.containsKey('transport') || q.containsKey('payload')) return _sshOverTransport(link, u);
   final out = <String, dynamic>{
     'type': 'ssh',
     'server': u.host,

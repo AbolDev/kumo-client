@@ -154,6 +154,34 @@ jobs:
           path: native-out
           compression-level: 0
 
+  # kumo-dns (the DNS tunnels and the SSH ones, see tools/build_dnstunnels.sh) for every Android CPU, named libkumodns.so so that
+  # Android lets the app run it.
+  native-dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build kumo-dns for arm64, arm and x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          export DNSTUNNELS_SRC="$RUNNER_TEMP/dnstunnels-src"
+          bash tools/build_dnstunnels.sh android arm64 native-out/jniLibs/arm64-v8a/libkumodns.so
+          bash tools/build_dnstunnels.sh android arm native-out/jniLibs/armeabi-v7a/libkumodns.so
+          bash tools/build_dnstunnels.sh android amd64 native-out/jniLibs/x86_64/libkumodns.so
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-dns
+          path: native-out
+          compression-level: 0
   # The OpenVPN program for every Android CPU (named libopenvpn.so so Android lets the app run it). The
   # source files are checked against tools/android_openvpn/sha256.txt before anything is built.
   native-openvpn:
@@ -191,7 +219,7 @@ jobs:
 
   # The four APKs are built side by side, each on its own runner.
   apk:
-    needs: [native-box, native-xray, native-openvpn]
+    needs: [native-box, native-xray, native-dns, native-openvpn]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -284,7 +312,7 @@ jobs:
   # ("Run workflow"); nothing is published.
   play:
     if: github.event_name == 'workflow_dispatch'
-    needs: [native-box, native-xray, native-openvpn]
+    needs: [native-box, native-xray, native-dns, native-openvpn]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -389,6 +417,10 @@ jobs:
       - name: Build kumo-awg
         shell: bash
         run: bash tools/build_awg_core.sh windows amd64 windows/core/kumo-awg.exe
+      # kumo-dns: the DNS tunnels (DNSTT, VayDNS, NoizDNS, Soar) and the SSH ones, see tools/build_dnstunnels.sh.
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh windows amd64 windows/core/kumo-dns.exe
 
       - run: flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-${{ matrix.arch }} --no-pub ${{ matrix.target }}
 
@@ -473,6 +505,9 @@ jobs:
       - name: Build kumo-awg
         shell: bash
         run: bash tools/build_awg_core.sh windows arm64 windows/core/kumo-awg.exe
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh windows arm64 windows/core/kumo-dns.exe
 
       # Flutter builds Windows for the machine it runs on (the --target-platform flag is refused for
       # Windows), so this is a plain build on the ARM64 runner.
@@ -582,6 +617,9 @@ jobs:
           cache: false
       - name: Build kumo-awg
         run: bash tools/build_awg_core.sh linux ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} linux/core/kumo-awg
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh linux ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} linux/core/kumo-dns
 
       # The .ico files of the app icons are only read on Windows: they are left out of this build.
       - run: rm -f assets/app_icons/*.ico
@@ -699,6 +737,9 @@ jobs:
           cache: false
       - name: Build kumo-awg
         run: bash tools/build_awg_core.sh darwin universal macos/core/kumo-awg
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh darwin universal macos/core/kumo-dns
 
       # The .ico files of the app icons are only read on Windows: they are left out of this build.
       - run: rm -f assets/app_icons/*.ico
@@ -707,7 +748,7 @@ jobs:
       - name: Put the cores in the app, sign it and package it
         run: |
           app="build/macos/Build/Products/Release/Kumo.app"
-          cp macos/core/kumo-core macos/core/kumo-xray macos/core/kumo-awg "$app/Contents/MacOS/"
+          cp macos/core/kumo-core macos/core/kumo-xray macos/core/kumo-awg macos/core/kumo-dns "$app/Contents/MacOS/"
           codesign --force --deep --sign - "$app"
           mkdir -p dist work/universal
           ditto "$app" work/universal/Kumo.app
