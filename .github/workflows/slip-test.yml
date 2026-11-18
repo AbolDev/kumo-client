@@ -4,6 +4,10 @@ name: DNS tunnels trial build
 # A trial: nothing is released or uploaded anywhere but the artifacts of this run.
 on:
   workflow_dispatch:
+  # A workflow that is not on the main branch yet cannot be started by hand: a push of this branch starts it.
+  push:
+    branches: [feature/dns-tunnels]
+    paths: ['.github/workflows/slip-test.yml', 'tools/build_slip.sh']
 
 permissions:
   contents: read
