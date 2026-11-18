@@ -186,11 +186,14 @@ final class KumoVpn: NSObject, FlutterStreamHandler {
         let status = connection.status
         if status == .disconnected, wasStarting {
             wasStarting = false
-            // Why it ended (a start that failed, a core that stopped): told to the app as the error.
-            connection.fetchLastDisconnectError { [weak self] error in
-                self?.sink?(self?.stateMap(for: status, error: error?.localizedDescription))
+            // Why it ended (a start that failed, a core that stopped): told to the app as the error. The system says it from
+            // iOS 16; before that the app is only told that it stopped.
+            if #available(iOS 16.0, *) {
+                connection.fetchLastDisconnectError { [weak self] error in
+                    self?.sink?(self?.stateMap(for: status, error: error?.localizedDescription))
+                }
+                return
             }
-            return
         }
         if status == .connected { wasStarting = false }
         sink?(stateMap(for: status, error: nil))
