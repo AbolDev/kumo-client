@@ -153,7 +153,7 @@ final class KumoPlatformInterface: NSObject, LibboxPlatformInterfaceProtocol, Li
         _ = first.wait(timeout: .now() + 5)
     }
 
-    private static func report(_ path: NWPath, to listener: LibboxInterfaceUpdateListenerProtocol) {
+    private static func report(_ path: Network.NWPath, to listener: LibboxInterfaceUpdateListenerProtocol) {
         guard path.status != .unsatisfied, let interface = path.availableInterfaces.first else {
             listener.updateDefaultInterface("", interfaceIndex: -1, isExpensive: false, isConstrained: false)
             return
@@ -208,8 +208,8 @@ final class KumoPlatformInterface: NSObject, LibboxPlatformInterfaceProtocol, Li
 
     // MARK: answers that are fixed on iOS
 
-    func usePlatformAutoDetectInterfaceControl() -> Bool { false }
-    func autoDetectInterfaceControl(_ fd: Int32) throws {}
+    func usePlatformAutoDetectControl() -> Bool { false }
+    func autoDetectControl(_ fd: Int32) throws {}
     func useProcFS() -> Bool { false }
     func underNetworkExtension() -> Bool { true }
     func includeAllNetworks() -> Bool { false }
@@ -222,7 +222,7 @@ final class KumoPlatformInterface: NSObject, LibboxPlatformInterfaceProtocol, Li
         throw KumoTunnelError("not available on iOS")
     }
 
-    func sendNotification(_ notification: LibboxNotification?) throws {}
+    func send(_ notification: LibboxNotification?) throws {}
 
     /// The core asks to forget what it knows of names: the settings are put again, so the system forgets its own.
     func clearDNSCache() {
