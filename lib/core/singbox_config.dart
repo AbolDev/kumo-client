@@ -645,7 +645,9 @@ String buildSingBoxConfig(
   final direct = _RuleFields(o.directRules);
   // (The "stay off on these Wi-Fi networks" rule is gone: reading a network's name needs the
   // location permission, which the app no longer asks for.)
-  final fakeIp = o.fakeIp && o.tun;
+  // A tunnel of DNS is slow (a few kilobytes a second, and a second or more for every question), so with one the names are never looked
+  // up here: they get made-up addresses, and the server looks them up (the setting of the user is not changed).
+  final fakeIp = (o.fakeIp || (servers.length == 1 && servers.first.isDnsTunnel)) && o.tun;
   // The user's own rules come before everything else: what is blocked first, then "through the
   // VPN" (which wins over "direct" if a domain is in both lists), then "direct".
   final rules = <Map<String, dynamic>>[
