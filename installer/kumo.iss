@@ -220,7 +220,7 @@ Filename: "{app}\kumo.exe"; Flags: nowait shellexec; Check: UpdateInBackground
 
 [UninstallRun]
 ; Stops the VPN processes and removes the start-with-Windows task, if there is one.
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM kumo.exe /IM kumo-core.exe /IM kumo-xray.exe /IM kumo-awg.exe /IM openvpn.exe"; Flags: runhidden; RunOnceId: "StopKumo"
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM kumo.exe /IM kumo-core.exe /IM kumo-xray.exe /IM kumo-awg.exe /IM kumo-dns.exe /IM kumo-slipstream.exe /IM openvpn.exe"; Flags: runhidden; RunOnceId: "StopKumo"
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN KumoAutoStart /F"; Flags: runhidden; RunOnceId: "RemoveKumoTask"
 ; The network adapter OpenVPN servers use (made by Kumo the first time one is connected).
 Filename: "{app}\openvpn\tapctl.exe"; Parameters: "delete KumoOpenVPN"; Flags: runhidden; RunOnceId: "RemoveKumoAdapter"; Check: AdapterToolExists

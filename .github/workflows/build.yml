@@ -10,6 +10,8 @@ on:
 env:
   SING_BOX: '1.13.21'
   XRAY: 'v26.10.21'
+  # The client of Slipstream (QUIC over DNS, Rust: github.com/Mygod/slipstream-rust, Apache-2.0), at a commit.
+  SLIPSTREAM_COMMIT: '7de506b222c83ae97a19a618e33fe26899af1bd5'
 
 jobs:
   # Tests run next to the build instead of before it, so they no longer add to its time.
@@ -154,6 +156,122 @@ jobs:
           path: native-out
           compression-level: 0
 
+  # kumo-dns (the DNS tunnels and the SSH ones, see tools/build_dnstunnels.sh) for every Android CPU, named libkumodns.so so that
+  # Android lets the app run it.
+  native-dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build kumo-dns for arm64, arm and x86_64
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          export DNSTUNNELS_SRC="$RUNNER_TEMP/dnstunnels-src"
+          bash tools/build_dnstunnels.sh android arm64 native-out/jniLibs/arm64-v8a/libkumodns.so
+          bash tools/build_dnstunnels.sh android arm native-out/jniLibs/armeabi-v7a/libkumodns.so
+          bash tools/build_dnstunnels.sh android amd64 native-out/jniLibs/x86_64/libkumodns.so
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-dns
+          path: native-out
+          compression-level: 0
+  # The client of Slipstream for the computers, built with the project's own build action (it packs and uploads one artifact for
+  # each system). A failure here does not stop the release: the app then has the other tunnels, and Slipstream says it is missing.
+  slipstream:
+    name: Slipstream (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: linux-x86_64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, windows_platform: x64, vcpkg: ''}
+          - {name: linux-arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, windows_platform: x64, vcpkg: ''}
+          - {name: macos-arm64, runner: macos-26, target: aarch64-apple-darwin, windows_platform: x64, vcpkg: ''}
+          - {name: macos-x86_64, runner: macos-15-intel, target: x86_64-apple-darwin, windows_platform: x64, vcpkg: ''}
+          - {name: windows-x86_64, runner: windows-2025, target: x86_64-pc-windows-msvc, windows_platform: x64, vcpkg: x64-windows-static-md}
+          - {name: windows-arm64, runner: windows-11-arm, target: aarch64-pc-windows-msvc, windows_platform: ARM64, vcpkg: arm64-windows-static-md}
+    steps:
+      - name: Check out Slipstream
+        uses: actions/checkout@v6
+        with:
+          repository: Mygod/slipstream-rust
+          ref: ${{ env.SLIPSTREAM_COMMIT }}
+          submodules: recursive
+
+      # The build script of picoquic asks for Visual Studio 2022; the runners now come with a newer one: the generator is the one
+      # that is installed.
+      - name: Use the Visual Studio of the runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationVersion
+          $major = ($vs | Select-Object -First 1).Split('.')[0]
+          $year = @{ '17' = '2022'; '18' = '2026' }[$major]
+          (Get-Content scripts/build_picoquic_windows.ps1 -Raw) -replace 'Visual Studio 17 2022', "Visual Studio $major $year" | Set-Content scripts/build_picoquic_windows.ps1
+
+      - name: Build it with the project's own action
+        uses: ./.github/actions/build-binary
+        with:
+          target: ${{ matrix.target }}
+          artifact-name: slipstream-${{ matrix.name }}
+          windows-platform: ${{ matrix.windows_platform }}
+          vcpkg-triplet: ${{ matrix.vcpkg }}
+
+  # The client of Slipstream for every Android CPU (named libslipstream.so so Android lets the app run it), with OpenSSL built for
+  # the phone: see tools/build_slipstream_android.sh. Same as above: a failure does not stop the release.
+  native-slipstream:
+    name: Slipstream (Android ${{ matrix.abi }})
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {abi: arm64-v8a, target: aarch64-linux-android}
+          - {abi: armeabi-v7a, target: armv7-linux-androideabi}
+          - {abi: x86_64, target: x86_64-linux-android}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Check out Slipstream
+        uses: actions/checkout@v6
+        with:
+          repository: Mygod/slipstream-rust
+          ref: ${{ env.SLIPSTREAM_COMMIT }}
+          submodules: recursive
+          path: slipstream
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build the client for Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config perl
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          bash tools/build_slipstream_android.sh "${{ matrix.target }}" "${{ matrix.abi }}" slipstream native-out/jniLibs/${{ matrix.abi }}/libslipstream.so
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-slipstream-${{ matrix.abi }}
+          path: native-out
+          compression-level: 0
   # The OpenVPN program for every Android CPU (named libopenvpn.so so Android lets the app run it). The
   # source files are checked against tools/android_openvpn/sha256.txt before anything is built.
   native-openvpn:
@@ -191,7 +309,7 @@ jobs:
 
   # The four APKs are built side by side, each on its own runner.
   apk:
-    needs: [native-box, native-xray, native-openvpn]
+    needs: [native-box, native-xray, native-dns, native-slipstream, native-openvpn]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
@@ -284,7 +402,7 @@ jobs:
   # ("Run workflow"); nothing is published.
   play:
     if: github.event_name == 'workflow_dispatch'
-    needs: [native-box, native-xray, native-openvpn]
+    needs: [native-box, native-xray, native-dns, native-slipstream, native-openvpn]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -359,6 +477,7 @@ jobs:
   windows:
     # Visual Studio 2022 is the newest version these Flutter releases know.
     runs-on: windows-2022
+    needs: [slipstream]
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -389,7 +508,23 @@ jobs:
       - name: Build kumo-awg
         shell: bash
         run: bash tools/build_awg_core.sh windows amd64 windows/core/kumo-awg.exe
-
+      # kumo-dns: the DNS tunnels (DNSTT, VayDNS, NoizDNS, Soar) and the SSH ones, see tools/build_dnstunnels.sh.
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh windows amd64 windows/core/kumo-dns.exe
+      # The client of Slipstream, built by the job slipstream; kumo-dns runs it from next to itself.
+      - name: Get Slipstream
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: slipstream-windows-x86_64
+          path: slipstream-dl
+      - name: Put Slipstream next to kumo-dns
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd slipstream-dl && unzip -o -q slipstream-windows-x86_64.zip -d x
+          cp x/slipstream-client.exe ../windows/core/kumo-slipstream.exe
       - run: flutter build windows --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-windows-${{ matrix.arch }} --no-pub ${{ matrix.target }}
 
       # The Visual C++ runtime next to kumo.exe (the installer and the portable zip both carry it), so that the app
@@ -433,6 +568,7 @@ jobs:
   # released. The program is checked to really be an ARM64 one before it is packaged.
   windows-arm64:
     runs-on: windows-11-arm
+    needs: [slipstream]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -473,7 +609,21 @@ jobs:
       - name: Build kumo-awg
         shell: bash
         run: bash tools/build_awg_core.sh windows arm64 windows/core/kumo-awg.exe
-
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh windows arm64 windows/core/kumo-dns.exe
+      - name: Get Slipstream
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: slipstream-windows-arm64
+          path: slipstream-dl
+      - name: Put Slipstream next to kumo-dns
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd slipstream-dl && unzip -o -q slipstream-windows-arm64.zip -d x
+          cp x/slipstream-client.exe ../windows/core/kumo-slipstream.exe
       # Flutter builds Windows for the machine it runs on (the --target-platform flag is refused for
       # Windows), so this is a plain build on the ARM64 runner.
       - name: Build
@@ -545,6 +695,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-22.04-arm
     runs-on: ${{ matrix.runner }}
+    needs: [slipstream]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -582,7 +733,22 @@ jobs:
           cache: false
       - name: Build kumo-awg
         run: bash tools/build_awg_core.sh linux ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} linux/core/kumo-awg
-
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh linux ${{ matrix.arch == 'x64' && 'amd64' || 'arm64' }} linux/core/kumo-dns
+      - name: Get Slipstream
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: slipstream-linux-${{ matrix.arch == 'x64' && 'x86_64' || 'arm64' }}
+          path: slipstream-dl
+      - name: Put Slipstream next to kumo-dns
+        continue-on-error: true
+        shell: bash
+        run: |
+          cd slipstream-dl && tar -xzf *.tar.gz
+          cp */slipstream-client ../linux/core/kumo-slipstream
+          chmod +x ../linux/core/kumo-slipstream
       # The .ico files of the app icons are only read on Windows: they are left out of this build.
       - run: rm -f assets/app_icons/*.ico
       - run: flutter build linux --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-linux-${{ matrix.arch }} --no-pub
@@ -676,6 +842,7 @@ jobs:
   # macOS asks the user to allow it the first time.
   macos:
     runs-on: macos-15
+    needs: [slipstream]
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -699,7 +866,28 @@ jobs:
           cache: false
       - name: Build kumo-awg
         run: bash tools/build_awg_core.sh darwin universal macos/core/kumo-awg
-
+      - name: Build kumo-dns
+        shell: bash
+        run: bash tools/build_dnstunnels.sh darwin universal macos/core/kumo-dns
+      - name: Get Slipstream (Apple silicon)
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: slipstream-macos-arm64
+          path: slipstream-dl/arm64
+      - name: Get Slipstream (Intel)
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: slipstream-macos-x86_64
+          path: slipstream-dl/x86_64
+      - name: Put Slipstream next to kumo-dns (the two in one file)
+        continue-on-error: true
+        shell: bash
+        run: |
+          for a in arm64 x86_64; do (cd slipstream-dl/$a && tar -xzf *.tar.gz); done
+          lipo -create slipstream-dl/arm64/*/slipstream-client slipstream-dl/x86_64/*/slipstream-client -output macos/core/kumo-slipstream
+          chmod +x macos/core/kumo-slipstream
       # The .ico files of the app icons are only read on Windows: they are left out of this build.
       - run: rm -f assets/app_icons/*.ico
       - run: flutter build macos --release --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-macos --no-pub
@@ -707,7 +895,8 @@ jobs:
       - name: Put the cores in the app, sign it and package it
         run: |
           app="build/macos/Build/Products/Release/Kumo.app"
-          cp macos/core/kumo-core macos/core/kumo-xray macos/core/kumo-awg "$app/Contents/MacOS/"
+          cp macos/core/kumo-core macos/core/kumo-xray macos/core/kumo-awg macos/core/kumo-dns "$app/Contents/MacOS/"
+          if [ -f macos/core/kumo-slipstream ]; then cp macos/core/kumo-slipstream "$app/Contents/MacOS/"; fi
           codesign --force --deep --sign - "$app"
           mkdir -p dist work/universal
           ditto "$app" work/universal/Kumo.app

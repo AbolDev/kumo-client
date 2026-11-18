@@ -1,0 +1,135 @@
+name: Slipstream trial build
+
+# Builds the client of Slipstream (QUIC over DNS, github.com/Mygod/slipstream-rust, Apache-2.0: Rust with picoquic and OpenSSL) for
+# every system and says how big it is. The desktop ones are built with the project's own build action; the phone ones with the
+# NDK. A trial: nothing is released, only the artifacts of this run are kept.
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/dns-tunnels]
+    paths: ['.github/workflows/slipstream-test.yml', 'tools/build_slipstream_android.sh']
+
+permissions:
+  contents: read
+
+env:
+  SLIPSTREAM_COMMIT: 7de506b222c83ae97a19a618e33fe26899af1bd5
+
+jobs:
+  desktop:
+    name: Desktop (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: linux-x86_64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, windows_platform: x64, vcpkg: ''}
+          - {name: linux-arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, windows_platform: x64, vcpkg: ''}
+          - {name: macos-arm64, runner: macos-26, target: aarch64-apple-darwin, windows_platform: x64, vcpkg: ''}
+          - {name: macos-x86_64, runner: macos-15-intel, target: x86_64-apple-darwin, windows_platform: x64, vcpkg: ''}
+          - {name: windows-x86_64, runner: windows-2025, target: x86_64-pc-windows-msvc, windows_platform: x64, vcpkg: x64-windows-static-md}
+          - {name: windows-arm64, runner: windows-11-arm, target: aarch64-pc-windows-msvc, windows_platform: ARM64, vcpkg: arm64-windows-static-md}
+    steps:
+      - name: Check out Slipstream
+        uses: actions/checkout@v6
+        with:
+          repository: Mygod/slipstream-rust
+          ref: ${{ env.SLIPSTREAM_COMMIT }}
+          submodules: recursive
+
+      # The build script of picoquic asks for Visual Studio 2022; the runners now come with a newer one: the generator is the one
+      # that is installed.
+      - name: Use the Visual Studio of the runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationVersion
+          $major = ($vs | Select-Object -First 1).Split('.')[0]
+          $year = @{ '17' = '2022'; '18' = '2026' }[$major]
+          Write-Host "Visual Studio $major ($year)"
+          (Get-Content scripts/build_picoquic_windows.ps1 -Raw) -replace 'Visual Studio 17 2022', "Visual Studio $major $year" | Set-Content scripts/build_picoquic_windows.ps1
+      - name: Build it with the project's own action
+        uses: ./.github/actions/build-binary
+        with:
+          target: ${{ matrix.target }}
+          artifact-name: slipstream-${{ matrix.name }}
+          windows-platform: ${{ matrix.windows_platform }}
+          vcpkg-triplet: ${{ matrix.vcpkg }}
+
+  android:
+    name: Android (${{ matrix.abi }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {abi: arm64-v8a, target: aarch64-linux-android}
+          - {abi: armeabi-v7a, target: armv7-linux-androideabi}
+          - {abi: x86_64, target: x86_64-linux-android}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Check out Slipstream
+        uses: actions/checkout@v6
+        with:
+          repository: Mygod/slipstream-rust
+          ref: ${{ env.SLIPSTREAM_COMMIT }}
+          submodules: recursive
+          path: slipstream
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build the client for Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config perl
+          export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          bash tools/build_slipstream_android.sh "${{ matrix.target }}" "${{ matrix.abi }}" slipstream out/${{ matrix.abi }}/libslipstream.so
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: slipstream-android-${{ matrix.abi }}
+          path: out
+          compression-level: 0
+
+  sizes:
+    name: Sizes
+    needs: [desktop, android]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: slipstream-*
+          path: got
+
+      - name: List the clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p clients
+          for d in got/*; do
+            name="$(basename "$d")"
+            case "$name" in
+              slipstream-android-*) cp "$d"/*/libslipstream.so "clients/$name.so" 2>/dev/null || cp "$d"/libslipstream.so "clients/$name.so" 2>/dev/null || true ;;
+              slipstream-windows-*) (cd "$d" && unzip -o -q *.zip -d x && cp x/slipstream-client.exe "../../clients/$name.exe") ;;
+              *) (cd "$d" && tar -xzf *.tar.gz && cp */slipstream-client "../../clients/$name") ;;
+            esac
+          done
+          {
+            echo '### slipstream-client sizes'
+            echo
+            echo '| file | bytes | MB | zipped MB |'
+            echo '|---|---|---|---|'
+            for f in clients/*; do
+              b=$(stat -c %s "$f"); z=$(gzip -9 -c "$f" | wc -c)
+              printf '| %s | %s | %s | %s |\n' "$(basename "$f")" "$b" "$(awk "BEGIN{printf \"%.1f\", $b/1048576}")" "$(awk "BEGIN{printf \"%.1f\", $z/1048576}")"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"

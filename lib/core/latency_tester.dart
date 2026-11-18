@@ -173,7 +173,7 @@ Future<int> realDelay(ProxyConfig c, {Duration? timeout, NetOptions? options, St
   // A server whose link carries a final mask is measured the way it is used: through Xray.
   if (!c.canSingBox || (c.preferXray && c.canXray)) {
     if (!c.canXray) return -1;
-    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), page, awg: c.isAmnezia,
+    return VpnChannel.xrayDelay((port) => buildXrayConfig(c, port), page, awg: c.isAmnezia, dns: c.isDnsTunnel,
         timeoutMs: timeout.inMilliseconds);
   }
   var layers = await _resolvedLayers(c);
