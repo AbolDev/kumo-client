@@ -123,7 +123,7 @@ class _KumoAppState extends State<KumoApp>
     WidgetsBinding.instance.addObserver(this);
     // The check for a newer stable release starts with the app, so its answer is often in when the screen is
     // ready (and one kept from the last start is there at once). Not in the F-Droid build.
-    final update = fdroidBuild ? null : startupUpdateCheck();
+    final update = storeBuild ? null : startupUpdateCheck();
     _state.init().then((_) {
       // The icon picked in Settings. An update of the Windows app puts kumo.exe back on the
       // shortcuts, so they are checked again at each start.
@@ -135,7 +135,7 @@ class _KumoAppState extends State<KumoApp>
       _listenExternal();
       _state.noteOpen();
       // The wallets of donations: the list kept by the last download, then a new one from GitHub (signed, or it is not taken).
-      unawaited(startWallets());
+      if (donationsInApp) unawaited(startWallets());
       _askStarLater();
       // A newer stable release is offered as soon as the app is ready and the answer is in.
       update?.then((info) {

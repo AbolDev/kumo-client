@@ -682,11 +682,11 @@ class _SettingsPageState extends State<SettingsPage> {
         FutureBuilder<PackageInfo>(
           future: PackageInfo.fromPlatform(),
           builder: (context, snap) => ListTile(
-            leading: Icon(fdroidBuild ? Icons.info_outline : Icons.system_update),
-            title: Text(fdroidBuild ? 'Kumo' : tr(context, 'checkUpdate')),
+            leading: Icon(storeBuild ? Icons.info_outline : Icons.system_update),
+            title: Text(storeBuild ? 'Kumo' : tr(context, 'checkUpdate')),
             subtitle: Text(tr(context, 'currentVersion', {'v': snap.data?.version ?? ''})),
             // The F-Droid build only shows its version: the store updates it.
-            onTap: fdroidBuild ? null : _checkUpdate,
+            onTap: storeBuild ? null : _checkUpdate,
           ),
         ),
         ListTile(
@@ -698,16 +698,18 @@ class _SettingsPageState extends State<SettingsPage> {
             MaterialPageRoute<void>(settings: const RouteSettings(name: '/ShareAppPage'), builder: (_) => const ShareAppPage()),
           ),
         ),
-        ListTile(
-          leading: const Icon(Icons.favorite_border),
-          title: Text(tr(context, 'donateTitle')),
-          subtitle: Text(tr(context, 'donateDesc')),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute<void>(settings: const RouteSettings(name: '/DonatePage'), builder: (_) => const DonatePage()),
+        // Not in the build for Google Play (see build_flavor.dart).
+        if (donationsInApp)
+          ListTile(
+            leading: const Icon(Icons.favorite_border),
+            title: Text(tr(context, 'donateTitle')),
+            subtitle: Text(tr(context, 'donateDesc')),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(settings: const RouteSettings(name: '/DonatePage'), builder: (_) => const DonatePage()),
+            ),
           ),
-        ),
         // News of the releases and help, in the project's own channel.
         ListTile(
           leading: const Icon(Icons.telegram),

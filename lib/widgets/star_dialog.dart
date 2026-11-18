@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/build_flavor.dart' show donationsInApp;
 import '../l10n/extra.dart';
 import '../l10n/strings.dart';
 import 'kumo_mark.dart';
@@ -54,7 +55,8 @@ class StarDialog extends StatelessWidget {
                 label: Text(tr(context, 'starOpen')),
               ),
             ),
-            // A quieter way to help: the wallets of donations (the page opens after this closes).
+            // A quieter way to help: the wallets of donations (the page opens after this closes). Not in the build for Google Play.
+            if (donationsInApp)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               child: OutlinedButton.icon(
