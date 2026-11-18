@@ -110,7 +110,7 @@ jobs:
           cp ../tools/libbox_patch/ios/kumoxray/*.go experimental/kumoxray/
           # sing-box links into golang.org/x/net at its own version (a newer one does not link): Xray must not move it.
           net_before="$(go list -m -f '{{.Version}}' golang.org/x/net)"
-          go get "github.com/xtls/xray-core@$XRAY"
+          # (from version 26 the module path has its major version: github.com/xtls/xray-core/v26)`n          go get "github.com/xtls/xray-core/${XRAY%%.*}@$XRAY"
           net_after="$(go list -m -f '{{.Version}}' golang.org/x/net)"
           echo "x/net: $net_before -> $net_after"
           if [ "$net_before" != "$net_after" ]; then
