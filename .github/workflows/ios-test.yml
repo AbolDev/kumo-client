@@ -95,6 +95,10 @@ jobs:
       - name: Fetch sing-box
         run: git clone --depth 1 --branch "v$SING_BOX" https://github.com/SagerNet/sing-box.git sb
 
+      # AmneziaWG: the endpoint of that type, as on the phone (see tools/libbox_patch/amneziawg).
+      - name: Add AmneziaWG to sing-box
+        run: bash tools/libbox_patch/apply_amneziawg.sh sb
+
       - name: Build the framework for iOS
         run: |
           set -euo pipefail

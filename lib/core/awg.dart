@@ -16,9 +16,10 @@ import '../l10n/extra.dart' show trFor;
 /// The protocol the servers of AmneziaWG show in lists.
 const amneziaProtocol = 'amneziawg';
 
-/// Whether the core itself has the endpoint of AmneziaWG: the phone's does; on a computer kumo-awg is the one that has it.
+/// Whether the core itself has the endpoint of AmneziaWG: the one of the phone (Android, and iOS in its tunnel extension) does;
+/// on a computer kumo-awg is the one that has it.
 /// (A variable, so that a test can say otherwise.)
-bool amneziaInCore = Platform.isAndroid;
+bool amneziaInCore = Platform.isAndroid || Platform.isIOS;
 
 /// The options of the endpoint that are AmneziaWG's, by the names the endpoint has for them.
 const awgOptionNames = {
