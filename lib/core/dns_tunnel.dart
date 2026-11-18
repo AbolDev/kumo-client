@@ -9,10 +9,10 @@ part of 'proxy_config.dart';
 const dnsTunnelKey = '_kumoDns';
 
 /// The schemes of the DNS tunnels.
-const dnsTunnelSchemes = {'dnstt', 'vaydns', 'noizdns', 'soar'};
+const dnsTunnelSchemes = {'dnstt', 'vaydns', 'noizdns', 'slipstream', 'soar'};
 
 /// The names the schemes are shown with.
-const dnsTunnelNames = {'dnstt': 'DNSTT', 'vaydns': 'VayDNS', 'noizdns': 'NoizDNS', 'soar': 'Soar', 'ssh': 'SSH'};
+const dnsTunnelNames = {'dnstt': 'DNSTT', 'vaydns': 'VayDNS', 'noizdns': 'NoizDNS', 'slipstream': 'Slipstream', 'soar': 'Soar', 'ssh': 'SSH'};
 
 bool _dnsLink(String link) {
   final i = link.indexOf('://');
@@ -34,11 +34,14 @@ ProxyConfig? _dnsTunnel(String link) {
   final key = _decode(u.userInfo).isNotEmpty ? _decode(u.userInfo) : q('key');
   final resolvers = [for (final r in all['resolver'] ?? const <String>[]) if (r.trim().isNotEmpty) r.trim()];
   // Soar may find resolvers itself; the others need one.
-  if (key.isEmpty || (resolvers.isEmpty && !(scheme == 'soar' && q('discovery').isNotEmpty))) return null;
+  final authoritative = [for (final r in all['authoritative'] ?? const <String>[]) if (r.trim().isNotEmpty) r.trim()];
+  // Slipstream has no key (a certificate may pin the server's) and may have only authoritative resolvers.
+  if (scheme != 'slipstream' && key.isEmpty) return null;
+  if (resolvers.isEmpty && !(scheme == 'soar' && q('discovery').isNotEmpty) && !(scheme == 'slipstream' && authoritative.isNotEmpty)) return null;
   final spec = <String, dynamic>{
     'mode': scheme,
     'domain': u.host,
-    'pubkey': key,
+    if (key.isNotEmpty) 'pubkey': key,
     'resolvers': resolvers,
   };
   void number(String k, String name) {
@@ -57,6 +60,17 @@ ProxyConfig? _dnsTunnel(String link) {
       if (_truthy(q('stealth'))) spec['stealth'] = true;
       if (_truthy(q('authoritative'))) spec['authoritative'] = true;
       number('payload_size', 'max_payload');
+    case 'slipstream':
+      if (authoritative.isNotEmpty) spec['auth_resolvers'] = authoritative;
+      if (['bbr', 'dcubic'].contains(q('cc'))) spec['cc'] = q('cc');
+      if (q('cert').isNotEmpty) {
+        // The certificate that pins the server's, as PEM in base64.
+        try {
+          spec['cert'] = utf8.decode(_b64(q('cert')));
+        } catch (_) {
+          return null;
+        }
+      }
     case 'soar':
       final d = q('discovery');
       if (d.isNotEmpty) {
@@ -189,6 +203,7 @@ String? slipnetToKumoLink(String link) {
   final scheme = switch (type) {
     'dnstt' || 'dnstt_ssh' => 'dnstt',
     'sayedns' || 'sayedns_ssh' => 'noizdns',
+    'slipstream' || 'slipstream_ssh' => 'slipstream',
     'vaydns' || 'vaydns_ssh' => 'vaydns',
     'soar' => 'soar',
     'ssh' => 'ssh',
@@ -234,10 +249,16 @@ String? slipnetToKumoLink(String link) {
       final p = r.split(':');
       if (p.isEmpty || p[0].trim().isEmpty) continue;
       final addr = p.length > 1 && p[1].isNotEmpty ? '${p[0]}:${p[1]}' : p[0];
-      add('resolver', transport == 'tcp' ? 'tcp://$addr' : (transport == 'tls' ? 'tls://$addr' : 'udp://$addr'));
+      // A resolver SlipNet marks as authoritative is one its user runs himself (Slipstream paces its polling by it).
+      if (scheme == 'slipstream' && p.length > 2 && p[2] == '1') {
+        add('authoritative', addr);
+      } else {
+        add('resolver', transport == 'tcp' ? 'tcp://$addr' : (transport == 'tls' ? 'tls://$addr' : 'udp://$addr'));
+      }
     }
   }
   if (scheme == 'noizdns' && at(38) == '1') add('stealth', '1');
+  if (scheme == 'slipstream') add('cc', at(7));
   if (scheme == 'vaydns') {
     add('record', at(42));
     final qn = int.tryParse(at(43)) ?? 0;
@@ -258,6 +279,6 @@ String? slipnetToKumoLink(String link) {
     }
   }
   final key = at(11);
-  if (key.isEmpty || at(3).isEmpty) return null;
-  return '$scheme://${enc(key)}@${at(3)}?${tail()}';
+  if (at(3).isEmpty || (scheme != 'slipstream' && key.isEmpty)) return null;
+  return '$scheme://${key.isEmpty ? '' : '${enc(key)}@'}${at(3)}?${tail()}';
 }

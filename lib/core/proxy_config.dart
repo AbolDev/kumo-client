@@ -190,6 +190,7 @@ const _supportedSchemes = [
   'dnstt://',
   'vaydns://',
   'noizdns://',
+  'slipstream://',
   'soar://',
   'slipnet://',
 ];
@@ -262,7 +263,7 @@ Iterable<String> _words(String text) => text
 /// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`, and
 /// `warp-masque://`, the link of Kumo's own WARP servers, ends in `masque://`).
 final _schemeStart = RegExp(
-    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|awg|amneziawg|naive\+https|naive\+quic|openvpn|dnstt|vaydns|noizdns|soar|slipnet)://)'
+    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|awg|amneziawg|naive\+https|naive\+quic|openvpn|dnstt|vaydns|noizdns|slipstream|soar|slipnet)://)'
     r'|(?<![A-Za-z0-9-])(?=masque://)');
 
 /// Parses and shuffles thousands of links off the UI thread.

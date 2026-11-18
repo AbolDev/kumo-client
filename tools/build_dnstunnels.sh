@@ -42,7 +42,7 @@ fetch dnstt https://github.com/anonvector/dnstt.git "$DNSTT_COMMIT"
 work="$src/build-$goos-$goarch"
 rm -rf "$work"
 mkdir -p "$work"
-cp "$root/tools/dnstunnels/main.go" "$work/main.go"
+cp "$root"/tools/dnstunnels/*.go "$work/"
 cd "$work"
 cat > go.mod <<EOF
 module kumodns

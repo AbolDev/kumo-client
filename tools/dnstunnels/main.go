@@ -19,7 +19,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -54,7 +56,7 @@ type sshConfig struct {
 }
 
 type config struct {
-	Mode   string `json:"mode"` // dnstt, vaydns, noizdns, soar or ssh
+	Mode   string `json:"mode"` // dnstt, vaydns, noizdns, slipstream, soar or ssh
 	Listen string `json:"listen"`
 	User   string `json:"user"` // the login of the local SOCKS5 port
 	Pass   string `json:"pass"`
@@ -74,6 +76,13 @@ type config struct {
 	Stealth       bool `json:"stealth"`
 	Authoritative bool `json:"authoritative"`
 	MaxPayload    int  `json:"max_payload"`
+
+	// Slipstream (QUIC over DNS, run as a program of its own): the resolvers are UDP "host:port", the authoritative ones are
+	// resolvers the user runs himself, the certificate (PEM) pins the server's, the congestion control is bbr or dcubic.
+	AuthResolvers []string `json:"auth_resolvers"`
+	Cert          string   `json:"cert"`
+	CC            string   `json:"cc"`
+	SlipstreamBin string   `json:"slipstream_bin"` // where the program is, when it is not next to this one
 
 	// Soar
 	Discovery  bool     `json:"discovery"`
@@ -157,7 +166,7 @@ func start(c *config) (dialFunc, func(), error) {
 	case "ssh":
 		d, closeFn := sshDialer(c.SSH, func(ctx context.Context) (net.Conn, error) { return dialSSHBase(ctx, c.SSH) })
 		return d, closeFn, nil
-	case "dnstt", "vaydns", "noizdns":
+	case "dnstt", "vaydns", "noizdns", "slipstream":
 		local, stopTunnel, err := startDNS(c)
 		if err != nil {
 			return nil, nil, err
@@ -213,6 +222,9 @@ func resolverOf(r string) (kind, addr string) {
 
 // startDNS runs DNSTT, VayDNS or NoizDNS on a local TCP port (127.0.0.1) that leads to what the tunnel server forwards to.
 func startDNS(c *config) (string, func(), error) {
+	if c.Mode == "slipstream" {
+		return startSlipstream(c)
+	}
 	if c.Domain == "" || c.PubKey == "" || len(c.Resolvers) == 0 {
 		return "", nil, errors.New("a DNS tunnel needs a domain, a public key and a resolver")
 	}
@@ -750,4 +762,77 @@ func serveSocks(c net.Conn, user, pass string, dial dialFunc) {
 	go func() { _, _ = io.Copy(up, c); done <- struct{}{} }()
 	go func() { _, _ = io.Copy(c, up); done <- struct{}{} }()
 	<-done
+}
+
+// startSlipstream runs the client of Slipstream (a program of its own, Rust) on a local TCP port that leads to what the tunnel
+// server forwards to, and stops it when this program stops.
+func startSlipstream(c *config) (string, func(), error) {
+	if c.Domain == "" || (len(c.Resolvers) == 0 && len(c.AuthResolvers) == 0) {
+		return "", nil, errors.New("Slipstream needs a domain and a resolver")
+	}
+	bin := c.SlipstreamBin
+	if bin == "" {
+		self, err := os.Executable()
+		if err != nil {
+			return "", nil, err
+		}
+		dir := filepath.Dir(self)
+		for _, name := range []string{"kumo-slipstream", "kumo-slipstream.exe", "libslipstream.so"} {
+			if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+				bin = filepath.Join(dir, name)
+				break
+			}
+		}
+	}
+	if bin == "" {
+		return "", nil, errors.New("the program of Slipstream is not next to kumo-dns")
+	}
+	local, err := freeLocalAddr()
+	if err != nil {
+		return "", nil, err
+	}
+	host, port, _ := net.SplitHostPort(local)
+	args := []string{"--domain", c.Domain, "--tcp-listen-host", host, "--tcp-listen-port", port}
+	for _, r := range c.Resolvers {
+		kind, a := resolverOf(r)
+		if kind != "udp" {
+			return "", nil, errors.New("Slipstream takes UDP resolvers (ip:port)")
+		}
+		args = append(args, "--resolver", a)
+	}
+	for _, r := range c.AuthResolvers {
+		_, a := resolverOf(r)
+		args = append(args, "--authoritative", a)
+	}
+	if c.CC == "bbr" || c.CC == "dcubic" {
+		args = append(args, "--congestion-control", c.CC)
+	}
+	certFile := ""
+	if c.Cert != "" {
+		f, err := os.CreateTemp("", "kumo-slipstream-*.pem")
+		if err != nil {
+			return "", nil, err
+		}
+		certFile = f.Name()
+		_, _ = f.WriteString(c.Cert)
+		_ = f.Close()
+		args = append(args, "--cert", certFile)
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	dieWithParent(cmd)
+	if err := cmd.Start(); err != nil {
+		return "", nil, err
+	}
+	go func() {
+		err := cmd.Wait()
+		logf("slipstream stopped: %v", err)
+	}()
+	return local, func() {
+		_ = cmd.Process.Kill()
+		if certFile != "" {
+			_ = os.Remove(certFile)
+		}
+	}, nil
 }

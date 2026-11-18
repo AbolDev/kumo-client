@@ -81,6 +81,17 @@ void main() {
       expect(parseLink('ssh://root:pw@example.com:22?transport=quic'), isNull);
     });
 
+    test('Slipstream has no key: the domain, the resolvers, the authoritative ones, the congestion control', () {
+      final c = parseLink('slipstream://t.example.com?resolver=udp%3A%2F%2F1.1.1.1%3A53&authoritative=10.0.0.1%3A53&cc=bbr#S')!;
+      expect(c.protocol, 'slipstream');
+      expect(c.isDnsTunnel, isTrue);
+      expect(_spec(c).containsKey('pubkey'), isFalse);
+      expect(_spec(c)['resolvers'], ['udp://1.1.1.1:53']);
+      expect(_spec(c)['auth_resolvers'], ['10.0.0.1:53']);
+      expect(_spec(c)['cc'], 'bbr');
+      expect(parseLink('slipstream://t.example.com'), isNull, reason: 'a resolver is needed');
+      expect(parseLink('slipstream://t.example.com?authoritative=10.0.0.1%3A53'), isNotNull);
+    });
     test('the links are found in a text with others', () {
       final text = 'one dnstt://$_key@t.example.com?resolver=1.1.1.1#a\nand soar://$_key@s.example.com?discovery=1#b';
       expect(extractLinks(text), hasLength(2));
@@ -128,6 +139,20 @@ void main() {
       expect(_spec(c)['country'], 'IR');
     });
 
+    test('Slipstream with SSH, an authoritative resolver marked by the third field', () {
+      final f = fields(type: 'slipstream_ssh', resolvers: '1.1.1.1:53:0,10.0.0.1:53:1');
+      f[11] = '';
+      f[7] = 'bbr';
+      f[14] = '1';
+      f[15] = 'root';
+      f[16] = 'pw';
+      final c = parseLink(slipnet(f))!;
+      expect(c.protocol, 'slipstream');
+      expect(_spec(c)['resolvers'], ['udp://1.1.1.1:53']);
+      expect(_spec(c)['auth_resolvers'], ['10.0.0.1:53']);
+      expect(_spec(c)['cc'], 'bbr');
+      expect((_spec(c)['ssh'] as Map)['user'], 'root');
+    });
     test('a kind Kumo has no tunnel for is refused', () {
       expect(parseLink(slipnet(fields(type: 'snowflake'))), isNull);
       expect(parseLink('slipnet://not-base64!'), isNull);
