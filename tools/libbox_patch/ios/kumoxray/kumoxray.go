@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/v26/core"
-	"github.com/xtls/xray-core/v26/infra/conf/serial"
-	_ "github.com/xtls/xray-core/v26/main/distro/all"
+	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/infra/conf/serial"
+	_ "github.com/xtls/xray-core/main/distro/all"
 )
 
 var (
