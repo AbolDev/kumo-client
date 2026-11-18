@@ -8,6 +8,8 @@
 
 Сайт: [kumo-client.ir](https://kumo-client.ir/ru/) · [Telegram](https://t.me/Kumo_Client)
 
+[![release](https://img.shields.io/github/v/release/AbolDev/kumo-client?label=release)](https://github.com/AbolDev/kumo-client/releases/latest) [![downloads](https://img.shields.io/github/downloads/AbolDev/kumo-client/total?label=downloads)](https://github.com/AbolDev/kumo-client/releases) [![stars](https://img.shields.io/github/stars/AbolDev/kumo-client?style=flat)](https://github.com/AbolDev/kumo-client/stargazers) [![license](https://img.shields.io/github/license/AbolDev/kumo-client)](LICENSE) [![Telegram](https://img.shields.io/badge/Telegram-Kumo__Client-26A5E4?logo=telegram&logoColor=white)](https://t.me/Kumo_Client)
+
 </div>
 
 ## Что такое Kumo?
