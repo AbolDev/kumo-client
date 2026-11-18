@@ -5,7 +5,7 @@ import 'dart:math' show Random;
 
 /// What public services see of this connection.
 class IpInfo {
-  const IpInfo({this.v4, this.v6, this.country, this.countryCode, this.city, this.region, this.isp});
+  const IpInfo({this.v4, this.v6, this.country, this.countryCode, this.city, this.region, this.isp, this.asn});
 
   final String? v4;
   final String? v6;
@@ -14,6 +14,19 @@ class IpInfo {
   final String? city;
   final String? region;
   final String? isp;
+
+  /// The number of the network the address belongs to, as "AS197207", when a service said it.
+  final String? asn;
+}
+
+/// What the services see of the connection, in two views. [exit] is the connection itself: with a VPN on, the
+/// VPN server's address. [mine] is the user's own network, and is given only with a VPN on, when the Iranian
+/// service (which the connection sends straight out) saw an Iranian address that is not the exit's.
+class IpView {
+  const IpView({this.exit, this.mine});
+
+  final IpInfo? exit;
+  final IpInfo? mine;
 }
 
 /// One resolver (or the address) the DNS leak test saw.
@@ -66,6 +79,36 @@ bool _isV6(String s) => s.contains(':') && InternetAddress.tryParse(s) != null;
 /// so it answers with the user's real address; because it says Iran and the other services say the
 /// VPN's country, [chooseIpInfo] would then show the real address as if it were the VPN's.
 Future<IpInfo> fetchIpInfo({int? proxyPort, bool askIran = true}) async {
+  final results = await Future.wait([_fetchOthers(proxyPort), askIran ? fetchIranInfo(proxyPort) : Future.value(null)]);
+  final chosen = chooseIpInfo(results[0] ?? const IpInfo(), results[1]);
+  if (chosen.v4 == null && chosen.v6 == null) throw const SocketException('no address');
+  return chosen;
+}
+
+/// [fetchIpInfo] in two views (see [IpView]). With no VPN it is the user's own network, as before. With a VPN
+/// the Iranian service is asked as well: it is sent straight out, so when it sees an Iranian address that is
+/// not the exit's, that is the user's own network ([IpView.mine]) and the exit is what the other services saw.
+Future<IpView> fetchIpView({int? proxyPort, required bool connected}) async {
+  final results = await Future.wait([_fetchOthers(proxyPort), fetchIranInfo(proxyPort)]);
+  final view = chooseIpView(results[0], results[1], connected: connected);
+  if (view.exit == null && view.mine == null) throw const SocketException('no address');
+  return view;
+}
+
+/// The decision of [fetchIpView], for [others] (the world's services) and [iran] (the Iranian one).
+IpView chooseIpView(IpInfo? others, IpInfo? iran, {required bool connected}) {
+  final haveOthers = others != null && (others.v4 != null || others.v6 != null);
+  if (!connected) {
+    final chosen = chooseIpInfo(others ?? const IpInfo(), iran);
+    return chosen.v4 == null && chosen.v6 == null ? const IpView() : IpView(exit: chosen);
+  }
+  final iranian = iran != null && iran.countryCode == 'IR' && (iran.v4 != null || iran.v6 != null);
+  final same = iranian && haveOthers && (iran.v4 == others.v4 || (iran.v6 != null && iran.v6 == others.v6));
+  return IpView(exit: haveOthers ? others : null, mine: iranian && !same ? iran : null);
+}
+
+/// What the world's services say about this connection (null when none gave an address).
+Future<IpInfo?> _fetchOthers(int? proxyPort) async {
   Future<String?> v4() async {
     for (final url in const ['https://api.ipify.org', 'https://ipv4.icanhazip.com']) {
       try {
@@ -86,12 +129,10 @@ Future<IpInfo> fetchIpInfo({int? proxyPort, bool askIran = true}) async {
     return null;
   }
 
-  // Services of the world often cannot see the address of a user in Iran. This Iranian service can,
-  // so it is asked as well.
-  final results = await Future.wait([v4(), v6(), askIran ? fetchIranInfo(proxyPort) : Future.value(null)]);
-  final ip4 = results[0] as String?, ip6 = results[1] as String?;
-  final iran = results[2] as IpInfo?;
-  String? country, code, city, region, isp;
+  final results = await Future.wait([v4(), v6()]);
+  final ip4 = results[0], ip6 = results[1];
+  if (ip4 == null && ip6 == null) return null;
+  String? country, code, city, region, isp, asn;
   final lookup = ip4 ?? ip6;
   if (lookup != null) {
     try {
@@ -102,15 +143,14 @@ Future<IpInfo> fetchIpInfo({int? proxyPort, bool askIran = true}) async {
         city = j['city'] as String?;
         region = j['region'] as String?;
         final c = j['connection'];
-        if (c is Map) isp = (c['isp'] ?? c['org']) as String?;
+        if (c is Map) {
+          isp = (c['isp'] ?? c['org']) as String?;
+          if (c['asn'] != null) asn = 'AS${c['asn']}';
+        }
       }
     } catch (_) {}
   }
-  final others = IpInfo(
-      v4: ip4, v6: ip6, country: country, countryCode: code, city: city, region: region, isp: isp);
-  final chosen = chooseIpInfo(others, iran);
-  if (chosen.v4 == null && chosen.v6 == null) throw const SocketException('no address');
-  return chosen;
+  return IpInfo(v4: ip4, v6: ip6, country: country, countryCode: code, city: city, region: region, isp: isp, asn: asn);
 }
 
 /// The Iranian service's answer about this connection, or null when it fails.
@@ -144,6 +184,8 @@ IpInfo? parseIranInfo(Map j) {
     city: text('city'),
     region: text('regionName'),
     isp: text('isp') ?? text('org'),
+    // "as": "AS197207 Mobile Communication Company of Iran PLC"
+    asn: RegExp(r'AS\d+').firstMatch(text('as') ?? '')?.group(0),
   );
 }
 
@@ -165,6 +207,7 @@ IpInfo chooseIpInfo(IpInfo others, IpInfo? iran) {
     city: iran.city,
     region: iran.region,
     isp: iran.isp,
+    asn: iran.asn,
   );
 }
 

@@ -3,15 +3,22 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'cloudflare_colos.dart';
 import 'singbox_config.dart' show XrayAuth;
 import 'socks_get.dart';
 
 /// A place the speed is measured against: where a file is downloaded from, where an upload goes (not every
 /// server takes one) and a small page for the delay.
 class SpeedServer {
-  const SpeedServer(this.id, this.name, this.host, this.downloadUrl, this.pingUrl, {this.uploadUrl});
+  const SpeedServer(this.id, this.name, this.host, this.downloadUrl, this.pingUrl,
+      {this.uploadUrl, this.provider = '', this.place});
 
   final String id, name, host;
+
+  /// Who runs it ("Cloudflare"), and where it is when that is one place ("Frankfurt, Germany"). Cloudflare's place is
+  /// the data center the test reached (see [fetchCloudflareColo]), so it has none here.
+  final String provider;
+  final String? place;
 
   /// The address of the download; `{bytes}` and `{mb}` become the size asked for.
   final String downloadUrl;
@@ -39,6 +46,7 @@ const speedServers = <SpeedServer>[
     'https://speed.cloudflare.com/__down?bytes={bytes}',
     'https://speed.cloudflare.com/__down?bytes=0',
     uploadUrl: 'https://speed.cloudflare.com/__up',
+    provider: 'Cloudflare',
   ),
   SpeedServer(
     'librespeed-fra',
@@ -47,6 +55,8 @@ const speedServers = <SpeedServer>[
     'https://fra.speedtest.clouvider.net/backend/garbage.php?ckSize={mb}',
     'https://fra.speedtest.clouvider.net/backend/empty.php',
     uploadUrl: 'https://fra.speedtest.clouvider.net/backend/empty.php',
+    provider: 'Clouvider',
+    place: 'Frankfurt, Germany',
   ),
   SpeedServer(
     'librespeed-ams',
@@ -55,6 +65,8 @@ const speedServers = <SpeedServer>[
     'https://ams.speedtest.clouvider.net/backend/garbage.php?ckSize={mb}',
     'https://ams.speedtest.clouvider.net/backend/empty.php',
     uploadUrl: 'https://ams.speedtest.clouvider.net/backend/empty.php',
+    provider: 'Clouvider',
+    place: 'Amsterdam, Netherlands',
   ),
   SpeedServer(
     'librespeed-lon',
@@ -63,6 +75,8 @@ const speedServers = <SpeedServer>[
     'https://lon.speedtest.clouvider.net/backend/garbage.php?ckSize={mb}',
     'https://lon.speedtest.clouvider.net/backend/empty.php',
     uploadUrl: 'https://lon.speedtest.clouvider.net/backend/empty.php',
+    provider: 'Clouvider',
+    place: 'London, United Kingdom',
   ),
   // OVH only offers files to download: no upload here.
   SpeedServer(
@@ -71,6 +85,8 @@ const speedServers = <SpeedServer>[
     'proof.ovh.net',
     'https://proof.ovh.net/files/100Mb.dat',
     'https://proof.ovh.net/',
+    provider: 'OVH',
+    place: 'Roubaix, France',
   ),
 ];
 
@@ -521,4 +537,28 @@ String _reasons(List<String> why) {
     count[w] = (count[w] ?? 0) + 1;
   }
   return count.entries.map((e) => e.value > 1 ? '${e.key} ×${e.value}' : e.key).join(', ');
+}
+
+/// The Cloudflare data center a test through [route] reaches, by its code ("FRA"): one request for `/cdn-cgi/trace` on the
+/// test's own host, the way the test goes. Null when it could not be asked (the other servers' places are known in advance).
+Future<String?> fetchCloudflareColo(SpeedRoute route) async {
+  const url = 'https://speed.cloudflare.com/cdn-cgi/trace';
+  try {
+    if (route.socksPort != null) {
+      final body = await socksGet(url, route.socksPort!, auth: route.auth, timeout: const Duration(seconds: 8), maxBytes: 4096);
+      return body == null ? null : coloOfTrace(utf8.decode(body, allowMalformed: true));
+    }
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    if (route.proxyPort != null) client.findProxy = (_) => 'PROXY 127.0.0.1:${route.proxyPort}';
+    try {
+      final req = await client.getUrl(Uri.parse(url)).timeout(const Duration(seconds: 8));
+      final res = await req.close().timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) return null;
+      return coloOfTrace(await res.transform(utf8.decoder).join().timeout(const Duration(seconds: 8)));
+    } finally {
+      client.close(force: true);
+    }
+  } catch (_) {
+    return null;
+  }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 
 import '../core/ip_info.dart';
+import '../core/network_path.dart' show ipOperator;
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
 import 'share_sheet.dart';
@@ -21,7 +22,7 @@ class MyIpPage extends StatefulWidget {
 }
 
 class _MyIpPageState extends State<MyIpPage> {
-  IpInfo? _info;
+  IpView? _view;
   var _loading = true;
   var _failed = false;
 
@@ -36,15 +37,14 @@ class _MyIpPageState extends State<MyIpPage> {
       _loading = true;
       _failed = false;
     });
-    IpInfo? info;
+    IpView? view;
     try {
-      info = await fetchIpInfo(
-          proxyPort: widget.state.localProxyPort, askIran: !widget.state.connected);
+      view = await fetchIpView(proxyPort: widget.state.localProxyPort, connected: widget.state.connected);
     } catch (_) {}
     if (!mounted) return;
     setState(() {
-      _info = info;
-      _failed = info == null;
+      _view = view;
+      _failed = view == null;
       _loading = false;
     });
   }
@@ -96,9 +96,40 @@ class _MyIpPageState extends State<MyIpPage> {
     );
   }
 
+  /// The rows of one view of the connection, in a card; [heading] names it when there are two.
+  Widget _infoCard(IpInfo info, {String? heading}) {
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (heading != null)
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: 8, bottom: 6),
+          child: Text(heading, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ),
+      Card(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        color: scheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: scheme.outlineVariant),
+        ),
+        child: Column(children: [
+          _row(Icons.looks_4, 'IPv4', info.v4, copy: true),
+          _row(Icons.looks_6, 'IPv6', info.v6 ?? tr(context, 'ipNoV6'), copy: info.v6 != null),
+          _row(Icons.public, tr(context, 'ipCountry'), info.country, flag: _flagOf(info.countryCode)),
+          _row(Icons.location_city, tr(context, 'ipCity'),
+              [info.city, info.region].where((e) => e != null && e.isNotEmpty).join(', ')),
+          // The operator with the name people know it by after it: Mobile Communication Company of Iran (MCI, Hamrah Aval).
+          _row(Icons.business, tr(context, 'ipIsp'), ipOperator(info)),
+        ]),
+      ),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final info = _info;
+    final view = _view;
+    final info = view?.exit ?? view?.mine;
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
@@ -136,27 +167,12 @@ class _MyIpPageState extends State<MyIpPage> {
                   : ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        Card(
-                          elevation: 0,
-                          color: scheme.surfaceContainerLow,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(color: scheme.outlineVariant),
-                          ),
-                          child: Column(children: [
-                            _row(Icons.looks_4, 'IPv4', info.v4, copy: true),
-                            _row(Icons.looks_6, 'IPv6',
-                                info.v6 ?? tr(context, 'ipNoV6'),
-                                copy: info.v6 != null),
-                            _row(Icons.public, tr(context, 'ipCountry'), info.country,
-                                flag: _flagOf(info.countryCode)),
-                            _row(Icons.location_city, tr(context, 'ipCity'),
-                                [info.city, info.region]
-                                    .where((e) => e != null && e.isNotEmpty)
-                                    .join(', ')),
-                            _row(Icons.business, tr(context, 'ipIsp'), info.isp),
-                          ]),
-                        ),
+                        if (view!.mine != null && view.exit != null) ...[
+                          _infoCard(view.mine!, heading: tr(context, 'pathYou')),
+                          const SizedBox(height: 12),
+                          _infoCard(view.exit!, heading: tr(context, 'pathExit')),
+                        ] else
+                          _infoCard(info),
                         const SizedBox(height: 12),
                         Text(
                           tr(context, widget.state.connected ? 'ipThroughVpn' : 'ipNoVpn'),

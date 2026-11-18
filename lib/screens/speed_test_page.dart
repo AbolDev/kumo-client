@@ -1,13 +1,18 @@
+import 'dart:async';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../core/app_log.dart' show LogLevel, LogTag;
+import '../core/ip_info.dart';
+import '../core/network_path.dart';
 import '../core/speed_test.dart';
 import '../core/vpn_channel.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
+import '../widgets/network_path_card.dart';
 
 const _historyFile = 'speed_history.json';
 
@@ -30,6 +35,8 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
   var _cancel = false;
   SpeedStage? _stage;
   SpeedResult? _result;
+  // The path of the last test (see [_loadPath]); null while it is being asked or when nothing could be had.
+  List<PathNode>? _path;
   var _history = <SpeedResult>[];
   var _capMb = speedDefaultMb;
 
@@ -80,6 +87,7 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
       _running = true;
       _cancel = false;
       _result = null;
+      _path = null;
       _stage = SpeedStage.ping;
       _live = 0;
       _elapsed = Duration.zero;
@@ -130,6 +138,24 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
       if (got) _history = addToHistory(_history, r);
     });
     if (got) _saveHistory();
+    if (got) unawaited(_loadPath(route, _server));
+  }
+
+  /// Who the test went through and to: asked after the test, so that it cannot slow it down. The operator and the place
+  /// come from the same services as What is my IP, the data center of Cloudflare from the test's own host.
+  Future<void> _loadPath(SpeedRoute route, SpeedServer server) async {
+    IpView? view;
+    String? colo;
+    try {
+      final got = await Future.wait<Object?>([
+        fetchIpView(proxyPort: widget.state.localProxyPort, connected: widget.state.connected).then<Object?>((v) => v, onError: (_) => null),
+        server.id == 'cloudflare' ? fetchCloudflareColo(route) : Future<Object?>.value(null),
+      ]);
+      view = got[0] as IpView?;
+      colo = got[1] as String?;
+    } catch (_) {}
+    if (!mounted || _running) return;
+    setState(() => _path = buildPath(view: view, viaVpn: route.viaVpn, server: server, colo: colo));
   }
 
   static String _mbps(double? v) {
@@ -481,6 +507,10 @@ class _SpeedTestPageState extends State<SpeedTestPage> with SingleTickerProvider
     final failed = r.pingMs == null && r.downMbps == null && r.upMbps == null;
     return Column(children: [
       _row(),
+      if (_path != null) ...[
+        const SizedBox(height: 12),
+        NetworkPathCard(nodes: _path!, vpn: route?.viaVpn ?? r.viaVpn),
+      ],
       if (failed) ...[
         const SizedBox(height: 12),
         Text(tr(context, 'speedFailed'), textAlign: TextAlign.center, style: TextStyle(color: scheme.error)),
