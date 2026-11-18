@@ -91,7 +91,7 @@ void main() {
     String slipnet(List<String> fields) => 'slipnet://${base64.encode(utf8.encode(fields.join('|')))}';
 
     List<String> fields({required String type, String domain = 't.example.com', String resolvers = '8.8.8.8:53:0'}) {
-      final f = List<String>.filled(60, '');
+      final f = List<String>.filled(60, '', growable: true);
       f[0] = '24';
       f[1] = type;
       f[2] = 'From SlipNet';
