@@ -57,7 +57,7 @@ prefix="$work/openssl-$abi"
 (
   cd "$work/openssl"
   export ANDROID_NDK_ROOT="$NDK"
-  ./Configure "$config" -D__ANDROID_API__="$api" no-shared no-tests no-apps --prefix="$prefix" --openssldir="$prefix/ssl"
+  ./Configure "$config" -D__ANDROID_API__="$api" no-shared no-tests --prefix="$prefix" --openssldir="$prefix/ssl"
   make -j"$(nproc)" build_libs
   make install_dev
 )
