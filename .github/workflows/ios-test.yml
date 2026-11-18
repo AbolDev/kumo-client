@@ -1,0 +1,49 @@
+name: iOS trial build
+
+# A trial: builds the app for iOS without signing it, to see what in it does not build for that system. Kumo has no ios/ folder
+# yet, so the project of the platform is made here (flutter create) and is not kept. Nothing is published. The log is a file
+# of the run.
+on:
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: '3.27.4'
+          cache: true
+          pub-cache: true
+
+      - name: Make the iOS project
+        run: |
+          flutter create --platforms=ios --org app.kumo --project-name kumo .
+          git status --short | head -40
+
+      - run: flutter pub get
+
+      # The .ico files of the app icons are only read on Windows.
+      - run: rm -f assets/app_icons/*.ico
+
+      - name: Build without signing
+        run: |
+          set -o pipefail
+          flutter build ios --release --no-codesign --no-pub \
+            --dart-define=KUMO_COMMIT=${{ github.sha }} --dart-define=KUMO_BUILD=kumo-ios 2>&1 | tee ios-build.log
+
+      - name: What it made
+        if: always()
+        run: |
+          ls -la build/ios/iphoneos 2>/dev/null || echo "no app was made"
+          du -sh build/ios/iphoneos/Runner.app 2>/dev/null || true
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always()
+        with:
+          name: ios-build-log
+          path: ios-build.log
+          if-no-files-found: ignore
