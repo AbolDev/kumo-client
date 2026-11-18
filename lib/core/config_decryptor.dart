@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io' show gzip, zlib;
 import 'dart:typed_data';
 
@@ -112,6 +112,12 @@ _Format? _detect(Uint8List data, String fileName) {
   if (proto == 'bpf') return _Format.bpf;
   if (_isOpenEnvelope(data)) return _Format.npvs;
   return null;
+}
+
+/// Whether [data] is a plain slipnet:// link (not an encrypted one): such a link is a server to add, not a file to open.
+bool isPlainSlipnetLink(Uint8List data) {
+  final (proto, _) = _splitContent(data.length > 4096 ? data.sublist(0, 4096) : data);
+  return proto == 'slipnet';
 }
 
 /// Whether [fileName] or the start of [data] looks like one of the protected formats.

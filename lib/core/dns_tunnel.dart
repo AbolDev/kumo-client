@@ -92,6 +92,8 @@ ProxyConfig? _dnsTunnel(String link) {
   final ssh = _sshSpec(q, local: true);
   if (ssh != null) {
     if (ssh['_bad'] == true) return null;
+    // (Soar's server dials the SSH server, so it must be told where it is.)
+    if (scheme == 'soar' && (ssh['host'] ?? '').toString().isEmpty) return null;
     spec['ssh'] = ssh;
   } else if (_truthy(q('ssh'))) {
     return null;
@@ -122,6 +124,8 @@ Map<String, dynamic>? _sshSpec(String Function(String) q, {required bool local, 
     if (pem.isNotEmpty) 'key': pem,
     if (q('ssh_hostkey').isNotEmpty) 'host_key': q('ssh_hostkey'),
     if (!local) ...{'host': host, 'port': port},
+    // A Soar server dials the SSH server itself, so the SSH server's address is given with the login.
+    if (local && q('ssh_host').isNotEmpty) ...{'host': q('ssh_host'), 'port': int.tryParse(q('ssh_port')) ?? 22},
   };
   if (!local && transport.isNotEmpty) {
     if (!['tcp', 'tls', 'ws', 'http'].contains(transport)) return {'_bad': true};
@@ -205,7 +209,7 @@ String? slipnetToKumoLink(String link) {
     'sayedns' || 'sayedns_ssh' => 'noizdns',
     'slipstream' || 'slipstream_ssh' => 'slipstream',
     'vaydns' || 'vaydns_ssh' => 'vaydns',
-    'soar' => 'soar',
+    'soar' || 'soar_ssh' => 'soar',
     'ssh' => 'ssh',
     _ => null,
   };
@@ -272,10 +276,15 @@ String? slipnetToKumoLink(String link) {
   } else {
     add('socks_user', at(12));
     add('socks_pass', at(13));
-    if (at(14) == '1' && at(15).isNotEmpty) {
-      add('ssh', '1');
-      add('ssh_user', at(15));
-      add('ssh_pass', at(16));
+  }
+  if (at(14) == '1' && at(15).isNotEmpty) {
+    add('ssh', '1');
+    add('ssh_user', at(15));
+    add('ssh_pass', at(16));
+    add('ssh_key', at(24)); // the private key, in base64
+    if (scheme == 'soar') {
+      add('ssh_host', at(19));
+      add('ssh_port', at(17));
     }
   }
   final key = at(11);

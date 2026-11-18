@@ -40,7 +40,7 @@ Everything in a query is URL-encoded (`udp%3A%2F%2F1.1.1.1%3A53`).
 |---|---|
 | VayDNS | `record=` (`txt`, `null`, `cname`, `a`, `aaaa`, `mx`, `ns`, `srv`, `caa`), `qname=` (the longest name), `rps=` (queries a second), `clientid=` |
 | NoizDNS | `stealth=1` (labels of random lengths), `authoritative=1`, `payload_size=` |
-| Soar | `discovery=IR` (find more resolvers; the country picks the lists of its own), `tcp=` (`auto`, `on`, `only`, `off`), `safe_qname=`, `candidate=` (more resolvers to try). A Soar server dials the sites itself, so it has no `socks_*` and no `ssh_*` |
+| Soar | `discovery=IR` (find more resolvers; the country picks the lists of its own), `tcp=` (`auto`, `on`, `only`, `off`), `safe_qname=`, `candidate=` (more resolvers to try). A Soar server dials the sites itself, so there is no `socks_*`; with `ssh=1` (a server whose backend is SSH) the Soar server dials the SSH server, whose address is `ssh_host=` and `ssh_port=` (22 when left out) |
 
 ### SSH over a transport of its own
 

@@ -162,7 +162,23 @@ type dialFunc func(ctx context.Context, addr string) (net.Conn, error)
 func start(c *config) (dialFunc, func(), error) {
 	switch c.Mode {
 	case "soar":
-		return startSoar(c)
+		dial, closeFn, err := startSoar(c)
+		if err != nil || c.SSH == nil {
+			return dial, closeFn, err
+		}
+		// Soar with SSH: the Soar server dials the SSH server itself, and the SSH session is made over that stream.
+		sshDial, closeSSH := sshDialer(c.SSH, func(ctx context.Context) (net.Conn, error) {
+			port := c.SSH.Port
+			if port == 0 {
+				port = 22
+			}
+			conn, err := dial(ctx, net.JoinHostPort(c.SSH.Host, strconv.Itoa(port)))
+			if err != nil {
+				return nil, err
+			}
+			return sendPayload(conn, c.SSH)
+		})
+		return sshDial, func() { closeSSH(); closeFn() }, nil
 	case "ssh":
 		d, closeFn := sshDialer(c.SSH, func(ctx context.Context) (net.Conn, error) { return dialSSHBase(ctx, c.SSH) })
 		return d, closeFn, nil
@@ -743,7 +759,11 @@ func serveSocks(c net.Conn, user, pass string, dial dialFunc) {
 	if _, err := io.ReadFull(c, pb); err != nil {
 		return
 	}
-	if req[1] != 1 { // only CONNECT
+	if req[1] == 3 { // UDP ASSOCIATE: for the DNS queries of the core (see serveUDP)
+		serveUDP(c, dial)
+		return
+	}
+	if req[1] != 1 { // otherwise only CONNECT
 		_, _ = c.Write([]byte{5, 7, 0, 1, 0, 0, 0, 0, 0, 0})
 		return
 	}
@@ -835,4 +855,117 @@ func startSlipstream(c *config) (string, func(), error) {
 			_ = os.Remove(certFile)
 		}
 	}, nil
+}
+
+// serveUDP answers UDP ASSOCIATE: the tunnels carry streams, not datagrams, so the one kind of datagram kept is a DNS query (to port
+// 53): it is sent to the resolver it was meant for as DNS over TCP through the tunnel, and over HTTPS (DoH, to the same address)
+// when the server of the tunnel allows no port 53. Everything else is dropped. The socket lives as long as the TCP connection of
+// the association does.
+func serveUDP(c net.Conn, dial dialFunc) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		_, _ = c.Write([]byte{5, 1, 0, 1, 0, 0, 0, 0, 0, 0})
+		return
+	}
+	defer pc.Close()
+	addr := pc.LocalAddr().(*net.UDPAddr)
+	reply := append([]byte{5, 0, 0, 1}, addr.IP.To4()...)
+	reply = append(reply, byte(addr.Port>>8), byte(addr.Port))
+	if _, err := c.Write(reply); err != nil {
+		return
+	}
+	_ = c.SetDeadline(time.Time{})
+	go func() {
+		_, _ = io.Copy(io.Discard, c)
+		_ = pc.Close()
+	}()
+	buf := make([]byte, 65535)
+	for {
+		n, from, err := pc.ReadFrom(buf)
+		if err != nil {
+			return
+		}
+		pkt := append([]byte(nil), buf[:n]...)
+		go answerDatagram(pc, from, pkt, dial)
+	}
+}
+
+func answerDatagram(pc net.PacketConn, from net.Addr, pkt []byte, dial dialFunc) {
+	// RSV(2) FRAG(1) ATYP ADDR PORT DATA
+	if len(pkt) < 10 || pkt[0] != 0 || pkt[1] != 0 || pkt[2] != 0 {
+		return
+	}
+	var host string
+	var rest []byte
+	switch pkt[3] {
+	case 1:
+		host, rest = net.IP(pkt[4:8]).String(), pkt[8:]
+	case 4:
+		if len(pkt) < 22 {
+			return
+		}
+		host, rest = net.IP(pkt[4:20]).String(), pkt[20:]
+	case 3:
+		l := int(pkt[4])
+		if len(pkt) < 5+l+2 {
+			return
+		}
+		host, rest = string(pkt[5:5+l]), pkt[5+l:]
+	default:
+		return
+	}
+	if len(rest) < 3 || int(rest[0])<<8|int(rest[1]) != 53 {
+		return
+	}
+	query := rest[2:]
+	head := pkt[:len(pkt)-len(query)]
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	answer, err := dnsThroughTunnel(ctx, dial, host, query)
+	if err != nil {
+		logf("DNS %s: %v", host, err)
+		return
+	}
+	_, _ = pc.WriteTo(append(append([]byte(nil), head...), answer...), from)
+}
+
+// dnsThroughTunnel asks the resolver [host] the DNS message [query] through the tunnel: over TCP on port 53, else DoH on port 443.
+func dnsThroughTunnel(ctx context.Context, dial dialFunc, host string, query []byte) ([]byte, error) {
+	if conn, err := dial(ctx, net.JoinHostPort(host, "53")); err == nil {
+		defer conn.Close()
+		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+		if _, err := conn.Write(append([]byte{byte(len(query) >> 8), byte(len(query))}, query...)); err == nil {
+			head := make([]byte, 2)
+			if _, err := io.ReadFull(conn, head); err == nil {
+				answer := make([]byte, int(head[0])<<8|int(head[1]))
+				if _, err := io.ReadFull(conn, answer); err == nil {
+					return answer, nil
+				}
+			}
+		}
+	}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return dial(ctx, net.JoinHostPort(host, "443"))
+			},
+			TLSClientConfig: &tls.Config{ServerName: host, InsecureSkipVerify: true}, //nolint:gosec // an address, no name to check; the answer is only a DNS message
+		},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+host+"/dns-query", strings.NewReader(string(query)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/dns-message")
+	req.Header.Set("Accept", "application/dns-message")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("DoH answered %d", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 65535))
 }

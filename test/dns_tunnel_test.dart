@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/config_decryptor.dart' show isPlainSlipnetLink;
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
 
@@ -152,6 +154,39 @@ void main() {
       expect(_spec(c)['auth_resolvers'], ['10.0.0.1:53']);
       expect(_spec(c)['cc'], 'bbr');
       expect((_spec(c)['ssh'] as Map)['user'], 'root');
+    });
+    test('Soar with SSH: the Soar server dials the SSH server, whose address comes with the login', () {
+      final f = fields(type: 'soar_ssh', resolvers: '8.8.8.8:53:0');
+      f[14] = '1';
+      f[15] = 'root';
+      f[16] = 'pw';
+      f[17] = '2222';
+      f[19] = '203.0.113.5';
+      final c = parseLink(slipnet(f))!;
+      expect(c.protocol, 'soar');
+      final ssh = _spec(c)['ssh'] as Map;
+      expect(ssh['host'], '203.0.113.5');
+      expect(ssh['port'], 2222);
+      expect(ssh['user'], 'root');
+      // without the address of the SSH server there is nothing to dial
+      f[19] = '';
+      expect(parseLink(slipnet(f)), isNull);
+      expect(parseLink('soar://KEY@t.example.com?resolver=1.1.1.1&ssh=1&ssh_user=u&ssh_pass=p'), isNull);
+      expect(parseLink('soar://KEY@t.example.com?resolver=1.1.1.1&ssh=1&ssh_user=u&ssh_pass=p&ssh_host=203.0.113.5')!.isDnsTunnel, isTrue);
+    });
+
+    test('the link SlipGate printed for a Soar server (no login) is read', () {
+      const link =
+          'slipnet://Mjl8c29hcnxzb2FyfHIuc2VydmVyLXMyLmlyfDguOC44Ljg6NTM6MHwwfDUwMDB8YmJyfDEwODB8MTI3LjAuMC4xfDB8UFNmckwrZjNmblIzancvZHFPWmt4eFJxNXhOR2s4RWI4OVMyOVNJbWc5az18fHwwfHx8MjJ8MHw0Ni44LjEwMi4xMjJ8MHx8dWRwfHBhc3N3b3JkfHx8fDB8NDQzfHx8MHx8MHwwfHwwfHwwfDB8MTA4MHwwfHR4dHwxMDF8MHwwfDB8MHwwfDB8MHx8fDgwODB8fDB8L3wxfHx8cm91bmRyb2JpbnwzfHx0bHN8d3N8L3x8NDQzfDF8bWljcm98MzAwfHwwfDF8MHw4fHwwfHwwfHxhdXRv';
+      final c = parseLink(link)!;
+      expect(c.protocol, 'soar');
+      expect(c.xrayOutbound![dnsTunnelKey]['pubkey'], 'PSfrL+f3fnR3jw/dqOZkxxRq5xNGk8Eb89S29SImg9k=');
+      expect(c.xrayOutbound![dnsTunnelKey]['domain'], 'r.server-s2.ir');
+      expect(c.xrayOutbound![dnsTunnelKey]['resolvers'], ['udp://8.8.8.8:53']);
+      expect(c.xrayOutbound![dnsTunnelKey].containsKey('ssh'), isFalse);
+      // a plain link is a server to add, not a protected file to open
+      expect(isPlainSlipnetLink(Uint8List.fromList(utf8.encode(link))), isTrue);
+      expect(isPlainSlipnetLink(Uint8List.fromList(utf8.encode('slipnet-enc://AAAA'))), isFalse);
     });
     test('a kind Kumo has no tunnel for is refused', () {
       expect(parseLink(slipnet(fields(type: 'snowflake'))), isNull);

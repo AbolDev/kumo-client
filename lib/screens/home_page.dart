@@ -365,7 +365,8 @@ class HomePage extends StatelessWidget {
     final clip = await Clipboard.getData(Clipboard.kTextPlain);
     final text = clip?.text?.trim() ?? '';
     final raw = Uint8List.fromList(utf8.encode(text));
-    if (text.isNotEmpty && isProtectedFile('clipboard.txt', raw)) {
+    // (A plain slipnet:// link is a server to add, not a protected file.)
+    if (text.isNotEmpty && isProtectedFile('clipboard.txt', raw) && !isPlainSlipnetLink(raw)) {
       if (context.mounted) {
         await _importProtected(context, raw, 'clipboard.txt');
       }
@@ -409,7 +410,7 @@ class HomePage extends StatelessWidget {
 
   Future<void> _importFile(
       BuildContext context, String name, Uint8List bytes) async {
-    if (!isProtectedFile(name, bytes)) {
+    if (!isProtectedFile(name, bytes) || isPlainSlipnetLink(bytes)) {
       await _import(context, utf8.decode(bytes, allowMalformed: true));
       return;
     }
