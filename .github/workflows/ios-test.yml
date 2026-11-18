@@ -51,3 +51,44 @@ jobs:
           name: ios-build-log
           path: ios-build.log
           if-no-files-found: ignore
+
+  # sing-box as a framework for iOS (what the tunnel extension links), built from the source of sing-box, with the
+  # same tags the project of sing-box itself builds its Apple framework with.
+  libbox:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      SING_BOX: 1.13.21
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Fetch sing-box
+        run: git clone --depth 1 --branch "v$SING_BOX" https://github.com/SagerNet/sing-box.git sb
+
+      - name: Build the framework for iOS
+        run: |
+          set -euo pipefail
+          cd sb
+          go install github.com/sagernet/gomobile/cmd/gomobile@v0.1.12
+          go install github.com/sagernet/gomobile/cmd/gobind@v0.1.12
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          gomobile init
+          go run ./cmd/internal/build_libbox -target apple -platform ios 2>&1 | tail -80
+          ls -la
+          du -sh Libbox.xcframework
+
+      - name: Zip it
+        run: |
+          cd sb
+          ditto -c -k --sequesterRsrc --keepParent Libbox.xcframework ../Libbox.xcframework.zip
+          ls -la ../Libbox.xcframework.zip
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: libbox-ios
+          path: Libbox.xcframework.zip
