@@ -88,7 +88,19 @@ jobs:
           ditto -c -k --sequesterRsrc --keepParent Libbox.xcframework ../Libbox.xcframework.zip
           ls -la ../Libbox.xcframework.zip
 
+      # The header says what the framework offers to Swift: the Swift of the tunnel is written against it.
+      - name: The header
+        run: |
+          h=$(find sb/Libbox.xcframework -name '*.h' -path '*ios-arm64*' | head -20)
+          echo "$h"
+          mkdir -p headers && cp -R $(dirname $(echo "$h" | head -1)) headers/ && ls -R headers | head -30
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: libbox-ios
           path: Libbox.xcframework.zip
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: libbox-header
+          path: headers
