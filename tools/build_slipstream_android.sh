@@ -29,6 +29,15 @@ export "AR_$(echo "$target" | tr '-' '_')=$BIN/llvm-ar"
 export ANDROID_ABI="$abi" ANDROID_PLATFORM="android-$api" ANDROID_NDK_HOME="$NDK"
 export RUST_ANDROID_GRADLE_CC="$BIN/$clang" RUST_ANDROID_GRADLE_AR="$BIN/llvm-ar"
 
+# OpenSSL's makefile calls the tools by the names of the old gcc toolchains (aarch64-linux-android-ranlib ...): the NDK has the
+# LLVM ones, so a folder of links under those names comes first in the path.
+shim="$(mktemp -d)"
+for name in ar ranlib strip nm objcopy objdump readelf; do
+  for triple in aarch64-linux-android arm-linux-androideabi armv7a-linux-androideabi armv7-linux-androideabi x86_64-linux-android; do
+    ln -sf "$BIN/llvm-$name" "$shim/$triple-$name"
+  done
+done
+export PATH="$shim:$BIN:$PATH"
 mkdir -p "$(dirname "$out")"
 abs="$(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
 cd "$src"

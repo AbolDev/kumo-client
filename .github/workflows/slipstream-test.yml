@@ -38,6 +38,17 @@ jobs:
           ref: ${{ env.SLIPSTREAM_COMMIT }}
           submodules: recursive
 
+      # The build script of picoquic asks for Visual Studio 2022; the runners now come with a newer one: the generator is the one
+      # that is installed.
+      - name: Use the Visual Studio of the runner
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationVersion
+          $major = ($vs | Select-Object -First 1).Split('.')[0]
+          $year = @{ '17' = '2022'; '18' = '2026' }[$major]
+          Write-Host "Visual Studio $major ($year)"
+          (Get-Content scripts/build_picoquic_windows.ps1 -Raw) -replace 'Visual Studio 17 2022', "Visual Studio $major $year" | Set-Content scripts/build_picoquic_windows.ps1
       - name: Build it with the project's own action
         uses: ./.github/actions/build-binary
         with:
