@@ -6,6 +6,7 @@ import 'awg.dart';
 import 'ovpn/ovpn_profile.dart';
 import 'warp/warp_profile.dart' show WarpNoise, parseWarpNoise;
 
+part 'dns_import.dart';
 part 'dns_tunnel.dart';
 part 'link_extra.dart';
 part 'xray_outbound.dart';
@@ -193,6 +194,12 @@ const _supportedSchemes = [
   'slipstream://',
   'soar://',
   'slipnet://',
+  'dnst://',
+  'dnstm://',
+  'rovunet://',
+  'veyra://',
+  'velta://',
+  'dns://',
 ];
 
 /// The parameters an HTTP proxy link may carry: anything else in a query makes the address a page (a
@@ -263,7 +270,7 @@ Iterable<String> _words(String text) => text
 /// Zero-width match in front of each `scheme://` (not in the middle of a word: `vless://` ends in `ss://`, and
 /// `warp-masque://`, the link of Kumo's own WARP servers, ends in `masque://`).
 final _schemeStart = RegExp(
-    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|awg|amneziawg|naive\+https|naive\+quic|openvpn|dnstt|vaydns|noizdns|slipstream|soar|slipnet)://)'
+    r'(?<![A-Za-z0-9])(?=(?:vmess|vless|trojan|ss|hysteria2|hy2|tuic|anytls|hysteria|socks5|socks4a|socks4|socks|ssh|wireguard|wg|awg|amneziawg|naive\+https|naive\+quic|openvpn|dnstt|vaydns|noizdns|slipstream|soar|slipnet|dnst|dnstm|rovunet|veyra|velta|dns)://)'
     r'|(?<![A-Za-z0-9-])(?=masque://)');
 
 /// Parses and shuffles thousands of links off the UI thread.
@@ -286,7 +293,7 @@ List<ProxyConfig> parseLinks(List<String> links, {bool secure = false}) {
   for (final l in links) {
     var c = parseLink(secure ? secureLink(l) : l);
     // (A link of SlipNet becomes the Kumo link of the same server, and that is the link kept: it is the one that is shared.)
-    if (c != null && c.link != l && !l.startsWith('slipnet://')) c = c.withLink(l);
+    if (c != null && c.link != l && !c.isDnsTunnel) c = c.withLink(l);
     if (c != null && seen.add(c.key)) out.add(c);
   }
   return out;
@@ -357,6 +364,12 @@ ProxyConfig? parseLink(String link) {
     if (link.startsWith('masque://')) return _masqueServer(link);
     if (link.startsWith('naive+')) return _naive(link);
     if (link.startsWith('openvpn://')) return _openvpn(link);
+    // The links other apps make for DNS tunnels (see dns_import.dart) become the Kumo link of the same server first.
+    final scheme = link.contains('://') ? link.substring(0, link.indexOf('://')).toLowerCase() : '';
+    if (_alwaysForeign(scheme) || (_dnsLink(link) && foreignDnsToKumo(link) != null)) {
+      final kumo = foreignDnsToKumo(link);
+      return kumo == null ? null : parseLink(kumo);
+    }
     if (_dnsLink(link)) return _dnsTunnel(link);
     if (link.startsWith('slipnet://')) {
       final kumo = slipnetToKumoLink(link);
