@@ -9,6 +9,7 @@ on:
 jobs:
   ios:
     runs-on: macos-15
+    needs: libbox
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -19,14 +20,30 @@ jobs:
           cache: true
           pub-cache: true
 
-      - name: Make the iOS project
+      # The project of the platform is in ios/; flutter create only adds what a Mac makes (the Podfile).
+      - name: Make the iOS project complete
         run: |
           flutter create --platforms=ios --org app.kumo --project-name kumo .
-          # mobile_scanner asks for iOS 15.5 or later (the first trial stopped there at pod install).
+          # mobile_scanner asks for iOS 15.5 or later.
           perl -pi -e "s/^#? ?platform :ios, '[0-9.]+'/platform :ios, '15.5'/" ios/Podfile
-          perl -pi -e 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;/IPHONEOS_DEPLOYMENT_TARGET = 15.5;/g' ios/Runner.xcodeproj/project.pbxproj
           grep -n "platform :ios" ios/Podfile
-          git status --short | head -40
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: libbox-ios
+          path: libbox-art
+
+      - name: Put sing-box in the project and add the tunnel extension
+        run: |
+          set -euo pipefail
+          mkdir -p ios/Libbox
+          ditto -x -k libbox-art/Libbox.xcframework.zip ios/Libbox
+          ls ios/Libbox
+          ls ios/Libbox/Libbox.xcframework
+          # xcodeproj comes with CocoaPods
+          gem list xcodeproj | head -3 || true
+          ruby -e 'require "xcodeproj"; puts Xcodeproj::VERSION' || gem install xcodeproj --no-document
+          ruby tools/ios_add_tunnel.rb
 
       - run: flutter pub get
 
@@ -44,6 +61,7 @@ jobs:
         run: |
           ls -la build/ios/iphoneos 2>/dev/null || echo "no app was made"
           du -sh build/ios/iphoneos/Runner.app 2>/dev/null || true
+          ls build/ios/iphoneos/Runner.app/PlugIns 2>/dev/null || echo "no extension inside"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         if: always()
@@ -52,6 +70,13 @@ jobs:
           path: ios-build.log
           if-no-files-found: ignore
 
+      # The project after the script, to keep it in the repository.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always()
+        with:
+          name: ios-project-file
+          path: ios/Runner.xcodeproj/project.pbxproj
+          if-no-files-found: ignore
   # sing-box as a framework for iOS (what the tunnel extension links), built from the source of sing-box, with the
   # same tags the project of sing-box itself builds its Apple framework with.
   libbox:
