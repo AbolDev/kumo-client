@@ -5,6 +5,15 @@ name: Slipstream trial build
 # NDK. A trial: nothing is released, only the artifacts of this run are kept.
 on:
   workflow_dispatch:
+    inputs:
+      domain:
+        description: A Slipstream server to test the clients against (the tunnel domain). Empty = the ordinary trial build.
+        required: false
+        default: ''
+      server:
+        description: The IP address of that server (its DNS port 53 is asked directly).
+        required: false
+        default: ''
   push:
     branches: [feature/dns-tunnels]
     paths: ['.github/workflows/slipstream-test.yml', 'tools/build_slipstream_android.sh']
@@ -17,6 +26,7 @@ env:
 
 jobs:
   desktop:
+    if: ${{ inputs.domain == '' }}
     name: Desktop (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -58,6 +68,7 @@ jobs:
           vcpkg-triplet: ${{ matrix.vcpkg }}
 
   android:
+    if: ${{ inputs.domain == '' }}
     name: Android (${{ matrix.abi }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
@@ -102,7 +113,7 @@ jobs:
   sizes:
     name: Sizes
     needs: [desktop, android]
-    if: always()
+    if: ${{ always() && inputs.domain == '' }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -133,3 +144,60 @@ jobs:
               printf '| %s | %s | %s | %s |\n' "$(basename "$f")" "$b" "$(awk "BEGIN{printf \"%.1f\", $b/1048576}")" "$(awk "BEGIN{printf \"%.1f\", $z/1048576}")"
             done
           } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # Which client of Slipstream a server speaks to: each client is built on Linux and asked to open a stream to the server, once through
+  # a public resolver and once straight to the server (the runner is outside any filter, so a result here says the clients and the
+  # server, not the network). What the server answers to the first bytes of an SSH session is printed.
+  compat:
+    if: ${{ inputs.domain != '' }}
+    name: Compat (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: mygod-0.1.1, repo: Mygod/slipstream-rust, ref: 7de506b222c83ae97a19a618e33fe26899af1bd5}
+          - {name: anonvector, repo: anonvector/slipstream-rust, ref: 60a5e38}
+          - {name: fox-fig-plus, repo: Fox-Fig/slipstream-rust-plus, ref: 5af5198}
+    steps:
+      - name: Check out the client
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ matrix.ref }}
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build the client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libssl-dev
+          cargo build -p slipstream-client --release
+
+      - name: Ask the server
+        env:
+          DOMAIN: ${{ inputs.domain }}
+          SERVER: ${{ inputs.server }}
+        run: |
+          try() { # label, extra client flags...
+            label="$1"; shift
+            port=$((7000 + RANDOM % 1000))
+            ./target/release/slipstream-client --domain "$DOMAIN" --tcp-listen-host 127.0.0.1 --tcp-listen-port "$port" "$@" > "client-$port.log" 2>&1 &
+            pid=$!
+            sleep 6
+            reply="(nothing)"
+            if exec 3<>"/dev/tcp/127.0.0.1/$port" 2>/dev/null; then
+              printf 'SSH-2.0-kumo-test\r\n' >&3
+              reply="$(timeout 20 head -c 60 <&3 2>/dev/null | tr -d '\r\n' | tr -c '[:print:]' '?' || true)"
+              [ -n "$reply" ] || reply="(nothing)"
+              exec 3<&- 3>&-
+            fi
+            echo "== $label -> $reply"
+            tail -n 5 "client-$port.log" | sed 's/^/     /'
+            kill "$pid" 2>/dev/null || true
+          }
+          try "through 8.8.8.8" --resolver 8.8.8.8:53
+          try "through 1.1.1.1" --resolver 1.1.1.1:53
+          if [ -n "$SERVER" ]; then try "straight to the server" --authoritative "$SERVER:53"; fi
