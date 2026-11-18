@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
@@ -47,17 +48,30 @@ class _ScanPageState extends State<ScanPage> {
   /// What is said under the frame while the parts of a series are being read.
   String? _partText;
 
+  /// A pick from the gallery is open (or its picture is being read): another tap does nothing. The plugin refuses a second
+  /// pick while one is open ("already_active"), and the button is off meanwhile.
+  var _picking = false;
+
   Future<void> _pickFromGallery() async {
+    if (_picking) return;
     final t = S.of(context);
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (picked == null) return;
-    final capture = await _controller.analyzeImage(picked.path);
-    if (!mounted) return;
-    if (capture == null || capture.barcodes.isEmpty) {
-      toast(context, t.noQrFound);
-      return;
+    setState(() => _picking = true);
+    try {
+      final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (picked == null) return;
+      final capture = await _controller.analyzeImage(picked.path);
+      if (!mounted) return;
+      if (capture == null || capture.barcodes.isEmpty) {
+        toast(context, t.noQrFound);
+        return;
+      }
+      _finish(capture);
+    } on PlatformException catch (e) {
+      // The picker is open already (a second pick started before the first came back): nothing to do.
+      if (e.code != 'already_active') rethrow;
+    } finally {
+      if (mounted) setState(() => _picking = false);
     }
-    _finish(capture);
   }
 
   @override
@@ -108,7 +122,7 @@ class _ScanPageState extends State<ScanPage> {
                     child: FilledButton.icon(
                       icon: const Icon(Icons.photo_library),
                       label: Text(t.pickFromGallery),
-                      onPressed: _pickFromGallery,
+                      onPressed: _picking ? null : _pickFromGallery,
                     ),
                   ),
                 ),

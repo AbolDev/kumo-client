@@ -16,6 +16,10 @@ bool isNetworkError(Object error) =>
     error is WebSocketException ||
     error is TimeoutException;
 
+/// True for the image picker saying it is open already ("already_active"): a second pick that started before the first came
+/// back. Nothing to fix in the app and nothing the user needs to be told, so it is not a crash report.
+bool isPickerBusy(Object error) => error is PlatformException && error.code == 'already_active';
+
 /// True when the text of a failure (a core that did not start, what the system said) names the network
 /// and not the app: a server name that has no address (a bad or offline host), no route, an unreachable
 /// network. Such a start failure is the user's server or network, so it is not a crash report either.
@@ -96,7 +100,7 @@ class CrashHub {
   /// Reports [error] (never throws, never waits).
   static void report(Object error, StackTrace? stack, {String? kind, bool fatal = false, String? message}) {
     final s = sink;
-    if (s == null || isNetworkError(error)) return;
+    if (s == null || isNetworkError(error) || isPickerBusy(error)) return;
     String text;
     try {
       text = message ?? error.toString();

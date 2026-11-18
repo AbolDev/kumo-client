@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show FlutterError;
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/desktop_vpn.dart' show isTunAdapterFailure, stripAnsi;
 import 'package:kumo/core/proxy_config.dart';
@@ -23,6 +24,10 @@ void main() {
       expect(isNetworkError(const HttpException('closed')), isTrue);
       expect(isNetworkError(TimeoutException('late')), isTrue);
       expect(isNetworkError(const FormatException('bad')), isFalse);
+      // The image picker saying it is open already is not a fault either; another picker error is.
+      expect(isPickerBusy(PlatformException(code: 'already_active', message: 'Image picker is already active')), isTrue);
+      expect(isPickerBusy(PlatformException(code: 'photo_access_denied')), isFalse);
+      expect(isPickerBusy(const FormatException('already_active')), isFalse);
       expect(isNetworkError(StateError('x')), isFalse);
     });
 
