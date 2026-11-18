@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kumo/core/config_decryptor.dart' show isPlainSlipnetLink;
+import 'package:kumo/core/net_options.dart' show NetOptions;
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
 
@@ -93,6 +94,17 @@ void main() {
       expect(_spec(c)['cc'], 'bbr');
       expect(parseLink('slipstream://t.example.com'), isNull, reason: 'a resolver is needed');
       expect(parseLink('slipstream://t.example.com?authoritative=10.0.0.1%3A53'), isNotNull);
+    });
+    test('the whole device through a DNS tunnel looks names up at the server (fake addresses), whatever the setting says', () {
+      final c = parseLink('dnstt://$_key@t.example.com?resolver=1.1.1.1')!;
+      final plain = parseLink('socks5://127.0.0.1:1080')!;
+      Map<String, dynamic> dnsOf(ProxyConfig server, {required bool tun}) =>
+          (jsonDecode(buildSingBoxConfig([server], xrayPort: server.needsXray ? 31000 : null, options: NetOptions()..tun = tun)) as Map<String, dynamic>)['dns']
+              as Map<String, dynamic>;
+      bool hasFakeIp(Map<String, dynamic> dns) => (dns['servers'] as List).any((s) => s is Map && s['type'] == 'fakeip');
+      expect(hasFakeIp(dnsOf(c, tun: true)), isTrue);
+      expect(hasFakeIp(dnsOf(c, tun: false)), isFalse, reason: 'only with the tunnel of the device');
+      expect(hasFakeIp(dnsOf(plain, tun: true)), isFalse, reason: 'another server keeps the setting of the user');
     });
     test('the links are found in a text with others', () {
       final text = 'one dnstt://$_key@t.example.com?resolver=1.1.1.1#a\nand soar://$_key@s.example.com?discovery=1#b';

@@ -73,6 +73,7 @@ type config struct {
 	UTLS     string  `json:"utls"`
 
 	// NoizDNS
+	Noiz          *bool `json:"noiz"` // the features of NoizDNS (cover traffic, a shorter name); on unless it says false
 	Stealth       bool `json:"stealth"`
 	Authoritative bool `json:"authoritative"`
 	MaxPayload    int  `json:"max_payload"`
@@ -265,7 +266,7 @@ func startDNS(c *config) (string, func(), error) {
 		if err != nil {
 			return "", nil, err
 		}
-		n.SetNoizMode(true)
+		n.SetNoizMode(c.Noiz == nil || *c.Noiz)
 		n.SetStealthMode(c.Stealth)
 		n.SetAuthoritativeMode(c.Authoritative)
 		if c.MaxPayload > 0 {
@@ -553,9 +554,9 @@ func sshDialer(s *sshConfig, base func(context.Context) (net.Conn, error)) (dial
 				return nil
 			}
 		}
-		_ = raw.SetDeadline(time.Now().Add(30 * time.Second))
+		_ = raw.SetDeadline(time.Now().Add(75 * time.Second)) // a DNS tunnel is slow to answer at first
 		cc, chans, reqs, err := ssh.NewClientConn(raw, net.JoinHostPort(s.Host, strconv.Itoa(max(s.Port, 22))),
-			&ssh.ClientConfig{User: s.User, Auth: auths, HostKeyCallback: cb, Timeout: 30 * time.Second})
+			&ssh.ClientConfig{User: s.User, Auth: auths, HostKeyCallback: cb, Timeout: 75 * time.Second})
 		if err != nil {
 			_ = raw.Close()
 			return nil, err
