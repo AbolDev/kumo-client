@@ -43,6 +43,17 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             throw KumoTunnelError("there is no configuration to start")
         }
 
+        // Xray, for the servers only it can carry: in this process (an extension cannot start a program), a local SOCKS port that the
+        // configuration of the core sends them to. The app gives its configuration with the request, as it does the core's.
+        let savedXray = base.appendingPathComponent("active_xray.json")
+        if let xray = options?["xrayConfig"] as? String, !xray.isEmpty {
+            try? xray.write(to: savedXray, atomically: true, encoding: .utf8)
+        } else if options?["configContent"] != nil {
+            // A new connection without Xray: the one of the last must not be started again by a start of the system.
+            try? FileManager.default.removeItem(at: savedXray)
+        }
+        let xrayConfig = (try? String(contentsOf: savedXray, encoding: .utf8)) ?? ""
+
         let setup = LibboxSetupOptions()
         setup.basePath = base.path
         setup.workingPath = working.path
@@ -61,6 +72,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         }
         commandServer = server
         do {
+            if !xrayConfig.isEmpty {
+                var xrayError: NSError?
+                if !KumoxrayStart(xrayConfig, &xrayError) {
+                    throw KumoTunnelError("Xray: \(xrayError?.localizedDescription ?? "did not start")")
+                }
+            }
             try server.start()
             try server.startOrReloadService(config, options: LibboxOverrideOptions())
             traffic.start()
@@ -80,6 +97,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         commandServer = nil
         traffic.stop()
         try? server.closeService()
+        var xrayError: NSError?
+        _ = KumoxrayStop(&xrayError)
         platform.reset()
         server.close()
     }

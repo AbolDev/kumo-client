@@ -49,7 +49,9 @@ final class KumoVpn: NSObject, FlutterStreamHandler {
                 }
                 do {
                     self.wasStarting = true
-                    try manager.connection.startVPNTunnel(options: ["configContent": config as NSString])
+                    var options: [String: NSObject] = ["configContent": config as NSString]
+                    if let xray = args["xrayConfig"] as? String, !xray.isEmpty { options["xrayConfig"] = xray as NSString }
+                    try manager.connection.startVPNTunnel(options: options)
                     result(nil)
                 } catch {
                     result(FlutterError(code: "start_failed", message: error.localizedDescription, details: nil))
