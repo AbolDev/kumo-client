@@ -332,6 +332,14 @@ class _WarpPageState extends State<WarpPage> {
                     ),
                     onTap: warp.busy || warp.scanning ? null : _pickFingerprint,
                   ),
+                  // AmneziaWG: the name is shown, so that the user knows what WARP is reached with and that it is supported.
+                  SwitchOption(
+                    secondary: const Icon(Icons.shield_moon_outlined),
+                    title: Text(tr(context, 'warpAmnezia')),
+                    subtitle: Text(tr(context, 'warpAmneziaDesc')),
+                    value: warp.amnezia,
+                    onChanged: warp.busy || warp.scanning ? null : warp.setAmnezia,
+                  ),
                   SwitchOption(
                     secondary: const Icon(Icons.layers_outlined),
                     title: Text(tr(context, 'warpInWarp')),

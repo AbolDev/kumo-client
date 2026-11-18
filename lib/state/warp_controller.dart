@@ -145,13 +145,33 @@ class WarpController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether the plain WireGuard ways of WARP are reached with AmneziaWG (junk packets before the handshake, for a network that
+  /// cuts the handshake of WireGuard).
+  bool amnezia = false;
+
+  /// Turns AmneziaWG on or off for the ways of WARP and rebuilds the servers with it.
+  Future<void> setAmnezia(bool on) async {
+    if (account == null || busy || on == amnezia) return;
+    amnezia = on;
+    error = null;
+    try {
+      await _apply();
+      await _state.reconnectIfConnected();
+    } catch (e) {
+      error = '$e'.replaceFirst('Bad state: ', '');
+    }
+    await _save();
+    notifyListeners();
+  }
+
   /// The link of a way of reaching WARP. A MASQUE way makes its account first when there is none.
   Future<String> _linkOf(WarpCombo c, {WarpAccount? wg, WarpEndpoint? endpoint, String name = 'WARP'}) async {
     if (isMasqueKind(c.method.kind)) {
       final account = await _ensureMasque();
       return masqueLink(account, c.method, name: name, fingerprint: masqueFingerprint);
     }
-    return warpLink(wg ?? account!, c.method, endpoint ?? c.endpoint, endpoint == null ? c.portIndex : 0, name: name);
+    return warpLink(wg ?? account!, c.method, endpoint ?? c.endpoint, endpoint == null ? c.portIndex : 0,
+        name: name, amnezia: amnezia);
   }
 
   Future<WarpMasqueAccount> _ensureMasque() async {
@@ -200,6 +220,7 @@ class WarpController extends ChangeNotifier {
         masque = WarpMasqueAccount.fromJson(j['masque']);
         final fp = j['masqueFp'];
         masqueFingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
+        amnezia = j['amnezia'] == true;
         inWarp = j['inWarp'] == true && account2 != null;
         h2Default = j['h2Default'] == true;
         final cu = j['custom'];
@@ -231,6 +252,7 @@ class WarpController extends ChangeNotifier {
         'account2': account2?.toJson(),
         'masque': masque?.toJson(),
         if (masqueFingerprint.isNotEmpty) 'masqueFp': masqueFingerprint,
+        if (amnezia) 'amnezia': true,
         'inWarp': inWarp,
         if (h2Default) 'h2Default': true,
         if (custom != null) 'custom': {'method': custom!.method, 'ip': custom!.ip, 'port': custom!.port},
@@ -785,6 +807,7 @@ class WarpController extends ChangeNotifier {
     account2 = null;
     masque = null;
     masqueFingerprint = '';
+    amnezia = false;
     h2Default = false;
     inWarp = false;
     custom = null;

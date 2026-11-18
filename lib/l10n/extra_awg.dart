@@ -15,6 +15,8 @@ const extraAwgEn = <String, String>{
   'awgDesc': 'Obfuscation of the WireGuard packets. Leave them empty for plain WireGuard.',
   'awgPrivateKey': 'Private key',
   'awgQrPart': 'Part {have} of {total} of the QR code of Amnezia read. Show the next one.',
+  'warpAmnezia': 'AmneziaWG',
+  'warpAmneziaDesc': 'Reaches WARP with AmneziaWG: junk packets are sent before the WireGuard handshake, for a network that cuts WARP. Only the plain WireGuard ways. Leave it off if WARP connects without it.',
 };
 
 const extraAwgFa = <String, String>{
@@ -32,6 +34,8 @@ const extraAwgFa = <String, String>{
   'awgDesc': 'مبهم‌سازی بسته‌های WireGuard. برای WireGuard ساده خالی بگذارید.',
   'awgPrivateKey': 'کلید خصوصی',
   'awgQrPart': 'بخش {have} از {total} کد QR امنزیا خوانده شد. بخش بعدی را نشان بدهید.',
+  'warpAmnezia': 'AmneziaWG',
+  'warpAmneziaDesc': 'اتصال به WARP با AmneziaWG: پیش از دست‌دهی WireGuard چند بسته‌ی ساختگی فرستاده می‌شود، برای شبکه‌ای که WARP را قطع می‌کند. فقط برای روش‌های WireGuard ساده. اگر WARP بدون آن وصل می‌شود، خاموش بگذارید.',
 };
 
 const extraAwgRu = <String, String>{
@@ -49,6 +53,8 @@ const extraAwgRu = <String, String>{
   'awgDesc': 'Маскировка пакетов WireGuard. Для обычного WireGuard оставьте пустым.',
   'awgPrivateKey': 'Закрытый ключ',
   'awgQrPart': 'Прочитана часть {have} из {total} QR-кода Amnezia. Покажите следующую.',
+  'warpAmnezia': 'AmneziaWG',
+  'warpAmneziaDesc': 'Подключение к WARP через AmneziaWG: перед рукопожатием WireGuard отправляются фиктивные пакеты, для сети, которая блокирует WARP. Только для обычных способов WireGuard. Если WARP подключается и без этого, оставьте выключенным.',
 };
 
 const extraAwgVi = <String, String>{
@@ -66,6 +72,8 @@ const extraAwgVi = <String, String>{
   'awgDesc': 'Làm rối các gói WireGuard. Để trống nếu dùng WireGuard thường.',
   'awgPrivateKey': 'Khóa riêng tư',
   'awgQrPart': 'Đã đọc phần {have} trên {total} của mã QR Amnezia. Hãy quét phần tiếp theo.',
+  'warpAmnezia': 'AmneziaWG',
+  'warpAmneziaDesc': 'Kết nối WARP bằng AmneziaWG: gửi vài gói giả trước khi bắt tay WireGuard, dành cho mạng chặn WARP. Chỉ áp dụng cho các cách WireGuard thường. Nếu WARP kết nối được mà không cần, hãy để tắt.',
 };
 
 const extraAwgZh = <String, String>{
@@ -83,6 +91,8 @@ const extraAwgZh = <String, String>{
   'awgDesc': '混淆 WireGuard 数据包。普通 WireGuard 请留空。',
   'awgPrivateKey': '私钥',
   'awgQrPart': '已读取 Amnezia 二维码的第 {have} 部分（共 {total} 部分），请出示下一个。',
+  'warpAmnezia': 'AmneziaWG',
+  'warpAmneziaDesc': '使用 AmneziaWG 连接 WARP：在 WireGuard 握手之前发送干扰包，适用于封锁 WARP 的网络。仅适用于普通 WireGuard 方式。如果不开启也能连上 WARP，请保持关闭。',
 };
 
 const extraAwgAr = <String, String>{
@@ -100,4 +110,6 @@ const extraAwgAr = <String, String>{
   'awgDesc': 'تعمية حزم WireGuard. اتركها فارغة لاستخدام WireGuard العادي.',
   'awgPrivateKey': 'المفتاح الخاص',
   'awgQrPart': 'تمت قراءة الجزء {have} من {total} من رمز QR الخاص بـ Amnezia. اعرض الجزء التالي.',
+  'warpAmnezia': 'AmneziaWG',
+  'warpAmneziaDesc': 'الاتصال بـ WARP عبر AmneziaWG: تُرسل حزم وهمية قبل مصافحة WireGuard، للشبكات التي تحجب WARP. لطرق WireGuard العادية فقط. اتركه معطلاً إذا كان WARP يتصل بدونه.',
 };

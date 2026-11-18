@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kumo/core/awg.dart' show amneziaInCore;
 import 'package:kumo/core/proxy_config.dart';
 import 'package:kumo/core/singbox_config.dart';
 import 'package:kumo/core/vpn_channel.dart';
@@ -96,6 +97,29 @@ void main() {
       expect(c.canXray, isTrue);
       expect(c.outbound['type'], 'wireguard');
       expect((c.outbound['peers'] as List).first['reserved'], [219, 200, 184]);
+    });
+
+    test('with AmneziaWG on, a plain way gets junk packets and is an endpoint of AmneziaWG', () {
+      final was = amneziaInCore;
+      amneziaInCore = true;
+      addTearDown(() => amneziaInCore = was);
+      final link = warpLink(_account, plain, p.endpoints.first, 0, amnezia: true);
+      final c = parseLink(link)!;
+      expect(c.protocol, 'amneziawg');
+      expect(c.outbound['jc'], 4);
+      expect(c.outbound['jmin'], 40);
+      expect(c.outbound['jmax'], 70);
+      // WARP knows no padding or header setting: only the junk ones are sent.
+      for (final k in ['s1', 's2', 'h1', 'h2', 'i1']) {
+        expect(c.outbound.containsKey(k), isFalse);
+      }
+      expect(c.outbound['address'], isNotEmpty);
+    });
+
+    test('with AmneziaWG off, or with noise, the link has no junk settings', () {
+      expect(warpLink(_account, plain, p.endpoints.first, 0), isNot(contains('jc=')));
+      expect(warpLink(_account, noise, p.endpoints.first, 0, amnezia: true), isNot(contains('jc=')));
+      expect(parseLink(warpLink(_account, noise, p.endpoints.first, 0, amnezia: true))!.label, 'wireguard + noise');
     });
 
     test('the port index wraps round the ports of the endpoint', () {
