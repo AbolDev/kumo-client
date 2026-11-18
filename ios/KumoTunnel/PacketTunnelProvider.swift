@@ -10,6 +10,7 @@ import NetworkExtension
 class PacketTunnelProvider: NEPacketTunnelProvider {
     private(set) var commandServer: LibboxCommandServer?
     private lazy var platform = KumoPlatformInterface(self)
+    private let traffic = TrafficMonitor()
 
     /// The folder the app and the extension share (an App Group): the configuration and what the core writes.
     static func sharedDirectory() -> URL {
@@ -62,6 +63,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         do {
             try server.start()
             try server.startOrReloadService(config, options: LibboxOverrideOptions())
+            traffic.start()
         } catch {
             stopCore()
             throw KumoTunnelError("start of the core: \(error.localizedDescription)")
@@ -76,6 +78,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     func stopCore() {
         guard let server = commandServer else { return }
         commandServer = nil
+        traffic.stop()
         try? server.closeService()
         platform.reset()
         server.close()
@@ -84,6 +87,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     func writeMessage(_ message: String) {
         // 2 is an error in the levels of sing-box.
         commandServer?.writeMessage(2, message: message)
+    }
+
+    /// The app asks (every second while it shows the speeds): the last status of the core, as text.
+    override func handleAppMessage(_ messageData: Data) async -> Data? {
+        traffic.json()
     }
 
     // The phone sleeps and wakes: the core is told, to save the battery and to find the network again.

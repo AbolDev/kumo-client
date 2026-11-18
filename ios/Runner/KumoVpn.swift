@@ -24,7 +24,7 @@ final class KumoVpn: NSObject, FlutterStreamHandler {
         let control = FlutterMethodChannel(name: "kumo/control", binaryMessenger: messenger)
         control.setMethodCallHandler { [weak self] call, result in self?.handle(call, result) }
         FlutterEventChannel(name: "kumo/status", binaryMessenger: messenger).setStreamHandler(self)
-        FlutterEventChannel(name: "kumo/traffic", binaryMessenger: messenger).setStreamHandler(IdleStream())
+        FlutterEventChannel(name: "kumo/traffic", binaryMessenger: messenger).setStreamHandler(TrafficStream(manager: { [weak self] in self?.manager }))
     }
 
     // MARK: the channel
@@ -218,8 +218,33 @@ final class KumoVpn: NSObject, FlutterStreamHandler {
     }
 }
 
-/// A stream that never gives anything (the speeds of the tunnel are not sent to the app yet).
-private final class IdleStream: NSObject, FlutterStreamHandler {
-    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? { nil }
-    func onCancel(withArguments arguments: Any?) -> FlutterError? { nil }
+/// The speeds and totals of the tunnel for the app (`kumo/traffic`: up, down, up total, down total, in bytes). Every second, while
+/// the tunnel is up, the extension is asked for its last status (see `handleAppMessage` of PacketTunnelProvider).
+private final class TrafficStream: NSObject, FlutterStreamHandler {
+    private let manager: () -> NETunnelProviderManager?
+    private var timer: Timer?
+
+    init(manager: @escaping () -> NETunnelProviderManager?) {
+        self.manager = manager
+    }
+
+    func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            guard let session = self?.manager()?.connection as? NETunnelProviderSession, session.status == .connected else { return }
+            try? session.sendProviderMessage(Data("traffic".utf8)) { reply in
+                guard let reply,
+                      let object = try? JSONSerialization.jsonObject(with: reply) as? [String: Any] else { return }
+                func number(_ key: String) -> Int { (object[key] as? NSNumber)?.intValue ?? 0 }
+                events([number("up"), number("down"), number("upTotal"), number("downTotal")])
+            }
+        }
+        return nil
+    }
+
+    func onCancel(withArguments arguments: Any?) -> FlutterError? {
+        timer?.invalidate()
+        timer = nil
+        return nil
+    }
 }

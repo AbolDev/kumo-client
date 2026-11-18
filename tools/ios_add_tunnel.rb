@@ -14,8 +14,15 @@ DEPLOYMENT = '15.5'.freeze
 project_path = File.expand_path('../ios/Runner.xcodeproj', __dir__)
 project = Xcodeproj::Project.open(project_path)
 
-if project.targets.any? { |t| t.name == 'KumoTunnel' }
-  puts 'KumoTunnel is already in the project'
+SOURCES = %w[PacketTunnelProvider.swift KumoPlatformInterface.swift TrafficMonitor.swift].freeze
+
+if (existing = project.targets.find { |t| t.name == 'KumoTunnel' })
+  # The target is there: only the sources it lacks are added (a file written since).
+  group = project.main_group['KumoTunnel']
+  added = SOURCES.reject { |f| group.files.any? { |x| x.path == f } }.map { |f| group.new_file(f) }
+  existing.add_file_references(added) unless added.empty?
+  project.save unless added.empty?
+  puts added.empty? ? 'KumoTunnel is already in the project' : "Added to KumoTunnel: #{added.map(&:path).join(', ')}"
   exit 0
 end
 
@@ -36,7 +43,7 @@ runner.add_system_framework('NetworkExtension')
 # ---- the extension
 ext = project.new_target(:app_extension, 'KumoTunnel', :ios, DEPLOYMENT)
 group = project.main_group.new_group('KumoTunnel', 'KumoTunnel')
-sources = %w[PacketTunnelProvider.swift KumoPlatformInterface.swift].map { |f| group.new_file(f) }
+sources = SOURCES.map { |f| group.new_file(f) }
 group.new_file('Info.plist')
 group.new_file('KumoTunnel.entitlements')
 ext.add_file_references(sources)
