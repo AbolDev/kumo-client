@@ -40,9 +40,35 @@ done
 export PATH="$shim:$BIN:$PATH"
 mkdir -p "$(dirname "$out")"
 abs="$(cd "$(dirname "$out")" && pwd)/$(basename "$out")"
+
+# OpenSSL 3.0 (the long-term version) built for the phone's CPU, as static libraries, from a pinned commit of its tag: the build of
+# picoquic and the Rust crate are given it through the variables they read. (The project's own "vendored" feature builds one that
+# picoquic's CMake cannot find.)
+OPENSSL_COMMIT="${OPENSSL_COMMIT:-a279090b9cd6b682a5a178410765a63e619fa2d9}"   # openssl-3.0.22
+case "$target" in
+  aarch64-linux-android) config=android-arm64 ;;
+  armv7-linux-androideabi) config=android-arm ;;
+  x86_64-linux-android) config=android-x86_64 ;;
+esac
+work="$(mktemp -d)"
+git clone --filter=blob:none --no-checkout https://github.com/openssl/openssl.git "$work/openssl"
+git -C "$work/openssl" checkout --quiet "$OPENSSL_COMMIT"
+prefix="$work/openssl-$abi"
+(
+  cd "$work/openssl"
+  export ANDROID_NDK_ROOT="$NDK"
+  ./Configure "$config" -D__ANDROID_API__="$api" no-shared no-tests no-apps --prefix="$prefix" --openssldir="$prefix/ssl"
+  make -j"$(nproc)" build_libs
+  make install_dev
+)
+libdir="$prefix/lib"
+[ -f "$libdir/libcrypto.a" ] || libdir="$prefix/lib64"
+export OPENSSL_ROOT_DIR="$prefix" OPENSSL_INCLUDE_DIR="$prefix/include"
+export OPENSSL_SSL_LIBRARY="$libdir/libssl.a" OPENSSL_CRYPTO_LIBRARY="$libdir/libcrypto.a"
+export OPENSSL_DIR="$prefix" OPENSSL_LIB_DIR="$libdir" OPENSSL_STATIC=1
+
 cd "$src"
-# OpenSSL is built from source for the phone (the project's feature for it); picoquic by its own script.
-cargo build -p slipstream-client --release --target "$target" --features openssl-vendored
+cargo build -p slipstream-client --release --target "$target"
 cp "target/$target/release/slipstream-client" "$abs"
 "$BIN/llvm-strip" "$abs" || true
 chmod +x "$abs"
