@@ -119,7 +119,8 @@ jobs:
           if [ "$net_before" != "$net_after" ]; then
             go mod edit -replace "golang.org/x/net=golang.org/x/net@$net_before"
           fi
-          go build ./experimental/kumoxray
+          # (the modules Xray needs have no lines in go.sum yet: -mod=mod adds them, and moves no version)
+          GOFLAGS=-mod=mod go build ./experimental/kumoxray
           # the same bind, with the package of Xray after libbox
           perl -pi -e 's#args = append\(args, "\./experimental/libbox"\)#args = append(args, "./experimental/libbox", "./experimental/kumoxray")#' cmd/internal/build_libbox/main.go
           grep -n "kumoxray" cmd/internal/build_libbox/main.go
