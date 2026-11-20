@@ -99,7 +99,7 @@ Map<String, dynamic>? _xrayStream(
       final extra = s('extra');
       if (extra != null) {
         try {
-          xhttp['extra'] = jsonDecode(extra);
+          xhttp['extra'] = wholeNumbers(jsonDecode(extra));
         } catch (_) {
           // an unreadable "extra" block only loses optional tuning
         }
@@ -136,7 +136,8 @@ Map<String, dynamic>? _xrayStream(
   if (fm != null) {
     try {
       final extra = jsonDecode(fm);
-      if (extra is Map<String, dynamic>) finalmask.addAll(extra);
+      final mask = wholeNumbers(extra);
+      if (mask is Map<String, dynamic>) finalmask.addAll(mask);
     } catch (_) {}
   }
   if (finalmask.isNotEmpty) stream['finalmask'] = finalmask;
@@ -198,6 +199,16 @@ Map<String, dynamic>? _xrayStream(
     stream['security'] = 'none';
   }
   return stream;
+}
+
+/// [v] (JSON a link carried) with every number that has no fraction written as an integer: Dart reads `20` or `20.0` of a
+/// link as a double and writes it back as `20.0`, which Xray refuses where it wants an integer (xmux.hKeepAlivePeriod of XHTTP:
+/// "cannot unmarshal number 20.0 into ... of type int64"). A number with a fraction stays as it is.
+Object? wholeNumbers(Object? v) {
+  if (v is Map) return {for (final e in v.entries) '${e.key}': wholeNumbers(e.value)};
+  if (v is List) return [for (final e in v) wholeNumbers(e)];
+  if (v is double && v.isFinite && v == v.truncateToDouble() && v.abs() < 9e15) return v.toInt();
+  return v;
 }
 
 /// Some exports write every number and flag as text ("250", "false"); Xray wants them as what they are.

@@ -2850,7 +2850,7 @@ class AppState extends ChangeNotifier {
       final viaXray = chosen.length == 1 && chosen.first.useXray(net.core);
       // (Or AmneziaWG servers in a group: kumo-awg takes the port and the ones after it.)
       final awgGroup = _awgGroupOf(chosen);
-      final xrayPort = viaXray || awgGroup.isNotEmpty ? _helperPort(awgGroup.length) : null;
+      final xrayPort = viaXray || awgGroup.isNotEmpty ? await _helperPort(awgGroup.length) : null;
       final parts = _standbyParts(chosen, routing, sets, xrayPort, resolved: await _resolveAhead(chosen));
       // Something changed while this was being prepared.
       if (!net.keepProxy || !_idle || _preparing) return;
@@ -3228,8 +3228,8 @@ class AppState extends ChangeNotifier {
           awgPort: awg);
       final proxyPort =
           isDesktop && !net.tun ? net.proxyPort : null;
-      final xrayPortNew = viaXray ? _helperPort(0) : null;
-      final awgPortNew = awgGroup.isEmpty ? null : _helperPort(awgGroup.length);
+      final xrayPortNew = viaXray ? await _helperPort(0) : null;
+      final awgPortNew = awgGroup.isEmpty ? null : await _helperPort(awgGroup.length);
       // The phone keeps the proxy alone after the tunnel stops; the desktop does it from here.
       final standby = !isDesktop && net.keepProxy
           ? _standbyParts(chosen, routing, sets, viaXray ? xrayPortNew : null, resolved: resolved)
@@ -3298,45 +3298,39 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Whether the system forbids listening on [port]: Windows keeps ranges of ports for Hyper-V, WSL and Docker, and binding one
-  /// fails with "forbidden by its access permissions" (WSAEACCES, 10013), so the core could never start on it. A port that another
-  /// program holds is another matter, and is left to the core's own error (the old core of the last connection may still be
-  /// letting go of it).
-  Future<bool> _portForbidden(int port) async {
+  /// Why [port] cannot be listened on at 127.0.0.1, or null when it can: `forbidden` is a port the system keeps for itself (Windows
+  /// keeps ranges for Hyper-V, WSL and Docker: "forbidden by its access permissions", 10013; Android and Linux answer EACCES or
+  /// EPERM), `busy` is one that another program, or a core left over from the last connection, holds.
+  Future<String?> _portProblem(int port) async {
     try {
       final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
       await s.close();
-      return false;
+      return null;
     } on SocketException catch (e) {
-      return Platform.isWindows && e.osError?.errorCode == 10013;
+      final code = e.osError?.errorCode;
+      return code == 10013 || code == 13 || code == 1 ? 'forbidden' : 'busy';
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
-  /// The proxy port of the core is moved out of a range the system keeps for itself, once (the new port is saved, and the user
-  /// is told), so that a connection never fails on it.
+  /// The proxy port of the core is moved to a free one when the system forbids it, or (on a computer) another program holds it, once:
+  /// the new port is saved and the user is told, so that a connection never fails on a port again and again. (On the phone a busy
+  /// port may be the proxy kept running by Kumo itself, so only a forbidden one is moved there.)
   Future<void> _ensureProxyPort() async {
-    if (!Platform.isWindows || !await _portForbidden(net.proxyPort)) return;
+    final problem = await _portProblem(net.proxyPort);
+    if (problem == null || (problem == 'busy' && !isDesktop)) return;
     final old = net.proxyPort;
     final random = Random();
     for (var i = 0; i < 60; i++) {
       final port = 20000 + random.nextInt(28000);
-      if (port == net.lanPort || await _portForbidden(port)) continue;
-      // free as well: a port a program holds is no better
-      try {
-        final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
-        await s.close();
-      } catch (_) {
-        continue;
-      }
+      if (port == net.lanPort || await _portProblem(port) != null) continue;
       net.proxyPort = port;
       _saveSettings();
-      _notice('proxyPortMoved', {'old': old, 'port': port});
+      _notice(problem == 'forbidden' ? 'proxyPortMoved' : 'proxyPortBusy', {'old': old, 'port': port});
       return;
     }
   }
-
   Future<int> _freePort() async {
     final s = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
     final port = s.port;
@@ -3350,7 +3344,21 @@ class AppState extends ChangeNotifier {
       chosen.length > 1 ? [for (final c in chosen) if (c.viaAwgHelper) c] : const [];
 
   /// A port for a helper that takes [count] ports (one for [count] 0 and 1).
-  int _helperPort(int count) => 30000 + Random().nextInt(30000 - (count < 1 ? 1 : count));
+  Future<int> _helperPort(int count) async {
+    final n = count < 1 ? 1 : count;
+    final random = Random();
+    // A port that can be listened on right now, and not one drawn blindly: a random one was often held by another program or kept by
+    // the system (Windows reserves ranges), and the helper then failed to start on it.
+    for (var i = 0; i < 40; i++) {
+      final base = 30000 + random.nextInt(30000 - n);
+      var free = true;
+      for (var k = 0; k < n && free; k++) {
+        free = await _portProblem(base + k) == null;
+      }
+      if (free) return base;
+    }
+    return 30000 + random.nextInt(30000 - n);
+  }
 
   XrayAuth _newXrayAuth() => (user: 'k${_randomSecret().substring(0, 8)}', pass: _randomSecret());
 

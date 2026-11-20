@@ -10,6 +10,7 @@ import 'probe_fetch.dart' show probeFetch;
 import 'proxy_holder.dart';
 import 'socks_get.dart' show socksSpeed;
 import 'system_proxy.dart';
+import 'usage/crash_hub.dart' show coreNotRunnableMark;
 import 'vpn_channel.dart' show AppEntry, Traffic, VpnState, VpnStatus;
 import 'win_autostart.dart';
 import 'win_dpapi.dart';
@@ -25,6 +26,27 @@ bool isTunAdapterFailure(String text) =>
 
 /// The text without the colour codes a core writes for a terminal (the "FATAL" of sing-box is red).
 String stripAnsi(String text) => text.replaceAll(RegExp(r'\x1B\[[0-9;]*[A-Za-z]'), '');
+
+/// What to tell when the core did not answer on its control port: what it wrote, and when it wrote nothing,
+/// whether it had stopped (with its exit code) or was still running and silent for [waited].
+String coreStartMessage(String output,
+    {int? exitCode, required bool exited, required int apiPort, required Duration waited}) {
+  final text = output.trim();
+  if (text.isNotEmpty) return text;
+  if (exited) return 'sing-box did not start: it stopped at once with no output (exit code ${exitCode ?? '?'})';
+  return 'sing-box did not start: it was running but its control port $apiPort did not answer in ${waited.inSeconds} s '
+      '(a firewall or security program may hold it back)';
+}
+
+/// What to tell when the system refused to run the core program. On Linux the packages give `kumo-core` to
+/// the group "kumo" only (it holds the network capability), so a user outside that group gets "Permission
+/// denied"; the way out is told instead of the bare error.
+String coreSpawnProblem(ProcessException e, String exe) {
+  final denied = e.errorCode == 13 || e.message.toLowerCase().contains('permission denied');
+  if (!denied) return '${e.message} (${e.executable})';
+  return '$coreNotRunnableMark ($exe: permission denied). The package gives it to the group "kumo": '
+      'run  sudo usermod -aG kumo \$USER  and sign out and in again.';
+}
 
 /// The VPN on the desktop: the same sing-box core as on Android, run as a child process
 /// (kumo-core, with its TUN device made by wintun.dll on Windows). Xray (kumo-xray) is started
@@ -512,12 +534,18 @@ rm -rf "$T"
           throw StateError('the password was not given: ${output.toString().trim()}');
         }
       } else {
-        core = _core = await _spawn('kumo-core', ['run', '-c', file], output, keep: true);
+        try {
+          core = _core = await _spawn('kumo-core', ['run', '-c', file], output, keep: true);
+        } on ProcessException catch (e) {
+          throw StateError(coreSpawnProblem(e, _exePath('kumo-core')));
+        }
       }
       var exited = false;
+      int? exitedWith;
       if (core != null) {
         core.exitCode.then((code) {
           exited = true;
+          exitedWith = code;
           if (!stale() && identical(_core, core)) {
             var text = output.toString().trim();
             if (_elevated && File(_coreLog).existsSync()) {
@@ -539,7 +567,8 @@ rm -rf "$T"
         if (_elevated && File(_coreLog).existsSync()) {
           text = File(_coreLog).readAsStringSync().trim();
         }
-        throw StateError(text.isEmpty ? 'sing-box did not start' : text);
+        throw StateError(coreStartMessage(text,
+            exitCode: exitedWith, exited: exited, apiPort: api, waited: limit));
       }
       if (held != null) {
         _heldRoutes = held;
@@ -735,8 +764,10 @@ rm -rf "$T"
       await _writeConfig(file, held == null ? configJson : jsonEncode(cfg));
       final core = _sbCore = await _spawn('kumo-core', ['run', '-c', file], output, keep: true);
       var exited = false;
-      core.exitCode.then((_) {
+      int? exitedWith;
+      core.exitCode.then((code) {
         exited = true;
+        exitedWith = code;
         if (identical(_sbCore, core)) {
           _unrouteStandby();
           _sbCore = null;
@@ -757,7 +788,8 @@ rm -rf "$T"
       if (stale()) return false;
       if (!up) {
         final text = output.toString().trim();
-        throw StateError(text.isEmpty ? 'sing-box did not start' : text);
+        throw StateError(coreStartMessage(text,
+            exitCode: exitedWith, exited: exited, apiPort: apiPort, waited: const Duration(seconds: 15)));
       }
       _sbApi = apiPort;
       _sbSecret = apiSecret;

@@ -294,7 +294,10 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
         readStandby(intent)
         val idle = VpnBridge.status == VpnBridge.STOPPED || VpnBridge.status == VpnBridge.ERROR
         // Every startForegroundService() must be answered by startForeground().
-        runCatching { if (idle) showProxyForeground() else showForeground() }.onFailure { Log.e(TAG, "startForeground failed", it) }
+        runCatching { if (idle) showProxyForeground() else showForeground() }.onFailure {
+            Log.e(TAG, "startForeground failed", it)
+            bareForeground()
+        }
         if (!idle || standbyPath == null) {
             if (idle) stopForegroundAndSelf()
             return
@@ -434,7 +437,37 @@ class BoxVpnService : VpnService(), PlatformInterface, CommandServerHandler {
 
     /** [showForeground] for a place that must not throw: a refusal is logged (the next start request answers again). */
     private fun showForegroundSafely() {
-        runCatching { showForeground() }.onFailure { Log.e(TAG, "startForeground failed", it) }
+        runCatching { showForeground() }.onFailure {
+            Log.e(TAG, "startForeground failed", it)
+            bareForeground()
+        }
+    }
+
+    /**
+     * The last answer to a startForegroundService(): when the full notification could not be built or shown (a resource, a
+     * PendingIntent, the channel, a refused type), a bare one with nothing but the icon and the name is tried, so that the
+     * request is answered whatever went wrong before ("did not then call Service.startForeground()" ends the whole app).
+     */
+    private fun bareForeground() {
+        runCatching {
+            val nm = getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                runCatching {
+                    nm.createNotificationChannel(
+                        NotificationChannel(CHANNEL_ID, "Kumo", NotificationManager.IMPORTANCE_LOW),
+                    )
+                }
+            }
+            val bare = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setContentTitle("Kumo")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setOngoing(true)
+                .build()
+            enterForeground(
+                bare,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE, ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED,
+            )
+        }.onFailure { Log.e(TAG, "the bare startForeground failed too", it) }
     }
 
     // ---- notification ----------------------------------------------------------

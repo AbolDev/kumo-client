@@ -61,8 +61,12 @@ bool isNetworkErrorText(String text) {
 bool isExpectedCoreFailure(String reason) {
   final r = reason.trim();
   const kinds = ['ovpn:auth', 'ovpn:handshake', 'ovpn:timeout', 'ovpn:permission'];
-  return kinds.any((k) => r == k || r.startsWith('$k|'));
+  return kinds.any((k) => r == k || r.startsWith('$k|')) || r.contains(coreNotRunnableMark);
 }
+
+/// The words with which the desktop app says that the system refused to run the VPN core for this user
+/// (Linux: not in the group "kumo" that the package gives the core to). Told to the user, not a crash.
+const coreNotRunnableMark = 'The VPN core cannot be run by this user';
 
 /// The name of what was thrown. A release build renames the classes ("yq"), so the ones worth telling
 /// apart are named here by what they are; the rest keep the name the build gave them.

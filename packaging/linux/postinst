@@ -7,9 +7,13 @@ if command -v setcap >/dev/null 2>&1; then
   chgrp kumo /opt/kumo/kumo-core >/dev/null 2>&1 || true
   chmod 750 /opt/kumo/kumo-core >/dev/null 2>&1 || true
   setcap cap_net_admin,cap_net_bind_service,cap_net_raw+ep /opt/kumo/kumo-core || true
-  # the person who installed it (with sudo) is in the group from the next sign-in
-  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
-    usermod -aG kumo "$SUDO_USER" >/dev/null 2>&1 || true
+  # the person who installed it (with sudo, pkexec, or the one signed in at the console) is in the
+  # group from the next sign-in; anybody else is told by the app how to join it
+  who="${SUDO_USER:-}"
+  if [ -z "$who" ] && [ -n "${PKEXEC_UID:-}" ]; then who="$(getent passwd "$PKEXEC_UID" | cut -d: -f1)"; fi
+  if [ -z "$who" ]; then who="$(logname 2>/dev/null || true)"; fi
+  if [ -n "$who" ] && [ "$who" != root ]; then
+    usermod -aG kumo "$who" >/dev/null 2>&1 || true
   fi
 fi
 exit 0

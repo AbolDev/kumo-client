@@ -251,13 +251,28 @@ List<int>? _reserved(String? v) {
   return parts.cast<int>();
 }
 
+/// A WireGuard key as the cores want it: standard base64, padded, of 32 bytes. Empty when [raw] is no such key.
+String _wireguardKey(String raw) {
+  var s = raw.trim().replaceAll(RegExp(r'\s'), '+').replaceAll('-', '+').replaceAll('_', '/');
+  s = s.replaceAll(RegExp(r'=+$'), '');
+  if (s.isEmpty || !RegExp(r'^[A-Za-z0-9+/]+$').hasMatch(s)) return '';
+  try {
+    final bytes = base64.decode(s.padRight(s.length + (4 - s.length % 4) % 4, '='));
+    return bytes.length == 32 ? base64.encode(bytes) : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 /// `wireguard://PRIVATE_KEY@host:port?publickey=..&address=10.0.0.2/32,fd00::2/128&mtu=1280&reserved=1,2,3#name`.
 /// sing-box runs it as an endpoint; Xray as a WireGuard outbound.
 ProxyConfig? _wireguard(String link) {
   final u = Uri.parse(link.replaceFirst(RegExp(r'^(wg|awg|amneziawg)://'), 'wireguard://'));
   final q = u.queryParameters;
-  final priv = (q['privatekey'] ?? q['private_key'] ?? _decode(u.userInfo)).trim();
-  final pub = (q['publickey'] ?? q['public_key'] ?? q['peer_public_key'] ?? '').trim();
+  // The keys are written to the cores as standard base64 of 32 bytes: a link may carry them URL-safe, without the padding, or with a
+  // `+` that the query turned into a space (a core then stops with "illegal base64 data"). One that is no key refuses the link.
+  final priv = _wireguardKey(q['privatekey'] ?? q['private_key'] ?? _decode(u.userInfo));
+  final pub = _wireguardKey(q['publickey'] ?? q['public_key'] ?? q['peer_public_key'] ?? '');
   final addresses = (q['address'] ?? q['ip'] ?? '')
       .split(',')
       .where((e) => e.trim().isNotEmpty)
@@ -272,7 +287,9 @@ ProxyConfig? _wireguard(String link) {
       .toList();
   final reserved = _reserved(q['reserved']);
   final mtu = int.tryParse(q['mtu'] ?? '');
-  final psk = (q['presharedkey'] ?? q['psk'] ?? '').trim();
+  final pskText = (q['presharedkey'] ?? q['psk'] ?? '').trim();
+  final psk = pskText.isEmpty ? '' : _wireguardKey(pskText);
+  if (pskText.isNotEmpty && psk.isEmpty) return null;
   final keepAlive = int.tryParse(q['keepalive'] ?? q['persistentkeepalive'] ?? '');
   // AmneziaWG: the settings of its obfuscation beside the ones of WireGuard (a setting that is not valid refuses the link).
   final awg = awgOptions(q);

@@ -5,8 +5,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show FlutterError;
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:kumo/core/desktop_vpn.dart' show isTunAdapterFailure, stripAnsi;
+import 'package:kumo/core/desktop_vpn.dart' show coreSpawnProblem, coreStartMessage, isTunAdapterFailure, stripAnsi;
 import 'package:kumo/core/proxy_config.dart';
+import 'package:kumo/core/singbox_config.dart';
 import 'package:kumo/core/usage/crash_hub.dart';
 
 const _pin = 'vless://11111111-1111-1111-1111-111111111111@v.example.com:443'
@@ -153,6 +154,81 @@ void main() {
       expect(isTunAdapterFailure('start inbound/mixed[mixed-in]: listen tcp: bind: address already in use'), isFalse);
       expect(isTunAdapterFailure('create service: initialize outbound[3]: invalid public_key'), isFalse);
       expect(isTunAdapterFailure(''), isFalse);
+    });
+  });
+
+  group('the crash reports of 18 to 20 November', () {
+    test('an XHTTP link with 20.0 in its "extra" gives Xray 20, not 20.0 (reports 125, 126)', () {
+      final extra = Uri.encodeComponent('{"xmux":{"hKeepAlivePeriod":20.0,"maxConcurrency":"16-32"},"scMaxEachPostBytes":1000000,"noGRPCHeader":false}');
+      final server = parseLinks([
+        'vless://11111111-1111-1111-1111-111111111111@x.example.com:443'
+            '?security=tls&sni=x.example.com&type=xhttp&path=%2Fx&extra=$extra#x',
+      ]).single;
+      final text = buildXrayConfig(server, 31000);
+      expect(RegExp(r'"hKeepAlivePeriod":\s*20(?![.\d])').hasMatch(text), isTrue, reason: text);
+      expect(text.contains('20.0'), isFalse);
+      // The other values of the block stay as they were.
+      final out = ((jsonDecode(text) as Map)['outbounds'] as List).cast<Map>().firstWhere((o) => o['streamSettings'] != null);
+      final xhttp = (out['streamSettings'] as Map)['xhttpSettings'] as Map;
+      expect((xhttp['extra'] as Map)['xmux']['maxConcurrency'], '16-32');
+      expect((xhttp['extra'] as Map)['noGRPCHeader'], false);
+    });
+
+    test('only a number without a fraction is made an integer', () {
+      expect(wholeNumbers({'a': 20.0, 'b': 0.5, 'c': [1.0, 2.5, 'x'], 'd': {'e': 3.0}}),
+          {'a': 20, 'b': 0.5, 'c': [1, 2.5, 'x'], 'd': {'e': 3}});
+      expect(wholeNumbers(7), 7);
+      expect(wholeNumbers('20.0'), '20.0');
+    });
+
+    test('a WireGuard key written URL-safe, without padding or with its "+" turned into a space is accepted (reports 143-145)', () {
+      final bytes = [0xfb, 0xff, 0xbf, ...List<int>.generate(29, (i) => 255 - i * 7)];
+      final std = base64.encode(bytes);
+      expect(std, contains('+'));
+      final urlSafe = std.replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+      final unpadded = std.replaceAll('=', '');
+      final spaced = std.replaceAll('+', ' ');
+      for (final key in [std, urlSafe, unpadded, spaced]) {
+        final link = 'wireguard://x@1.2.3.4:51820?privatekey=${key.replaceAll(' ', '+')}&publickey=${Uri.encodeComponent(key)}&address=10.0.0.2';
+        final c = parseLink(link);
+        expect(c, isNotNull, reason: key);
+        expect(c!.outbound['private_key'], std, reason: key);
+        expect(((c.outbound['peers'] as List).single as Map)['public_key'], std, reason: key);
+        final secret = ((c.xrayOutbound!['settings']) as Map)['secretKey'];
+        expect(secret, std, reason: key);
+      }
+    });
+
+    test('a WireGuard key that is no 32 bytes refuses the link instead of stopping a core', () {
+      final good = base64.encode(List<int>.filled(32, 7));
+      final short = base64.encode(List<int>.filled(31, 7));
+      expect(parseLink('wireguard://x@1.2.3.4:51820?privatekey=${Uri.encodeComponent(short)}&publickey=${Uri.encodeComponent(good)}&address=10.0.0.2'), isNull);
+      expect(parseLink('wireguard://x@1.2.3.4:51820?privatekey=${Uri.encodeComponent(good)}&publickey=not%20a%20key!&address=10.0.0.2'), isNull);
+      expect(parseLink('wireguard://x@1.2.3.4:51820?privatekey=${Uri.encodeComponent(good)}&publickey=${Uri.encodeComponent(good)}&presharedkey=zz&address=10.0.0.2'), isNull);
+    });
+
+    test('a core that did not answer says what was seen (report 109)', () {
+      const wait = Duration(seconds: 25);
+      expect(coreStartMessage('FATAL start service: boom', exited: true, exitCode: 1, apiPort: 9090, waited: wait), 'FATAL start service: boom');
+      final stopped = coreStartMessage('', exited: true, exitCode: -1073741819, apiPort: 9090, waited: wait);
+      expect(stopped, contains('exit code -1073741819'));
+      final silent = coreStartMessage('  ', exited: false, apiPort: 9090, waited: wait);
+      expect(silent, contains('9090'));
+      expect(silent, contains('25 s'));
+      expect(silent, isNot(equals('sing-box did not start')));
+    });
+
+    test('a core the user may not run is told in words and is no crash report (reports 107, 108, 129)', () {
+      final denied = coreSpawnProblem(
+          const ProcessException('/opt/kumo/kumo-core', ['run'], 'Permission denied', 13), '/opt/kumo/kumo-core');
+      expect(denied, contains('usermod -aG kumo'));
+      expect(denied, contains('/opt/kumo/kumo-core'));
+      expect(isExpectedCoreFailure(denied), isTrue);
+      // Another reason to fail keeps its own words, and is still a report.
+      final missing = coreSpawnProblem(
+          const ProcessException('/opt/kumo/kumo-core', ['run'], 'No such file or directory', 2), '/opt/kumo/kumo-core');
+      expect(missing, contains('No such file'));
+      expect(isExpectedCoreFailure(missing), isFalse);
     });
   });
 }
