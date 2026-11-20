@@ -6,6 +6,7 @@ import '../widgets/kumo_mark.dart';
 import '../core/net_options.dart' show fingerprints;
 import '../core/proxy_config.dart' show parseLink;
 import '../core/usage_stats.dart' show formatBytes;
+import '../core/warp/warp_register.dart' show WarpAccount, parseWarpAccount, warpLicenseOf;
 import '../core/warp/warp_store.dart';
 import '../l10n/extra.dart';
 import '../state/app_state.dart';
@@ -69,6 +70,125 @@ class _WarpPageState extends State<WarpPage> {
       ),
     );
     if (ok == true) await warp.remove();
+  }
+
+  /// Asks for a WARP+ license key; WARP is bound to it when the key has the shape of one.
+  Future<void> _askLicense() async {
+    final input = TextEditingController(text: warp.license);
+    String? problem;
+    final key = await showDialog<String>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setState) => AlertDialog(
+          title: Text(tr(c, 'warpLicense')),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(tr(c, 'warpLicenseHelp'), style: Theme.of(c).textTheme.bodySmall),
+            const SizedBox(height: 12),
+            TextField(
+              controller: input,
+              autofocus: true,
+              textDirection: TextDirection.ltr,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                labelText: tr(c, 'warpLicenseKey'),
+                hintText: 'xxxxxxxx-xxxxxxxx-xxxxxxxx',
+                errorText: problem == null ? null : tr(c, problem!),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(c), child: Text(MaterialLocalizations.of(c).cancelButtonLabel)),
+            TextButton(
+              onPressed: () {
+                final ok = warpLicenseOf(input.text);
+                if (ok == null) {
+                  setState(() => problem = 'warpLicenseBad');
+                } else {
+                  Navigator.pop(c, ok);
+                }
+              },
+              child: Text(tr(c, 'warpLicenseApply')),
+            ),
+          ],
+        ),
+      ),
+    );
+    input.dispose();
+    if (key != null) await warp.setLicense(key);
+  }
+
+  /// Asks for the keys of an account the user has (a WireGuard profile, or JSON) and uses them in place of one made here.
+  Future<void> _askImport() async {
+    final input = TextEditingController();
+    final reserved = TextEditingController();
+    String? problem;
+    final keys = await showDialog<WarpAccount>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setState) => AlertDialog(
+          title: Text(tr(c, 'warpImport')),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(tr(c, 'warpImportHelp'), style: Theme.of(c).textTheme.bodySmall),
+              const SizedBox(height: 12),
+              TextField(
+                controller: input,
+                autofocus: true,
+                minLines: 5,
+                maxLines: 8,
+                textDirection: TextDirection.ltr,
+                autocorrect: false,
+                enableSuggestions: false,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                decoration: InputDecoration(
+                  labelText: tr(c, 'warpImportText'),
+                  hintText: 'PrivateKey = …\nAddress = 172.16.0.2/32, 2606:4700:…/128',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: reserved,
+                textDirection: TextDirection.ltr,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: InputDecoration(
+                  labelText: tr(c, 'warpImportReservedLabel'),
+                  hintText: '12, 34, 56',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+              if (problem != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(tr(c, problem!), style: TextStyle(color: Theme.of(c).colorScheme.error)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(c), child: Text(MaterialLocalizations.of(c).cancelButtonLabel)),
+            TextButton(
+              onPressed: () {
+                final r = parseWarpAccount(input.text, reserved: reserved.text);
+                if (r.account == null) {
+                  setState(() => problem = r.problem);
+                } else {
+                  Navigator.pop(c, r.account);
+                }
+              },
+              child: Text(tr(c, 'warpImportUse')),
+            ),
+          ],
+        ),
+      ),
+    );
+    input.dispose();
+    reserved.dispose();
+    if (keys != null) await warp.importAccount(keys);
   }
 
   /// The uTLS fingerprint of the MASQUE ways over HTTP/2 (some networks cut one name of client and pass another).
@@ -372,6 +492,23 @@ class _WarpPageState extends State<WarpPage> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(warp.error!, style: TextStyle(color: scheme.error)),
                 ),
+              // An account of the user's own: a WARP+ license key, or the keys of an account made elsewhere.
+              _section(context, tr(context, 'warpSecOwn'), [
+                ListTile(
+                  leading: const Icon(Icons.workspace_premium_outlined),
+                  title: Text(tr(context, 'warpLicense')),
+                  subtitle: Text(warp.license.isEmpty
+                      ? tr(context, 'warpLicenseDesc')
+                      : tr(context, 'warpLicenseSet', {'key': '••••-${warp.license.substring(warp.license.length - 4)}'})),
+                  onTap: warp.busy || warp.scanning ? null : _askLicense,
+                ),
+                ListTile(
+                  leading: const Icon(Icons.vpn_key_outlined),
+                  title: Text(tr(context, 'warpImport')),
+                  subtitle: Text(warp.imported ? tr(context, 'warpImportOn') : tr(context, 'warpImportDesc')),
+                  onTap: warp.busy || warp.scanning ? null : _askImport,
+                ),
+              ]),
               _section(context, tr(context, 'warpSecProfile'), [
                 ListTile(
                   leading: warp.busy && warp.account != null

@@ -118,14 +118,22 @@ class WarpController extends ChangeNotifier {
       for (final m in p.usable(platform: platform, build: build))
         for (final e in p.endpoints)
           for (var i = 0; i < e.ports.length; i++) WarpCombo(m, e, i),
-      // The MASQUE ways come last (see [masqueMethods]).
-      for (final m in masqueMethods) WarpCombo(m, WarpEndpoint(masque?.endpoint ?? masqueDefaultEndpoint, const [443]), 0),
+      // The MASQUE ways come last (see [masqueMethods]). They need an account of their own (a P-256 key), which keys
+      // the user brought cannot give: with those only the WireGuard ways are used.
+      if (!imported)
+        for (final m in masqueMethods) WarpCombo(m, WarpEndpoint(masque?.endpoint ?? masqueDefaultEndpoint, const [443]), 0),
     ];
   }
 
   /// The account of the MASQUE ways, made the first time one of them is used (a different account from
   /// [account]: a device that takes a MASQUE key no longer speaks WireGuard).
   WarpMasqueAccount? masque;
+
+  /// The WARP+ license key the accounts are bound to (empty: a free account). The MASQUE account is made with it too.
+  String license = '';
+
+  /// Whether [account] holds keys the user brought (see [importAccount]) and not one made here.
+  bool imported = false;
 
   /// The uTLS fingerprint of the MASQUE ways over HTTP/2 (`chrome`, `firefox`, ...); empty keeps Xray's own.
   String masqueFingerprint = '';
@@ -179,7 +187,7 @@ class WarpController extends ChangeNotifier {
     if (have != null) return have;
     final p = store.profile;
     if (p == null) throw StateError('no WARP profile is available');
-    final made = await registerWarpMasque(p);
+    final made = await registerWarpMasque(p, license: license.isEmpty ? null : license);
     masque = made;
     await _save();
     return made;
@@ -221,7 +229,9 @@ class WarpController extends ChangeNotifier {
         final fp = j['masqueFp'];
         masqueFingerprint = fp is String && fingerprints.contains(fp) ? fp : '';
         amnezia = j['amnezia'] == true;
-        inWarp = j['inWarp'] == true && account2 != null;
+        license = j['license'] is String && warpLicenseOf(j['license'] as String) != null ? j['license'] as String : '';
+        imported = j['imported'] == true;
+        inWarp =j['inWarp'] == true && account2 != null;
         h2Default = j['h2Default'] == true;
         final cu = j['custom'];
         if (cu is Map && cu['method'] is String && cu['ip'] is String && cu['port'] is int) {
@@ -253,6 +263,8 @@ class WarpController extends ChangeNotifier {
         'masque': masque?.toJson(),
         if (masqueFingerprint.isNotEmpty) 'masqueFp': masqueFingerprint,
         if (amnezia) 'amnezia': true,
+        if (license.isNotEmpty) 'license': license,
+        if (imported) 'imported': true,
         'inWarp': inWarp,
         if (h2Default) 'h2Default': true,
         if (custom != null) 'custom': {'method': custom!.method, 'ip': custom!.ip, 'port': custom!.port},
@@ -576,6 +588,133 @@ class WarpController extends ChangeNotifier {
     }
   }
 
+  /// Binds WARP to a WARP+ license key (see [warpLicenseOf]): new accounts are made with it, in place of the ones there
+  /// are (the WireGuard one and, for the MASQUE ways, the MASQUE one), and the server is put in the list, chosen. A key the
+  /// service refuses leaves everything as it was and sets [error].
+  Future<void> setLicense(String text) async {
+    final key = warpLicenseOf(text);
+    if (key == null || busy) return;
+    busy = true;
+    error = null;
+    _setupProgress = 0;
+    final run = ++_setupRun;
+    notifyListeners();
+    final before = (account, masque, license, imported, enabled, choice, custom, h2Default);
+    final hadAccount = account != null;
+    try {
+      await load();
+      final p = store.profile;
+      if (p == null) throw StateError('no WARP profile is available');
+      imported = false;
+      final wantMasque = !inWarp && (await combos()).any((c) => isMasqueKind(c.method.kind));
+      var wg = 0.0, mq = 0.0;
+      void report() {
+        if (run != _setupRun || !busy) return;
+        final now = 0.9 * (wantMasque ? (wg + mq) / 2 : wg);
+        if (now > (_setupProgress ?? 0)) _setupProgress = now;
+        notifyListeners();
+      }
+
+      // A key the service refuses stops the WireGuard sign-up; the MASQUE one is only asked for at the same time.
+      final masqueSignUp = wantMasque
+          ? registerWarpMasque(p, license: key, onProgress: (v) {
+              mq = v;
+              report();
+            }).then<WarpMasqueAccount?>((a) => a, onError: (Object _) => null)
+          : Future<WarpMasqueAccount?>.value(null);
+      final made = await registerWarp(p, license: key, onProgress: (v) {
+        wg = v;
+        report();
+      });
+      final madeMasque = await masqueSignUp;
+      account = made;
+      masque = madeMasque;
+      license = key;
+      _masqueTried = true;
+      enabled = true;
+      custom = null;
+      choice = 0;
+      if (!inWarp && madeMasque != null) {
+        final i = (await combos()).indexWhere((c) => c.method.id == defaultMethodId);
+        if (i >= 0) {
+          choice = i;
+          h2Default = true;
+        }
+      }
+      if (run == _setupRun) _setupProgress = 0.95;
+      notifyListeners();
+      await _apply(choose: true);
+      await _save();
+      if (hadAccount) await _state.reconnectIfConnected();
+    } catch (e) {
+      account = before.$1;
+      masque = before.$2;
+      license = before.$3;
+      imported = before.$4;
+      enabled = before.$5;
+      choice = before.$6;
+      custom = before.$7;
+      h2Default = before.$8;
+      error = '$e'.replaceFirst('Bad state: ', '');
+      if (hadAccount) {
+        try {
+          await _apply();
+        } catch (_) {}
+      }
+    } finally {
+      _setupRun++;
+      busy = false;
+      _setupProgress = null;
+      notifyListeners();
+    }
+  }
+
+  /// Uses [keys] the user brought (see [parseWarpAccount]) in place of an account made here. Only the WireGuard ways of
+  /// the profile are used with them (see [imported]). Nothing changes when the server cannot be made from them.
+  Future<void> importAccount(WarpAccount keys) async {
+    if (busy) return;
+    busy = true;
+    error = null;
+    notifyListeners();
+    final before = (account, account2, masque, license, imported, enabled, choice, custom, inWarp);
+    final hadAccount = account != null;
+    try {
+      await load();
+      if (store.profile == null) throw StateError('no WARP profile is available');
+      account = keys;
+      account2 = null;
+      inWarp = false;
+      masque = null;
+      license = '';
+      imported = true;
+      enabled = true;
+      custom = null;
+      choice = 0;
+      await _apply(choose: true);
+      await _save();
+      if (hadAccount) await _state.reconnectIfConnected();
+    } catch (e) {
+      account = before.$1;
+      account2 = before.$2;
+      masque = before.$3;
+      license = before.$4;
+      imported = before.$5;
+      enabled = before.$6;
+      choice = before.$7;
+      custom = before.$8;
+      inWarp = before.$9;
+      error = '$e'.replaceFirst('Bad state: ', '');
+      if (hadAccount) {
+        try {
+          await _apply();
+        } catch (_) {}
+      }
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
   /// Turns WARP on: the server goes back in the list (the account is made first when there is none).
   Future<void> enable() async {
     if (account == null) return setUp();
@@ -806,6 +945,8 @@ class WarpController extends ChangeNotifier {
     account = null;
     account2 = null;
     masque = null;
+    license = '';
+    imported = false;
     masqueFingerprint = '';
     amnezia = false;
     h2Default = false;

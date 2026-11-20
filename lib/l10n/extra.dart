@@ -10,6 +10,7 @@ import 'extra_port.dart';
 import 'extra_privacy.dart';
 import 'extra_speedpath.dart';
 import 'extra_tools.dart';
+import 'extra_warp_own.dart';
 import 'strings.dart';
 
 /// Texts of the newer features, in every language the app has.
@@ -31,12 +32,13 @@ String trFor(String lang, String key, [Map<String, Object>? args]) {
 }
 
 const _extra = <String, Map<String, String>>{
-  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu, ...extraAwgRu, ...extraDonateRu, ...extraSpeedPathRu, ...extraPortRu},
-  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi, ...extraAwgVi, ...extraDonateVi, ...extraSpeedPathVi, ...extraPortVi},
-  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh, ...extraAwgZh, ...extraDonateZh, ...extraSpeedPathZh, ...extraPortZh},
-  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr, ...extraAwgAr, ...extraDonateAr, ...extraSpeedPathAr, ...extraPortAr},
+  'ru': {...extraRu, ...extraMoreRu, ...extraPrivacyRu, ...extraToolsRu, ...extraAwgRu, ...extraWarpOwnRu, ...extraDonateRu, ...extraSpeedPathRu, ...extraPortRu},
+  'vi': {...extraVi, ...extraMoreVi, ...extraPrivacyVi, ...extraToolsVi, ...extraAwgVi, ...extraWarpOwnVi, ...extraDonateVi, ...extraSpeedPathVi, ...extraPortVi},
+  'zh': {...extraZh, ...extraMoreZh, ...extraPrivacyZh, ...extraToolsZh, ...extraAwgZh, ...extraWarpOwnZh, ...extraDonateZh, ...extraSpeedPathZh, ...extraPortZh},
+  'ar': {...extraAr, ...extraMoreAr, ...extraPrivacyAr, ...extraToolsAr, ...extraAwgAr, ...extraWarpOwnAr, ...extraDonateAr, ...extraSpeedPathAr, ...extraPortAr},
   'en': {
     ...extraAwgEn,
+    ...extraWarpOwnEn,
     ...extraSpeedPathEn,
     ...extraPortEn,
     ...extraDonateEn,
@@ -160,6 +162,7 @@ const _extra = <String, Map<String, String>>{
   },
   'fa': {
     ...extraAwgFa,
+    ...extraWarpOwnFa,
     ...extraSpeedPathFa,
     ...extraPortFa,
     ...extraDonateFa,

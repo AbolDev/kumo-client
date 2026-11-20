@@ -28,6 +28,128 @@ class WarpRegisterException implements Exception {
   String toString() => message;
 }
 
+/// The service refused the WARP+ license key (it is not one, or it is used up). Not tried again on another way.
+class WarpLicenseException extends WarpRegisterException {
+  WarpLicenseException(super.message);
+}
+
+/// The public key of Cloudflare's WireGuard peer, the same for every WARP account.
+const warpPeerPublicKey = 'bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=';
+
+/// A WARP+ license key (three groups of eight letters and digits) as the service takes it, or null when [text] is not one.
+String? warpLicenseOf(String text) {
+  final key = text.trim();
+  return RegExp(r'^[A-Za-z0-9]{8}-[A-Za-z0-9]{8}-[A-Za-z0-9]{8}$').hasMatch(key) ? key : null;
+}
+
+/// A WireGuard key as standard padded base64 of its 32 bytes (the URL-safe alphabet, no padding, and a `+` that came
+/// as a space are accepted); null when [text] is not a key.
+String? warpKeyOf(String text) {
+  String? attempt(String s) {
+    var t = s.replaceAll(' ', '+').replaceAll('-', '+').replaceAll('_', '/').replaceAll('=', '');
+    if (t.isEmpty || !RegExp(r'^[A-Za-z0-9+/]+$').hasMatch(t)) return null;
+    while (t.length % 4 != 0) {
+      t += '=';
+    }
+    try {
+      final bytes = base64.decode(t);
+      return bytes.length == 32 ? base64.encode(bytes) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // A space at the start may be a plus; when that is not a key, the spaces around the text were only spaces.
+  return attempt(text.replaceAll(RegExp(r'[\r\n\t]'), '')) ?? attempt(text.trim());
+}
+
+/// An account taken from what the user gave ([problem] is the text key of what is wrong when there is no account).
+typedef WarpImport = ({WarpAccount? account, String? problem});
+
+/// An account from keys the user has: a WireGuard profile (what `wgcf` writes: `PrivateKey`, `Address`, `PublicKey`, and
+/// `Reserved` when the tool adds it) or JSON (`private_key`, `v4`, `v6`, `peer_public_key`, `reserved` or `client_id`).
+/// [reserved] is the three bytes of the account (`1,2,3`) or its `client_id` (base64); it overrides what [text] says.
+WarpImport parseWarpAccount(String text, {String reserved = ''}) {
+  const bad = (account: null, problem: 'warpImportEmpty');
+  final input = text.trim();
+  if (input.isEmpty) return bad;
+  String? priv, peer, reservedText;
+  final addresses = <String>[];
+  void take(String key, Object? value) {
+    if (value == null) return;
+    final k = key.toLowerCase().replaceAll('_', '');
+    final v = value is List ? value.join(',') : '$value';
+    switch (k) {
+      case 'privatekey' || 'priv':
+        priv = v;
+      case 'publickey' || 'peerpublickey' || 'pub':
+        peer = v;
+      case 'address' || 'addresses':
+        addresses.addAll(v.split(RegExp(r'[,\s]+')));
+      case 'v4' || 'v6':
+        addresses.add(v);
+      case 'reserved' || 'clientid':
+        reservedText = v;
+    }
+  }
+
+  if (input.startsWith('{')) {
+    try {
+      final j = jsonDecode(input);
+      if (j is! Map) return bad;
+      j.forEach((k, v) => take('$k', v));
+    } catch (_) {
+      return bad;
+    }
+  } else {
+    for (final line in input.split(RegExp(r'[\r\n]+'))) {
+      final at = line.indexOf('=');
+      if (at > 0) take(line.substring(0, at).trim(), line.substring(at + 1).trim());
+    }
+  }
+  final privateKey = priv == null ? null : warpKeyOf(priv!);
+  if (privateKey == null) return (account: null, problem: 'warpImportKey');
+  final peerKey = peer == null || peer!.trim().isEmpty ? warpPeerPublicKey : warpKeyOf(peer!);
+  if (peerKey == null) return (account: null, problem: 'warpImportPeer');
+  String? v4, v6;
+  for (final a in addresses) {
+    final ip = a.split('/').first.trim();
+    if (ip.isEmpty) continue;
+    if (ip.contains(':')) {
+      v6 ??= ip;
+    } else {
+      v4 ??= ip;
+    }
+  }
+  if (v4 == null || v6 == null || !RegExp(r'^\d{1,3}(\.\d{1,3}){3}$').hasMatch(v4) || !RegExp(r'^[0-9A-Fa-f:]+$').hasMatch(v6)) {
+    return (account: null, problem: 'warpImportAddr');
+  }
+  final bytes = parseWarpReserved(reserved.trim().isNotEmpty ? reserved : (reservedText ?? ''));
+  if (bytes == null) return (account: null, problem: 'warpImportReserved');
+  return (
+    account: WarpAccount(privateKey: privateKey, v4: v4, v6: v6, peerPublicKey: peerKey, reserved: bytes),
+    problem: null,
+  );
+}
+
+/// The three reserved bytes from `1,2,3` (or with spaces) or from the base64 `client_id` of the account; empty is
+/// `0,0,0`; null when it is neither.
+List<int>? parseWarpReserved(String text) {
+  final t = text.trim().replaceAll(RegExp(r'^\[|\]$'), '').trim();
+  if (t.isEmpty) return const [0, 0, 0];
+  if (RegExp(r'^\d+([,\s]+\d+){2}$').hasMatch(t)) {
+    final bytes = t.split(RegExp(r'[,\s]+')).map(int.parse).toList();
+    return bytes.every((b) => b <= 255) ? bytes : null;
+  }
+  if (t.length == 4 && RegExp(r'^[A-Za-z0-9+/=]+$').hasMatch(t)) {
+    try {
+      final bytes = base64.decode(t);
+      if (bytes.length == 3) return bytes;
+    } catch (_) {}
+  }
+  return null;
+}
+
 /// What a WireGuard client needs to use the WARP account made for this device.
 class WarpAccount {
   const WarpAccount({
@@ -386,6 +508,9 @@ Future<T> _throughService<T>(WarpProfile profile, Random? random, void Function(
     onProgress?.call(0.7);
     try {
       return await body(relay.port);
+    } on WarpLicenseException {
+      // The service answered: another way to it would be refused the same.
+      rethrow;
     } catch (e) {
       last = e;
     } finally {
@@ -395,9 +520,25 @@ Future<T> _throughService<T>(WarpProfile profile, Random? random, void Function(
   throw WarpRegisterException('$last');
 }
 
+typedef _Send = Future<Map<String, dynamic>> Function(String method, String path, Map<String, dynamic> body,
+    {String? token});
+
+/// Binds the account [id] to the WARP+ [license] (what `wgcf update` does). An answer of the service that refuses it
+/// (a 4xx) is a [WarpLicenseException].
+Future<void> _bindLicense(_Send send, String basePath, String id, String token, String license) async {
+  try {
+    await send('PUT', '$basePath/$id/account', {'license': license}, token: token);
+  } on WarpRegisterException catch (e) {
+    if (e.message.startsWith('the sign-up service answered 4')) throw WarpLicenseException(e.message);
+    rethrow;
+  }
+}
+
 /// Makes a WARP account for this device, reaching the service through the addresses and the piece
-/// sizes of [profile]; throws [WarpRegisterException] when none answers. [onProgress] runs from 0 to 1.
-Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random, void Function(double)? onProgress}) async {
+/// sizes of [profile]; throws [WarpRegisterException] when none answers. [onProgress] runs from 0 to 1. With a WARP+
+/// [license] (see [warpLicenseOf]) the account is bound to it; a key the service refuses is a [WarpLicenseException].
+Future<WarpAccount> registerWarp(WarpProfile profile,
+    {Random? random, void Function(double)? onProgress, String? license}) async {
   final (priv, pub) = newWireGuardKeys(random);
   final account = await _throughService(profile, random, onProgress, (port) async {
     final reg = await _callRetry(port, 'POST', _apiPath, {
@@ -414,6 +555,7 @@ Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random, void Func
     if (id is! String || token is! String || !RegExp(r'^[A-Za-z0-9-]{8,64}$').hasMatch(id)) {
       throw WarpRegisterException('the answer has no account');
     }
+    if (license != null) await _bindLicense((m, p, b, {String? token}) => _callRetry(port, m, p, b, token: token), _apiPath, id, token, license);
     final on = await _callRetry(port, 'PATCH', '$_apiPath/$id', {'warp_enabled': true}, token: token);
     final account = _account(priv, (on['config'] ?? reg['config']));
     if (account == null) throw WarpRegisterException('the answer is incomplete');
@@ -430,6 +572,7 @@ Future<WarpAccount> registerWarp(WarpProfile profile, {Random? random, void Func
 Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
     {Random? random,
     void Function(double)? onProgress,
+    String? license,
     Future<Map<String, dynamic>> Function(String method, String path, Map<String, dynamic> body, {String? token})?
         call}) async {
   final (_, wgPub) = newWireGuardKeys(random);
@@ -460,6 +603,7 @@ Future<WarpMasqueAccount> registerWarpMasque(WarpProfile profile,
       'tunnel_type': 'masque',
     }, token: token);
     onProgress?.call(0.9);
+    if (license != null) await _bindLicense(send, _masquePath, id, token, license);
     // The account is switched on as the WireGuard one is; an answer that refuses it does not stop the
     // sign-up (the service may not ask for it any more).
     try {
